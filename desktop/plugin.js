@@ -1,4 +1,4 @@
-import { Button, haptic, host } from '@hermes/plugin-sdk'
+import { Button, Input, haptic, host } from '@hermes/plugin-sdk'
 import { jsx, jsxs } from 'react/jsx-runtime'
 import { useState, useEffect, useRef } from 'react'
 
@@ -6,9 +6,12 @@ const ID = 'vrc-monitor'
 
 function VrcMonitorPane({ ctx }) {
   const [status, setStatus] = useState(null)
-  const [doctor, setDoctor] = useState(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [credState, setCredState] = useState(null)
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [qqmailAuthCode, setQqmailAuthCode] = useState('')
   const ctxRef = useRef(ctx)
   ctxRef.current = ctx
 
@@ -19,10 +22,10 @@ function VrcMonitorPane({ ctx }) {
     } catch (e) { /* 静默忽略 */ }
   }
 
-  const fetchDoctor = async () => {
+  const fetchCredentials = async () => {
     try {
-      const res = await ctxRef.current.rest('/doctor')
-      if (res) setDoctor(res)
+      const res = await ctxRef.current.rest('/credentials')
+      if (res) setCredState(res)
     } catch (e) { /* 静默忽略 */ }
   }
 
@@ -32,81 +35,55 @@ function VrcMonitorPane({ ctx }) {
     return () => clearInterval(interval)
   }, [])
 
-  const doAction = async (action) => {
+  const openConfig = async () => {
+    setDialogOpen(true)
+    setEmail('')
+    setPassword('')
+    setQqmailAuthCode('')
+    await fetchCredentials()
+  }
+
+  const saveCredentials = async () => {
     setLoading(true)
     haptic('tap')
     try {
-      const res = await ctxRef.current.rest(`/${action}`, { method: 'POST' })
+      const body = {}
+      if (email !== '') body.email = email
+      if (password !== '') body.password = password
+      if (qqmailAuthCode !== '') body.qqmail_auth_code = qqmailAuthCode
+      const res = await ctxRef.current.rest('/credentials', {
+        method: 'POST',
+        body,
+      })
       if (!res || res.ok === false) {
-        host.notify({ kind: 'error', message: `${action} 失败: ${res?.error || '未知错误'}` })
+        host.notify({ kind: 'error', message: `保存失败: ${res?.error || '未知错误'}` })
       } else {
-        host.notify({ kind: 'info', message: `${action} 成功` })
+        host.notify({ kind: 'info', message: '凭据保存成功' })
+        setDialogOpen(false)
       }
-      await fetchStatus()
     } catch (e) {
-      host.notify({ kind: 'error', message: `${action} 异常: ${e?.message || e}` })
+      host.notify({ kind: 'error', message: `保存异常: ${e?.message || e}` })
     } finally {
       setLoading(false)
     }
   }
 
-  const openConfig = async () => {
-    setDialogOpen(true)
-    await fetchDoctor()
-  }
-
-  const statusText = status
-    ? (status.running ? '运行中' : '已停止')
+  const runningText = status
+    ? (status.running ? '运行中' : '未运行')
     : '加载中...'
+
+  const configured = credState?.configured
+  const emailMasked = credState?.email_masked
 
   return jsxs('div', {
     className: 'flex h-full flex-col gap-3 p-3 text-sm',
     children: [
       jsx('div', { className: 'font-medium', children: 'VRChat 监控' }),
 
-      jsxs('div', { className: 'flex flex-col gap-1', children: [
-        jsx('div', {
-          className: 'text-(--ui-text-secondary)',
-          children: `状态: ${statusText}`
-        }),
-        status && status.pid && jsx('div', {
-          className: 'text-(--ui-text-tertiary)',
-          children: `PID: ${status.pid}`
-        }),
-        status && status.health && !status.health.error && jsx('div', {
-          className: 'text-(--ui-text-tertiary)',
-          children: `健康: ${JSON.stringify(status.health)}`
-        }),
-        status && status.resolved && jsxs('div', {
-          className: 'text-(--ui-text-tertiary) flex flex-col gap-0.5',
-          children: [
-            jsx('div', {
-              children: `服务目录: ${status.resolved.monitor_dir || '未解析'}`
-            }),
-            jsx('div', {
-              children: `Node.js: ${status.resolved.node_exe || '未解析'}`
-            })
-          ]
-        })
-      ]}),
-
-      jsxs('div', { className: 'flex gap-2', children: [
-        jsx(Button, {
-          onClick: () => doAction('start'),
-          disabled: loading,
-          children: '启动'
-        }),
-        jsx(Button, {
-          onClick: () => doAction('stop'),
-          disabled: loading,
-          children: '停止'
-        }),
-        jsx(Button, {
-          onClick: () => doAction('restart'),
-          disabled: loading,
-          children: '重启'
-        })
-      ]}),
+      jsx('div', {
+        className: 'text-(--ui-text-secondary)',
+        children: `状态: ${runningText}`
+      }),
 
       jsx('hr', { className: 'border-(--ui-stroke-tertiary)' }),
 
@@ -123,7 +100,7 @@ function VrcMonitorPane({ ctx }) {
               jsxs('div', {
                 className: 'flex items-center justify-between',
                 children: [
-                  jsx('div', { className: 'font-medium', children: '配置检查' }),
+                  jsx('div', { className: 'font-medium', children: '账号配置' }),
                   jsx('button', {
                     type: 'button',
                     className: 'text-(--ui-text-tertiary) hover:text-(--ui-text-primary) text-lg leading-none',
@@ -133,41 +110,68 @@ function VrcMonitorPane({ ctx }) {
                 ]
               }),
 
-              doctor && doctor.checks
-                ? jsxs('div', { className: 'flex flex-col gap-2', children: [
-                    ...doctor.checks.map((check, i) =>
-                      jsxs('div', {
-                        key: i,
-                        className: 'flex items-start gap-2',
-                        children: [
-                          jsx('span', {
-                            className: check.ok ? 'text-(--ui-green)' : 'text-(--ui-red)',
-                            children: check.ok ? '\u2713' : '\u2717'
-                          }),
-                          jsxs('div', { className: 'flex flex-col', children: [
-                            jsx('span', { children: check.name }),
-                            jsx('span', {
-                              className: 'text-(--ui-text-tertiary) text-xs',
-                              children: check.detail || ''
-                            })
-                          ]})
-                        ]
-                      })
-                    )
-                  ]})
+              configured
+                ? jsx('div', {
+                    className: 'text-(--ui-text-tertiary) text-xs',
+                    children: `当前已配置邮箱 ${emailMasked || ''}，密码/授权码留空则保留原值`
+                  })
                 : jsx('div', {
-                    className: 'text-(--ui-text-tertiary)',
-                    children: '加载中...'
+                    className: 'text-(--ui-text-tertiary) text-xs',
+                    children: '请填写三项并保存'
                   }),
 
-              jsx('div', {
-                className: 'text-(--ui-text-tertiary) text-xs',
-                children: '配置说明请查看仓库根目录 AGENTS.md，让 AI Agent 自动完成配置'
-              }),
+              jsxs('div', { className: 'flex flex-col gap-2', children: [
+                jsxs('div', { className: 'flex flex-col gap-1', children: [
+                  jsx('div', {
+                    className: 'text-xs text-(--ui-text-secondary)',
+                    children: 'VRChat 邮箱'
+                  }),
+                  jsx(Input, {
+                    placeholder: configured && emailMasked
+                      ? `当前邮箱: ${emailMasked}`
+                      : '请输入 VRChat 邮箱',
+                    value: email,
+                    onChange: (e) => setEmail(e.target.value),
+                  })
+                ]}),
+
+                jsxs('div', { className: 'flex flex-col gap-1', children: [
+                  jsx('div', {
+                    className: 'text-xs text-(--ui-text-secondary)',
+                    children: 'VRChat 密码'
+                  }),
+                  jsx(Input, {
+                    type: 'password',
+                    placeholder: '留空则不修改',
+                    value: password,
+                    onChange: (e) => setPassword(e.target.value),
+                  })
+                ]}),
+
+                jsxs('div', { className: 'flex flex-col gap-1', children: [
+                  jsx('div', {
+                    className: 'text-xs text-(--ui-text-secondary)',
+                    children: 'QQ 邮箱 IMAP 授权码'
+                  }),
+                  jsx(Input, {
+                    type: 'password',
+                    placeholder: '留空则不修改',
+                    value: qqmailAuthCode,
+                    onChange: (e) => setQqmailAuthCode(e.target.value),
+                  })
+                ]}),
+              ]}),
 
               jsxs('div', { className: 'flex gap-2', children: [
-                jsx(Button, { onClick: fetchDoctor, children: '重新检测' }),
-                jsx(Button, { onClick: () => setDialogOpen(false), children: '关闭' })
+                jsx(Button, {
+                  onClick: saveCredentials,
+                  disabled: loading,
+                  children: '保存'
+                }),
+                jsx(Button, {
+                  onClick: () => setDialogOpen(false),
+                  children: '关闭'
+                })
               ]})
             ]
           })

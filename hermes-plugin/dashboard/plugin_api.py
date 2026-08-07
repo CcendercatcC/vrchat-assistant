@@ -151,28 +151,46 @@ def _credentials_path() -> Optional[Path]:
     return Path(monitor_dir) / "credentials.json"
 
 
+def _mask_email(email: str) -> str:
+    """Mask email local part: 84xxxx16@qq.com -> 84***16@qq.com"""
+    if "@" not in email:
+        return email
+    local, domain = email.split("@", 1)
+    if len(local) <= 1:
+        masked_local = "***"
+    elif len(local) <= 4:
+        masked_local = local[0] + "***" + local[-1]
+    else:
+        masked_local = local[:2] + "***" + local[-2:]
+    return f"{masked_local}@{domain}"
+
+
 @router.get("/credentials")
 def get_credentials() -> Dict[str, Any]:
     try:
-        cred_path = _credentials_path()
-        if cred_path is None:
-            return {"ok": False, "error": "请先配置服务目录"}
-        email = ""
-        password_configured = False
-        qqmail_auth_code_configured = False
-        if cred_path.is_file():
-            try:
-                creds = json.loads(cred_path.read_text(encoding="utf-8"))
-            except Exception:
-                creds = {}
-            email = creds.get("email", "") or ""
-            password_configured = bool(creds.get("password"))
-            qqmail_auth_code_configured = bool(creds.get("qqmail_auth_code"))
+        monitor_dir = pm._resolve_monitor_dir()
+        cred_path = None
+        configured = False
+        email_masked = None
+
+        if monitor_dir:
+            cred_path = Path(monitor_dir) / "credentials.json"
+            if cred_path.is_file():
+                configured = True
+                try:
+                    creds = json.loads(cred_path.read_text(encoding="utf-8"))
+                except Exception:
+                    creds = {}
+                email = creds.get("email", "") or ""
+                if email:
+                    email_masked = _mask_email(email)
+
         return {
             "ok": True,
-            "email": email,
-            "password_configured": password_configured,
-            "qqmail_auth_code_configured": qqmail_auth_code_configured,
+            "configured": configured,
+            "email_masked": email_masked,
+            "monitor_dir": monitor_dir,
+            "config_path": str(cred_path) if cred_path else None,
         }
     except Exception as e:
         return {"ok": False, "error": str(e)}
@@ -181,9 +199,15 @@ def get_credentials() -> Dict[str, Any]:
 @router.post("/credentials")
 def post_credentials(body: CredentialBody) -> Dict[str, Any]:
     try:
-        cred_path = _credentials_path()
-        if cred_path is None:
-            return {"ok": False, "error": "请先配置服务目录"}
+        monitor_dir = pm._resolve_monitor_dir()
+        if not monitor_dir:
+            return {
+                "ok": False,
+                "error": "服务目录未配置，请先设置 VRC_MONITOR_DIR 环境变量或参考 AGENTS.md",
+            }
+
+        cred_path = Path(monitor_dir) / "credentials.json"
+
         if cred_path.is_file():
             try:
                 creds = json.loads(cred_path.read_text(encoding="utf-8"))
@@ -191,23 +215,41 @@ def post_credentials(body: CredentialBody) -> Dict[str, Any]:
                 creds = {}
         else:
             creds = {}
-        if body.email is not None and body.email != "":
-            creds["email"] = body.email
-        if body.password is not None and body.password != "":
-            creds["password"] = body.password
-        if body.qqmail_auth_code is not None and body.qqmail_auth_code != "":
-            creds["qqmail_auth_code"] = body.qqmail_auth_code
+
+        fields = []
+
+        if body.email is not None:
+            if body.email == "":
+                creds.pop("email", None)
+            else:
+                creds["email"] = body.email
+            fields.append("email")
+
+        if body.password is not None:
+            if body.password == "":
+                creds.pop("password", None)
+            else:
+                creds["password"] = body.password
+            fields.append("password")
+
+        if body.qqmail_auth_code is not None:
+            if body.qqmail_auth_code == "":
+                creds.pop("qqmail_auth_code", None)
+            else:
+                creds["qqmail_auth_code"] = body.qqmail_auth_code
+            fields.append("qqmail_auth_code")
+
         cred_path.parent.mkdir(parents=True, exist_ok=True)
         tmp = cred_path.with_suffix(".json.tmp")
         tmp.write_text(
             json.dumps(creds, indent=2, ensure_ascii=False), encoding="utf-8"
         )
         tmp.replace(cred_path)
+
         return {
             "ok": True,
-            "email": creds.get("email", ""),
-            "password_configured": bool(creds.get("password")),
-            "qqmail_auth_code_configured": bool(creds.get("qqmail_auth_code")),
+            "saved": True,
+            "fields": fields,
         }
     except Exception as e:
         return {"ok": False, "error": str(e)}
