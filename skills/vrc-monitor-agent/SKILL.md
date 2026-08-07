@@ -15,7 +15,7 @@ metadata:
 - 服务启动：项目目录下 `node start-monitor.js`（首次需配置 `credentials.json`，见 AGENTS.md）
 - 数据库：本地 SQLite（WebSocket 实时采集事件，含历史上线/位置/同屏记录）
 
-## MCP 工具（18 个）
+## MCP 工具（27 个）
 
 | 工具 | 说明 |
 |------|------|
@@ -35,8 +35,12 @@ metadata:
 | `upload_emoji` | 上传自定义 boop 表情（需 VRChat Plus；imagePath 必填，animated/animationStyle 可选） |
 | `upload_print` | 上传照片到 VRChat 相册 Prints（需 VRC+；imagePath 必填，note 可选备注） |
 | `upload_gallery_image` | 上传图片到 VRC+ 图库 Gallery（需 VRC+；imagePath 必填） |
+| `get_prints` | 相册照片列表（含 downloadUrl 直链） |
+| `get_gallery_images` | 图库图片列表（含 downloadUrl 直链） |
 | `download_print` | 从相册下载照片到本地（printId 必填；返回路径可 MEDIA: 发送） |
 | `download_gallery_image` | 从图库下载图片到本地（fileId 必填；返回路径可 MEDIA: 发送） |
+| `remove_print` | 删除相册照片（不可逆！必须 confirm: true） |
+| `remove_gallery_image` | 删除图库图片（不可逆！必须 confirm: true） |
 | `send_invite` | 邀请好友加入你当前所在房间（拉人进房；userId/worldId/instanceId 必填、message 可选） |
 | `request_invite` | 请求好友邀请你加入 TA 的房间（userId 必填、message 可选，默认 "Can I join you?"） |
 | `send_friend_request` | 发送好友请求（添加好友；userId 直接加 或 displayName 精确匹配不区分大小写，二选一） |
@@ -143,7 +147,7 @@ curl -s http://127.0.0.1:8799/mcp -X POST -H "Content-Type: application/json" \
 
 boop 通知落库的顶层事件类型是 `notification-v2`（不是 boop），boop 在 content_json.type 里。`get_recent_events(typeFilter="boop")` 查不到，用 `typeFilter="notification-v2"`。
 
-### ⚠️ sql.js 内存数据库 — 外部写文件无效/会被覆盖
+### 注意：sql.js 内存数据库 — 外部写文件无效/会被覆盖
 
 服务用 sql.js（WASM 内存数据库）：启动时把 sqlite 文件读进内存，`save()` 才写回。**外部直接改数据库文件 = 服务进程看不到，且服务周期性 save 会把内存状态覆盖回文件、冲掉外部写入**。所有数据写入必须走 MCP 工具（如 `set_nickname`）。只读检查可用 sqlite3 CLI 直连文件，但可能和服务内存不一致。
 
