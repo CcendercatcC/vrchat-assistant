@@ -518,13 +518,15 @@ function parseLocation(loc) {
   const worldId = sep >= 0 ? loc.slice(0, sep) : loc;
   const rest = sep >= 0 ? loc.slice(sep + 1) : '';
   const instMatch = rest.match(/^([^~]+)/);
-  // 白名单匹配实例类型；~region(jp) / ~groupAccessType(x) 是元字段，不能当类型（公开实例只有 ~region 段）
-  const typeMatch = rest.match(/~(private|hidden|friends|group|local|public)\(([^)]+)\)/);
+  // 白名单匹配实例类型（~private/hidden/friends/group/public 带 owner 括号）；~region(jp) / ~groupAccessType(x) 是元字段
+  const typeMatch = rest.match(/~(private|hidden|friends|group|public)\(([^)]+)\)/);
+  // ~local 无括号（VRChat 本地实例格式 `~local`）
+  const localMatch = rest.match(/~local\b/);
   const regionMatch = rest.match(/~region\(([^)]+)\)/);
   const gAccessMatch = rest.match(/~groupAccessType\(([^)]+)\)/);
   return {
     // 有 instanceId 但无类型标记 = VRChat 无房主公开实例 → 'public'
-    type: typeMatch ? typeMatch[1] : (instMatch ? 'public' : null),
+    type: typeMatch ? typeMatch[1] : (localMatch ? 'local' : (instMatch ? 'public' : null)),
     ownerId: typeMatch ? typeMatch[2] : null,
     worldId: worldId || null,
     instanceId: instMatch ? instMatch[1] : null,
