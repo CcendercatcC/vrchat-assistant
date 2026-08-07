@@ -19,7 +19,7 @@ metadata:
 
 | 工具 | 说明 |
 |------|------|
-| `get_online_friends` | 当前在线好友列表（含位置/平台） |
+| `get_online_friends` | 当前在线好友列表（含昵称 nickname + 房型解析 locationParsed：worldId/instanceId/type/ownerId/region） |
 | `get_friend_info` | 好友详细信息 |
 | `search_users` | 按名字搜索用户 |
 | `get_friend_events` | 某好友的事件历史（本地库） |

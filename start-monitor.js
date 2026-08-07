@@ -509,11 +509,42 @@ const CUSTOM_TOOLS = [
 
 // ── 工具处理器 ──
 
+function parseLocation(loc) {
+  if (!loc) return null;
+  if (loc === 'offline') return { type: 'offline' };
+  if (loc === 'traveling') return { type: 'traveling' };
+  if (loc === 'private') return { type: 'private' };
+  const sep = loc.indexOf(':');
+  const worldId = sep >= 0 ? loc.slice(0, sep) : loc;
+  const rest = sep >= 0 ? loc.slice(sep + 1) : '';
+  const instMatch = rest.match(/^([^~]+)/);
+  // 白名单匹配实例类型；~region(jp) / ~groupAccessType(x) 是元字段，不能当类型（公开实例只有 ~region 段）
+  const typeMatch = rest.match(/~(private|hidden|friends|group|local|public)\(([^)]+)\)/);
+  const regionMatch = rest.match(/~region\(([^)]+)\)/);
+  const gAccessMatch = rest.match(/~groupAccessType\(([^)]+)\)/);
+  return {
+    // 有 instanceId 但无类型标记 = VRChat 无房主公开实例 → 'public'
+    type: typeMatch ? typeMatch[1] : (instMatch ? 'public' : null),
+    ownerId: typeMatch ? typeMatch[2] : null,
+    worldId: worldId || null,
+    instanceId: instMatch ? instMatch[1] : null,
+    region: regionMatch ? regionMatch[1] : null,
+    groupAccessType: gAccessMatch ? gAccessMatch[1] : null,
+  };
+}
+
 async function handleGetOnlineFriends() {
   const r = await api._request('GET', '/auth/user/friends?offline=false');
   if (r.status !== 200) throw new Error(`API error: ${r.status}`);
   const friends = Array.isArray(r.data) ? r.data : [];
   const online = friends.filter(f => f.location && f.location !== 'offline');
+
+  const nicknames = storage.getNicknames({});
+  const nicknameMap = new Map();
+  for (const item of nicknames) {
+    if (item.userId) nicknameMap.set(item.userId, item.nickname);
+  }
+
   return {
     online: online.length,
     total: friends.length,
@@ -525,6 +556,8 @@ async function handleGetOnlineFriends() {
       statusDescription: f.statusDescription,
       platform: f.platform,
       avatarImageUrl: f.currentAvatarThumbnailImageUrl,
+      nickname: nicknameMap.get(f.id) || null,
+      locationParsed: parseLocation(f.location || 'private'),
     })),
   };
 }
