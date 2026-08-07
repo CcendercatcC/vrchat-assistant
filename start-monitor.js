@@ -756,7 +756,29 @@ async function main() {
 
   // 2. 初始化 API 客户端
   log('\n🔑 初始化 API 客户端...');
-  const creds = JSON.parse(readFileSync(CRED_FILE, 'utf-8'));
+  if (!existsSync(CRED_FILE)) {
+    console.error('\n❌ 未找到 credentials.json — 无法登录 VRChat');
+    console.error('');
+    console.error('   请先完成配置：');
+    console.error(`   1. 复制 credentials.example.json 为 credentials.json`);
+    console.error('   2. 填入 VRChat 邮箱、密码、QQ 邮箱 IMAP 授权码');
+    console.error('   3. 配置说明详见仓库根目录 AGENTS.md');
+    console.error('');
+    process.exit(1);
+  }
+  let creds;
+  try {
+    creds = JSON.parse(readFileSync(CRED_FILE, 'utf-8'));
+  } catch (parseErr) {
+    console.error(`\n❌ credentials.json 解析失败: ${parseErr.message}`);
+    console.error('   请检查文件是否为合法 JSON（参考 credentials.example.json 模板）');
+    process.exit(1);
+  }
+  if (!creds.email || !creds.password) {
+    console.error('\n❌ credentials.json 缺少 email 或 password 字段');
+    console.error('   请参考 credentials.example.json 补全配置');
+    process.exit(1);
+  }
   api = new VrchatApiClient(creds.email, creds.password);
   api.loadCookieFromFile(COOKIE_FILE);
   try {

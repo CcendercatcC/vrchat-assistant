@@ -51,7 +51,7 @@ cp credentials.example.json credentials.json
 ### 2. 启动服务
 
 ```bash
-cd vrcx-mcp-actions
+cd <本仓库目录>
 node start-monitor.js
 ```
 
@@ -167,7 +167,7 @@ mcp_servers:
 ## 📁 目录结构
 
 ```
-vrcx-mcp-actions/
+.
 ├── start-monitor.js        # 主入口（Node 服务）
 ├── core/
 │   ├── init-db.sql         # 数据库 DDL
