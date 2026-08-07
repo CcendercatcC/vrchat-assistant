@@ -187,7 +187,6 @@ vrcx-mcp-actions/
 ├── desktop/
 │   └── plugin.js           # Hermes 桌面插件（GUI 配置面板）
 ├── credentials.example.json # 凭据模板（复制为 credentials.json）
-├── 一键启动.cmd            # Windows 快捷启动
 └── README.md
 ```
 
