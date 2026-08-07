@@ -411,7 +411,8 @@ export class VrchatApiClient {
    */
   async uploadImageFile(fileBuffer, filename, params) {
     await this.ensureAuth();
-    return this._multipartRequest('POST', '/file/image', fileBuffer, filename, params);
+    // 显式 contentType: image/png（默认 fileDisplayName 'blob' 无扩展名 → octet-stream → 服务端 400 "must be an image"）
+    return this._multipartRequest('POST', '/file/image', fileBuffer, filename, params, { fileFieldName: 'file', fileDisplayName: 'blob', contentType: 'image/png' });
   }
 
   /**
