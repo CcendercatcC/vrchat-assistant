@@ -227,6 +227,18 @@ const CUSTOM_TOOLS = [
     },
   },
   {
+    name: 'get_mutual_friends',
+    description: '[query] List mutual friends between you and a user (userId or exact displayName). Includes local nicknames.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        userId: { type: 'string', description: 'VRChat user id (usr_...)' },
+        displayName: { type: 'string', description: 'Exact display name to search' },
+        limit: { type: 'number', default: 100, description: 'Max results (1-100, default 100)' },
+      },
+    },
+  },
+  {
     name: 'search_users',
     description: '[query] Search VRChat users by display name.',
     inputSchema: {
@@ -453,6 +465,51 @@ async function handleSearchUsers({ query, limit = 10 }) {
       status: u.status,
       isFriend: u.isFriend,
     })),
+  };
+}
+
+async function handleGetMutualFriends({ userId, displayName, limit = 100 }) {
+  if (!userId && !displayName) throw new Error('userId or displayName is required');
+
+  let targetId = userId;
+  let targetDisplayName = null;
+
+  if (!targetId) {
+    const search = await api._request('GET', `/users?search=${encodeURIComponent(displayName)}&n=20`);
+    if (search.status !== 200) throw new Error(`API error: ${search.status}`);
+    const users = Array.isArray(search.data) ? search.data : [];
+    const matches = users.filter(u => u.displayName && u.displayName.toLowerCase() === displayName.toLowerCase());
+
+    if (matches.length === 0) throw new Error(`未找到显示名为 "${displayName}" 的用户`);
+    if (matches.length > 1) throw new Error(`显示名 "${displayName}" 匹配到多个用户，请用 userId 指定`);
+
+    targetId = matches[0].id;
+    targetDisplayName = matches[0].displayName;
+  }
+
+  const n = Math.max(1, Math.min(100, Number(limit) || 100));
+  const r = await api._request('GET', `/users/${targetId}/mutuals/friends?n=${n}&offset=0`);
+  if (r.status !== 200) throw new Error(`API error: ${r.status}`);
+
+  const nicknames = storage.getNicknames({});
+  const nicknameMap = new Map();
+  for (const item of nicknames) {
+    if (item.userId) nicknameMap.set(item.userId, item.nickname);
+  }
+
+  const mutuals = Array.isArray(r.data) ? r.data : [];
+  const mutualFriends = mutuals.map(u => ({
+    userId: u.id,
+    displayName: u.displayName,
+    nickname: nicknameMap.get(u.id) || null,
+    isFriend: u.isFriend !== undefined ? u.isFriend : true,
+  }));
+
+  return {
+    userId: targetId,
+    displayName: targetDisplayName,
+    total: mutualFriends.length,
+    mutualFriends,
   };
 }
 
@@ -734,6 +791,9 @@ async function handleRpc(rpc, session, res) {
             break;
           case 'get_friend_info':
             result = await rateLimiter.execute(() => handleGetFriendInfo(args));
+            break;
+          case 'get_mutual_friends':
+            result = await rateLimiter.execute(() => handleGetMutualFriends(args));
             break;
           case 'search_users':
             result = await rateLimiter.execute(() => handleSearchUsers(args));
