@@ -141,6 +141,7 @@ def get_doctor() -> Dict[str, Any]:
 class CredentialBody(BaseModel):
     email: Optional[str] = None
     password: Optional[str] = None
+    imap_auth_code: Optional[str] = None
     qqmail_auth_code: Optional[str] = None
 
 
@@ -232,12 +233,21 @@ def post_credentials(body: CredentialBody) -> Dict[str, Any]:
                 creds["password"] = body.password
             fields.append("password")
 
-        if body.qqmail_auth_code is not None:
+        if body.imap_auth_code is not None:
+            if body.imap_auth_code == "":
+                creds.pop("imap_auth_code", None)
+            else:
+                creds["imap_auth_code"] = body.imap_auth_code
+            creds.pop("qqmail_auth_code", None)  # 删除旧字段避免冗余
+            fields.append("imap_auth_code")
+        elif body.qqmail_auth_code is not None:
+            # 兼容旧字段，迁移到新字段名
             if body.qqmail_auth_code == "":
                 creds.pop("qqmail_auth_code", None)
             else:
-                creds["qqmail_auth_code"] = body.qqmail_auth_code
-            fields.append("qqmail_auth_code")
+                creds["imap_auth_code"] = body.qqmail_auth_code
+                creds.pop("qqmail_auth_code", None)
+            fields.append("imap_auth_code")
 
         cred_path.parent.mkdir(parents=True, exist_ok=True)
         tmp = cred_path.with_suffix(".json.tmp")

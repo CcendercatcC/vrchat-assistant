@@ -11,7 +11,7 @@
 
 - ✅ **WebSocket 实时监控** — 好友上线/下线/换世界即时入库
 - ✅ **自动重连 + 认证自愈** — 指数退避（1s→60s）+ cookie 过期自动 OTP 邮箱取码登录，无需人工干预
-- ✅ **自动 OTP 登录** — 邮箱验证码自动从 QQ 邮箱 IMAP 抓取，全链路无人值守
+- ✅ **自动 OTP 登录** — 邮箱验证码自动从邮箱 IMAP 抓取，全链路无人值守
 - ✅ **历史数据迁移** — 从 VRCX-0 导入 10 个月的 33 万条活动记录
 - ✅ **世界名缓存** — 自动解析 `wrld_xxx` 为可读世界名（24h TTL 防改名陈旧）
 - ✅ **关注名单** — 标记核心好友，活动时特别通知
@@ -28,7 +28,7 @@
 
 - Node.js ≥ 18
 - 一个 VRChat 账号（需开启邮箱 2FA）
-- 一个 QQ 邮箱（用于接收 OTP 验证码，需生成 IMAP 授权码）
+- 一个支持 IMAP 的邮箱（用于接收 OTP 验证码，需生成 IMAP 授权码/专用密码）
 
 ### 1. 配置凭据
 
@@ -42,11 +42,11 @@ cp credentials.example.json credentials.json
 {
   "email": "你的VRChat登录邮箱",
   "password": "你的VRChat密码",
-  "qqmail_auth_code": "QQ邮箱IMAP授权码"
+  "imap_auth_code": "邮箱IMAP授权码"
 }
 ```
 
-> QQ 邮箱授权码获取：QQ 邮箱 → 设置 → 账号 → 开启 IMAP/SMTP → 生成授权码。
+> IMAP 授权码获取：登录邮箱网页版 → 设置 → 开启 IMAP/SMTP → 生成授权码/专用密码。以 QQ 邮箱为例：设置 → 账号 → 开启 IMAP/SMTP → 生成授权码。
 
 ### 2. 启动服务
 
@@ -179,7 +179,7 @@ mcp_servers:
 │   ├── companions_method.js # 同屏查询实现
 │   └── rate-limiter.js     # API 限流
 ├── vrchat-api.js           # VRChat API 客户端
-├── fetch-otp.py            # QQ 邮箱 OTP 自动抓取
+├── fetch-otp.py            # 邮箱 IMAP OTP 自动抓取
 ├── migrate-vrcx0.mjs       # VRCX-0 数据迁移脚本
 ├── hermes-plugin/          # Hermes 托管插件
 │   ├── plugin.yaml
@@ -201,7 +201,7 @@ mcp_servers:
 A: 国内网络可能需代理。服务自动直连 6s 失败后回退到 `127.0.0.1:7892` 代理，无需人工干预。
 
 **Q: 登录提示 OTP 但一直失败？**
-A: 检查 `credentials.json` 的 `qqmail_auth_code` 是否为 QQ 邮箱 IMAP 授权码（非登录密码）。服务会在认证失败后冷却 120s（限流 401 则 5min）自动重试，不会高频刷验证码。
+A: 检查 `credentials.json` 的 `imap_auth_code` 是否为正确的 IMAP 授权码（非登录密码）。服务会在认证失败后冷却 120s（限流 401 则 5min）自动重试，不会高频刷验证码。
 
 **Q: cookie 过期了要手动处理吗？**
 A: 不需要。服务启动和 WS 重连都会自动走 OTP 取码登录，有效 cookie 自动落盘 `auth_cookie.txt`。

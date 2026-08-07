@@ -728,10 +728,10 @@ async function fetchOtpFromEmail() {
   }
   const creds = JSON.parse(readFileSync(CRED_FILE, 'utf-8'));
   const { execSync } = await import('node:child_process');
-  const otp = execSync(
-    `python "${otpScript}" "${creds.email}" "${creds.qqmail_auth_code}"`,
-    { timeout: 15000, encoding: 'utf-8' }
-  ).trim();
+  const authCode = creds.imap_auth_code || creds.qqmail_auth_code || '';
+  let cmd = `python "${otpScript}" "${creds.email}" "${authCode}"`;
+  if (creds.imap_host) cmd += ` "${creds.imap_host}"`;
+  const otp = execSync(cmd, { timeout: 15000, encoding: 'utf-8' }).trim();
   return otp;
 }
 
@@ -761,7 +761,7 @@ async function main() {
     console.error('');
     console.error('   请先完成配置：');
     console.error(`   1. 复制 credentials.example.json 为 credentials.json`);
-    console.error('   2. 填入 VRChat 邮箱、密码、QQ 邮箱 IMAP 授权码');
+    console.error('   2. 填入 VRChat 邮箱、密码、邮箱 IMAP 授权码（imap_auth_code）');
     console.error('   3. 配置说明详见仓库根目录 AGENTS.md');
     console.error('');
     process.exit(1);

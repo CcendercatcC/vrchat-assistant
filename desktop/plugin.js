@@ -11,7 +11,7 @@ function VrcMonitorPane({ ctx }) {
   const [credState, setCredState] = useState(null)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [qqmailAuthCode, setQqmailAuthCode] = useState('')
+  const [imapAuthCode, setImapAuthCode] = useState('')
   const ctxRef = useRef(ctx)
   ctxRef.current = ctx
 
@@ -39,7 +39,7 @@ function VrcMonitorPane({ ctx }) {
     setDialogOpen(true)
     setEmail('')
     setPassword('')
-    setQqmailAuthCode('')
+    setImapAuthCode('')
     await fetchCredentials()
   }
 
@@ -50,7 +50,7 @@ function VrcMonitorPane({ ctx }) {
       const body = {}
       if (email !== '') body.email = email
       if (password !== '') body.password = password
-      if (qqmailAuthCode !== '') body.qqmail_auth_code = qqmailAuthCode
+      if (imapAuthCode !== '') body.imap_auth_code = imapAuthCode
       const res = await ctxRef.current.rest('/credentials', {
         method: 'POST',
         body,
@@ -151,13 +151,13 @@ function VrcMonitorPane({ ctx }) {
                 jsxs('div', { className: 'flex flex-col gap-1', children: [
                   jsx('div', {
                     className: 'text-xs text-(--ui-text-secondary)',
-                    children: 'QQ 邮箱 IMAP 授权码'
+                    children: '邮箱 IMAP 授权码'
                   }),
                   jsx(Input, {
                     type: 'password',
-                    placeholder: '留空则不修改',
-                    value: qqmailAuthCode,
-                    onChange: (e) => setQqmailAuthCode(e.target.value),
+                    placeholder: '邮箱的 IMAP 授权码，留空不修改',
+                    value: imapAuthCode,
+                    onChange: (e) => setImapAuthCode(e.target.value),
                   })
                 ]}),
               ]}),
