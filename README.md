@@ -176,7 +176,6 @@ mcp_servers:
 │   ├── ws-manager.js       # WebSocket 管理
 │   ├── event-pipeline.js   # 事件处理管道
 │   ├── friend-state.js     # 好友状态管理
-│   ├── companions_method.js # 同屏查询实现
 │   └── rate-limiter.js     # API 限流
 ├── vrchat-api.js           # VRChat API 客户端
 ├── fetch-otp.py            # 邮箱 IMAP OTP 自动抓取

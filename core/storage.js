@@ -264,9 +264,11 @@ export class Storage {
   // ── 新增：查找同屏好友 ──
 
   findCompanions(userId, startTime, endTime) {
-    // 1. 获取用户在时间范围内的所有 location 事件
+    // 1. 获取目标用户的时间范围内所有 location 事件
+    //    - 查自己：user-location（自己的位置事件）
+    //    - 查好友：friend-location（好友的位置事件）
     const userEvents = this._query(
-      `SELECT * FROM events WHERE user_id = $userId AND type = 'user-location'
+      `SELECT * FROM events WHERE user_id = $userId AND type IN ('user-location', 'friend-location')
        AND created_at >= $start AND created_at <= $end
        ORDER BY created_at ASC`,
       { $userId: userId, $start: startTime, $end: endTime }
@@ -319,9 +321,10 @@ export class Storage {
       { $start: startTime, $end: endTime }
     );
 
-    // 4. 交叉匹配
+    // 4. 交叉匹配（排除目标用户本人——查好友时 TA 自己的 friend-location 也会进 friendEvents）
     const matchedMap = new Map();
     for (const ev of friendEvents) {
+      if (ev.user_id === userId) continue;
       let location = '';
       try {
         const cj = JSON.parse(ev.content_json);
