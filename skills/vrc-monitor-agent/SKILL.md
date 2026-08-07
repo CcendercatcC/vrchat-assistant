@@ -35,6 +35,8 @@ metadata:
 | `upload_emoji` | 上传自定义 boop 表情（需 VRChat Plus；imagePath 必填，animated/animationStyle 可选） |
 | `upload_print` | 上传照片到 VRChat 相册 Prints（需 VRC+；imagePath 必填，note 可选备注） |
 | `upload_gallery_image` | 上传图片到 VRC+ 图库 Gallery（需 VRC+；imagePath 必填） |
+| `download_print` | 从相册下载照片到本地（printId 必填；返回路径可 MEDIA: 发送） |
+| `download_gallery_image` | 从图库下载图片到本地（fileId 必填；返回路径可 MEDIA: 发送） |
 | `send_invite` | 邀请好友加入你当前所在房间（拉人进房；userId/worldId/instanceId 必填、message 可选） |
 | `request_invite` | 请求好友邀请你加入 TA 的房间（userId 必填、message 可选，默认 "Can I join you?"） |
 | `send_friend_request` | 发送好友请求（添加好友；userId 直接加 或 displayName 精确匹配不区分大小写，二选一） |

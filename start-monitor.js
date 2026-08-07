@@ -7,7 +7,7 @@
  * 启动: node start-monitor.js
  */
 import http from 'node:http';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -242,6 +242,30 @@ const CUSTOM_TOOLS = [
       properties: {
         fileId: { type: 'string', description: 'File ID (file_...)' },
         confirm: { type: 'boolean', description: 'Set true to actually remove the gallery image (irreversible). Default false returns preview only.' },
+      },
+      required: ['fileId'],
+    },
+  },
+  {
+    name: 'download_print',
+    description: '[query] Download a photo from your VRChat prints album to local disk. Returns local file path.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        printId: { type: 'string', description: 'Print ID (prnt_...)' },
+        outputDir: { type: 'string', description: 'Optional output directory. Defaults to <service>/downloads/' },
+      },
+      required: ['printId'],
+    },
+  },
+  {
+    name: 'download_gallery_image',
+    description: '[query] Download an image from your VRC+ gallery to local disk. Returns local file path.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        fileId: { type: 'string', description: 'File ID (file_...)' },
+        outputDir: { type: 'string', description: 'Optional output directory. Defaults to <service>/downloads/' },
       },
       required: ['fileId'],
     },
@@ -1003,6 +1027,78 @@ async function handleRemoveGalleryImage({ fileId, confirm }) {
   return { fileId, ok: true };
 }
 
+// ── 新增：下载 prints / gallery 图片 ──
+
+function _extFromContentType(contentType, url) {
+  if (contentType) {
+    if (contentType.includes('image/png')) return 'png';
+    if (contentType.includes('image/jpeg')) return 'jpg';
+    if (contentType.includes('image/jpg')) return 'jpg';
+    if (contentType.includes('image/gif')) return 'gif';
+    if (contentType.includes('image/webp')) return 'webp';
+    if (contentType.includes('image/bmp')) return 'bmp';
+  }
+  try {
+    const pathname = new URL(url).pathname;
+    const match = pathname.match(/\.([a-zA-Z0-9]+)$/);
+    if (match) return match[1].toLowerCase();
+  } catch {}
+  return 'png';
+}
+
+async function handleDownloadPrint({ printId, outputDir }) {
+  if (!printId) throw new Error('printId is required');
+
+  const user = await api.ensureAuth();
+  const userId = user?.id;
+  if (!userId) throw new Error('Unable to determine current user');
+
+  const r = await api._request('GET', `/prints/user/${userId}?n=100`);
+  if (r.status !== 200) throw new Error(`API error: ${r.status}`);
+
+  const prints = Array.isArray(r.data) ? r.data : [];
+  const print = prints.find(p => p.id === printId);
+  if (!print) throw new Error(`未找到 printId: ${printId}`);
+
+  const url = print.files?.image;
+  if (!url) throw new Error(`未找到 printId: ${printId} 的图片 URL`);
+
+  const buffer = await api.downloadFile(url);
+
+  const ext = _extFromContentType(buffer.contentType, url);
+  const dir = outputDir || path.join(__dirname, 'downloads');
+  mkdirSync(dir, { recursive: true });
+  const filePath = path.join(dir, `print_${printId}.${ext}`);
+  writeFileSync(filePath, buffer);
+
+  return { ok: true, printId, path: filePath, sizeBytes: buffer.length, url };
+}
+
+async function handleDownloadGalleryImage({ fileId, outputDir }) {
+  if (!fileId) throw new Error('fileId is required');
+
+  const r = await api._request('GET', `/files?tag=gallery&n=100`);
+  if (r.status !== 200) throw new Error(`API error: ${r.status}`);
+
+  const images = Array.isArray(r.data) ? r.data : [];
+  const image = images.find(img => img.id === fileId);
+  if (!image) throw new Error(`未找到 fileId: ${fileId}`);
+
+  const lastVersion = image.versions?.[image.versions.length - 1];
+  const url = lastVersion?.file?.url;
+  if (!url) throw new Error(`未找到 fileId: ${fileId} 的图片 URL`);
+
+  const buffer = await api.downloadFile(url);
+
+  const ext = _extFromContentType(buffer.contentType, url);
+  const dir = outputDir || path.join(__dirname, 'downloads');
+  mkdirSync(dir, { recursive: true });
+  const filePath = path.join(dir, `gallery_${fileId}.${ext}`);
+  writeFileSync(filePath, buffer);
+
+  return { ok: true, fileId, path: filePath, sizeBytes: buffer.length, url };
+}
+
 // ── RPC 处理 ──
 
 async function handleRpc(rpc, session, res) {
@@ -1077,6 +1173,14 @@ async function handleRpc(rpc, session, res) {
           }
           case 'remove_gallery_image': {
             result = await rateLimiter.execute(() => handleRemoveGalleryImage(args));
+            break;
+          }
+          case 'download_print': {
+            result = await rateLimiter.execute(() => handleDownloadPrint(args));
+            break;
+          }
+          case 'download_gallery_image': {
+            result = await rateLimiter.execute(() => handleDownloadGalleryImage(args));
             break;
           }
           case 'send_invite': {

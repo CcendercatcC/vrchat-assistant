@@ -505,4 +505,59 @@ export class VrchatApiClient {
     };
     return map[ext] || 'application/octet-stream';
   }
+
+  /**
+   * Download a binary file (VRChat file endpoints require Cookie + UA, otherwise 403)
+   * @param {string} url Full URL (e.g. https://api.vrchat.cloud/api/1/file/xxx/1/file)
+   * @returns {Promise<Buffer>}
+   */
+  async downloadFile(url) {
+    await this.ensureAuth();
+    return this._downloadWithRedirects(url, 0);
+  }
+
+  _downloadWithRedirects(url, redirectCount) {
+    return new Promise((resolve, reject) => {
+      const target = new URL(url);
+      const options = {
+        hostname: target.hostname,
+        path: target.pathname + target.search,
+        method: 'GET',
+        headers: {
+          'User-Agent': 'VRCX-0-Actions-MCP/1.0',
+          'Cookie': `auth=${this.authCookie}`,
+        },
+      };
+
+      const req = https.request(options, (res) => {
+        // 302/301 重定向（VRChat 文件 URL → files.vrchat.cloud CDN 签名 URL）
+        if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
+          if (redirectCount >= 5) {
+            reject(new Error(`重定向次数过多 (${url})`));
+            return;
+          }
+          // 相对/绝对 location 解析
+          const next = new URL(res.headers.location, url).toString();
+          res.resume(); // 释放连接
+          resolve(this._downloadWithRedirects(next, redirectCount + 1));
+          return;
+        }
+
+        const chunks = [];
+        res.on('data', (chunk) => chunks.push(chunk));
+        res.on('end', () => {
+          if (res.statusCode >= 400) {
+            reject(new Error(`下载失败 HTTP ${res.statusCode}`));
+            return;
+          }
+          const buffer = Buffer.concat(chunks);
+          buffer.contentType = res.headers['content-type'] || null;
+          resolve(buffer);
+        });
+      });
+
+      req.on('error', reject);
+      req.end();
+    });
+  }
 }
