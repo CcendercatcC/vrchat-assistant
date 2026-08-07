@@ -29,7 +29,9 @@ metadata:
 | `get_world_name` | 世界名查询（缓存+API 回退） |
 | `get_nicknames` / `set_nickname` | 好友昵称映射（查询/写入，本地库） |
 | `get_watchlist` / `add_to_watchlist` / `remove_from_watchlist` | 关注名单 |
-| `send_boop` / `send_invite` / `request_invite` | 写操作（限流 2.6s） |
+| `send_boop` | 戳一戳好友（Boop），对方收到戳戳通知（参数：userId 必填、emojiId 可选） |
+| `send_invite` | 邀请好友加入你当前所在房间（拉人进房；userId/worldId/instanceId 必填、message 可选） |
+| `request_invite` | 请求好友邀请你加入 TA 的房间（userId 必填、message 可选，默认 "Can I join you?"） |
 | `get_server_status` | 服务/认证状态 |
 | `get_database_stats` | 数据库统计 |
 

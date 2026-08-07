@@ -182,13 +182,13 @@ mcp_servers:
 |------|------|
 | `get_watchlist` / `add_to_watchlist` / `remove_from_watchlist` | 关注名单管理 |
 
-### 写操作（限流 2.6s）
+### 写操作（VRChat 社交互动，限流 2.6s）
 
-| 工具 | 说明 |
-|------|------|
-| `send_boop` | 发送 Boop |
-| `send_invite` | 发送邀请 |
-| `request_invite` | 请求邀请 |
+| 工具 | 功能 | 必填参数 | 可选参数 |
+|------|------|----------|----------|
+| `send_boop` | 戳一戳好友（Boop），对方收到戳戳通知 | `userId` | `emojiId`（戳戳表情） |
+| `send_invite` | 邀请好友加入**你当前所在房间**（拉人进房） | `userId`、`worldId`、`instanceId` | `message`（附带消息） |
+| `request_invite` | 请求好友**邀请你加入 TA 的房间**（默认消息 "Can I join you?"） | `userId` | `message` |
 
 ### 系统
 
