@@ -66,14 +66,22 @@ curl http://127.0.0.1:8799/health
 服务本身是独立 Node 进程；若要交给 Hermes 托管（会话启动自动拉起、崩溃自愈），安装 `hermes-plugin/` 下的插件：
 
 ```bash
-# 1. 复制插件到 Hermes 用户插件目录
+# 1. 复制插件到 Hermes 用户插件目录（含 dashboard 后端子目录，必须带 -r）
 mkdir -p ~/.hermes/plugins/vrc-monitor
-cp hermes-plugin/* ~/.hermes/plugins/vrc-monitor/
+cp -r hermes-plugin/* ~/.hermes/plugins/vrc-monitor/
 
 # 2. 启用（需要 hermes 环境）
 hermes plugins enable vrc-monitor
 
 # 3. 重启 Hermes 会话生效
+```
+
+桌面插件（GUI 配置入口，可选）：
+
+```bash
+mkdir -p ~/.hermes/desktop-plugins/vrc-monitor
+cp desktop/plugin.js ~/.hermes/desktop-plugins/vrc-monitor/
+# 重启 Gateway + 桌面端 ⌘K → Reload desktop plugins
 ```
 
 ### 插件提供的工具
@@ -89,7 +97,7 @@ hermes plugins enable vrc-monitor
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `VRC_MONITOR_DIR` | `D:\workspace\vrcx-mcp-actions` | 服务目录（含 start-monitor.js） |
+| `VRC_MONITOR_DIR` | 自动探测（agent 在仓库目录内运行） | 服务目录（含 start-monitor.js），未探测到时需显式设置 |
 | `VRC_MONITOR_NODE` | PATH 中的 node | Node 可执行文件路径 |
 
 ### 进程托管原理
@@ -172,7 +180,12 @@ vrcx-mcp-actions/
 │   ├── plugin.yaml
 │   ├── __init__.py
 │   ├── process_manager.py  # 进程生命周期管理
-│   └── tools.py
+│   ├── tools.py
+│   └── dashboard/          # 桌面插件后端 API
+│       ├── manifest.json
+│       └── plugin_api.py   # /status /credentials /doctor 等路由
+├── desktop/
+│   └── plugin.js           # Hermes 桌面插件（GUI 配置面板）
 ├── credentials.example.json # 凭据模板（复制为 credentials.json）
 ├── 一键启动.cmd            # Windows 快捷启动
 └── README.md
