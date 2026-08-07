@@ -96,6 +96,18 @@ mcp_servers:
 - "XX 今天和谁一起玩？"
 - "查一下 XX 最近的活动记录"
 
+### 7. 安装 Agent Skill（可选但推荐）
+
+仓库 `skills/` 目录自带 2 份开箱即用的 Agent skill（已去敏感化），复制到你的 Hermes skills 目录后，Agent 直接掌握全部查询工作流和陷阱：
+
+```bash
+mkdir -p "$HERMES_HOME/skills"
+cp -r skills/vrc-monitor-agent "$HERMES_HOME/skills/"
+cp -r skills/vrc-monitor-companion-query "$HERMES_HOME/skills/"
+```
+
+重启 Hermes 会话生效。详见 README「Agent Skill 安装」章节。
+
 ## 常用操作
 
 | 操作 | 命令/方式 |

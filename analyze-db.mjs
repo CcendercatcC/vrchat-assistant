@@ -1,10 +1,12 @@
 /**
  * VRCX-0 数据库结构分析 v2
+ * 用法: node analyze-db.mjs [VRCX数据库路径]
+ * 默认路径按平台自动探测（Windows VRCX-0 默认安装位置）
  */
 import initSqlJs from 'sql.js';
 import { readFileSync } from 'node:fs';
 
-const DB_PATH = 'C:/Users/MECHREVO/AppData/Roaming/VRCX-0/VRCX-0.sqlite3';
+const DB_PATH = process.argv[2] || 'C:/Users/<用户名>/AppData/Roaming/VRCX-0/VRCX-0.sqlite3';
 
 function query(db, sql) {
   const result = db.exec(sql);

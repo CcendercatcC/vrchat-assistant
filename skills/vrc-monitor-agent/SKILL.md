@@ -1,0 +1,155 @@
+---
+name: vrc-monitor-agent
+description: "Use when answering questions about VRChat friends (online status, who played with whom, activity timelines, online patterns) via the vrc-monitor MCP server on port 8799."
+version: 1.0.0
+metadata:
+  hermes:
+    tags: [vrchat, gaming, social, mcp, monitoring]
+---
+
+# vrc-monitor Agent Skill — 好友监控系统使用指南
+
+本 skill 面向**任何 AI Agent**：当用户询问 VRChat 好友相关问题（谁在线、谁和谁一起玩、某人的活动时间线、上线规律）时，通过 `vrc-monitor` 的 MCP 接口查询。安装配置见项目根 `AGENTS.md` / `README.md`。
+
+- MCP 端点：`http://127.0.0.1:8799/mcp`
+- 服务启动：项目目录下 `node start-monitor.js`（首次需配置 `credentials.json`，见 AGENTS.md）
+- 数据库：本地 SQLite（WebSocket 实时采集事件，含历史上线/位置/同屏记录）
+
+## MCP 工具（18 个）
+
+| 工具 | 说明 |
+|------|------|
+| `get_online_friends` | 当前在线好友列表（含位置/平台） |
+| `get_friend_info` | 好友详细信息 |
+| `search_users` | 按名字搜索用户 |
+| `get_friend_events` | 某好友的事件历史（本地库） |
+| `get_recent_events` | 最新事件流 |
+| `get_companions` | **同屏交叉查询**（指定时间窗口内同实例的好友；可查自己或任意好友） |
+| `get_online_pattern` | **上线规律分析**（上线/下线/活跃时段分布 + 活跃天数/频率 + 峰值建议） |
+| `get_world_name` | 世界名查询（缓存+API 回退） |
+| `get_nicknames` / `set_nickname` | 好友昵称映射（查询/写入，本地库） |
+| `get_watchlist` / `add_to_watchlist` / `remove_from_watchlist` | 关注名单 |
+| `send_boop` / `send_invite` / `request_invite` | 写操作（限流 2.6s） |
+| `get_server_status` | 服务/认证状态 |
+| `get_database_stats` | 数据库统计 |
+
+调用方式（HTTP SSE JSON-RPC）：
+
+```bash
+curl -s http://127.0.0.1:8799/mcp -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"<工具名>","arguments":{...}}}'
+```
+
+响应是 SSE 格式，取 `data:` 行，解析 `result.content[0].text` 为 JSON。
+
+## 核心查询工作流
+
+### 1. "XX 现在和谁一起？" / 同实例好友
+
+```
+1. get_friend_info(userId=目标) → 取 location 字段（如 "wrld_xxx:77182~hidden(usr_owner)~region(jp)"）
+2. get_online_friends() → 所有在线好友的位置
+3. 按完整 location 字符串匹配 → 同实例的好友
+4. 从 location 解析 owner：hidden(usr_xxx)/private(usr_xxx)/friends(usr_xxx)/group(grp_xxx)
+5. get_world_name(worldId) → 世界名（location.split(':')[0]）
+```
+
+- 只能看到你也是好友的人（API 限制）
+- `~hidden(usr_A)` = A 的隐藏房；`~private(usr_B)` = B 的私密房；`~friends(usr_C)` = C 的好友房
+
+### 2. "XX 今天/某天和谁一起玩过？" → `get_companions`
+
+**不要委派子 agent 做同屏查询**——子 agent 只会查少量已知 userId，会漏掉其他人。直接用 MCP 工具：
+
+```bash
+curl -s http://127.0.0.1:8799/mcp -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_companions","arguments":{"startTime":"2026-08-01T11:00:00Z","endTime":"2026-08-01T17:00:00Z","userId":"<目标userId>"}}}'
+```
+
+- `startTime`/`endTime`：ISO 8601 UTC（北京时间 -8h），窗口 ≤24h
+- `userId`：**可查自己（默认，即登录账号）或任意好友**——传好友 ID = "XX 和谁一起玩过"
+- 原理：查目标用户的 location 事件 → 提取 worldId:instanceId → 全量比对好友 location 事件 → 排除目标本人 → 按 userId 分组
+- 返回每个同屏好友的 matchCount（同屏次数）、worlds（世界列表）
+
+### 3. "某天活动时间线" / "XX 和 YY 昨晚同房吗"
+
+```
+1. get_friend_events(userId=A, types="friend-location", limit=5) → 最近位置变化
+   - created_at 是 UTC，+8 转北京时间
+   - location 格式 "wrld_xxx:instanceId~hidden(usr_owner)~region(jp)"；traveling 时看 travelingToLocation
+2. 比对 worldId + instanceId：相同 = 同房；确认时间重叠
+3. get_world_name(worldId) → 世界名
+```
+
+陷阱：`get_friend_events` 每个事件嵌完整用户 JSON（~50KB），limit 大会爆响应。用 `limit=5` + `offset` 分页；或只读顶层字段。
+
+### 4. "XX 几点上线 / 什么时候最容易碰到 TA" → `get_online_pattern`
+
+一次调用拿全部规律，不要逐条翻事件：
+
+```bash
+# 默认最近 30 天（北京时间自然日）；可传 days 或 startTime/endTime
+curl -s http://127.0.0.1:8799/mcp -X POST -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_online_pattern","arguments":{"userId":"<目标userId>"}}}'
+```
+
+返回：`hourly`（上线/下线/位置活跃按北京小时分桶）、`activeDates`（活跃日期）、`frequency`（活跃天数/活动比率/平均间隔/最长空档）、`peak`（登录/活跃/下线峰值小时 + suggestedWindow 最佳相遇时段）。
+
+### 5. 昵称管理
+
+好友昵称映射存本地库（`nicknames` 表），**不维护在 skill 文件里**：
+
+- 查询：`get_nicknames`（不带参数返回全部；`userId` 精确查；`query` 按昵称或显示名模糊查）
+- 写入：`set_nickname {userId, nickname, displayName?}`（upsert 幂等）
+- 建议工作流：用户给好友取中文昵称 → `search_users` 找 userId → `set_nickname` 写入 → 后续查询结果用昵称展示
+
+## 结果格式
+
+用户偏好带昵称列的紧凑表格，不用原始显示名。companion 数据展示：`| 排名 | 好友 | 共处时间 | 同屏实例 | 最近一次 |`，一行小结总结社交模式。
+
+## 常见陷阱
+
+### 时间戳
+
+所有事件时间为 ISO 8601 UTC，展示转北京时间 +8。原始格式有两种（`...Z` 毫秒 / `+00:00` 微秒），解析时统一兼容。
+
+### 展示时间必须带完整日期
+
+事件按 created_at DESC 返回，可能混入数天前的旧事件。展示时间戳必须带年月日，只看时分秒会误读。
+
+### 世界名可能为空 / 缓存陈旧
+
+- `get_friend_events` 的 world_name 字段经常空，用 `get_world_name(worldId)` 单独查
+- VRChat 世界可以改名，world_cache 有 24h TTL 防陈旧；用户否认世界名时用 `get_world_name` 带 `forceRefresh: true` 强制刷新
+
+### traveling 状态
+
+`friend-location` 事件中 `location: "traveling"` 是转场，目的地看 `travelingToLocation`。
+
+### boop 通知在 notification-v2 里
+
+boop 通知落库的顶层事件类型是 `notification-v2`（不是 boop），boop 在 content_json.type 里。`get_recent_events(typeFilter="boop")` 查不到，用 `typeFilter="notification-v2"`。
+
+### ⚠️ sql.js 内存数据库 — 外部写文件无效/会被覆盖
+
+服务用 sql.js（WASM 内存数据库）：启动时把 sqlite 文件读进内存，`save()` 才写回。**外部直接改数据库文件 = 服务进程看不到，且服务周期性 save 会把内存状态覆盖回文件、冲掉外部写入**。所有数据写入必须走 MCP 工具（如 `set_nickname`）。只读检查可用 sqlite3 CLI 直连文件，但可能和服务内存不一致。
+
+### OTP 登录
+
+- 服务自动从邮箱 IMAP 抓取 OTP 验证码登录，无人值守
+- QQ 邮箱有"自动分类"功能会把验证码邮件归档到分类文件夹（IMAP 名含 `VRChat`，modified UTF-7 编码）——fetch-otp.py 已带文件夹遍历兜底，若 OTP 一直失败先想到这个
+- 认证失败有 120s 冷却，401 限流 5min 冷却，会自愈
+
+### 代理（国内网络）
+
+WebSocket 直连失败 6s 后自动回退到本地代理（默认 `127.0.0.1:7892`，可在代码/环境变量中修改）。若 HTTP 请求报 502 且本机开了系统代理，设 `NO_PROXY=127.0.0.1,localhost` 环境变量。
+
+## 服务健康检查
+
+```bash
+curl -s http://127.0.0.1:8799/health
+```
+
+正常：`auth.authenticated=true`、`ws.status=connected`。服务没起时：项目目录下 `node start-monitor.js` 后台启动（10-15s 完成登录+WS 连接）。改代码后必须重启才生效（进程常驻，不热加载）。

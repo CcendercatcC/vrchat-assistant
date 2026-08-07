@@ -21,6 +21,8 @@
 ---
 
 > 🤖 **AI Agent 看这里**：完整配置引导见 [AGENTS.md](AGENTS.md)——凭据、环境变量、启动、插件安装的逐步说明，可让 Agent 自动完成配置。
+>
+> 📦 **开箱即用的 Agent Skill**：仓库自带 2 份面向 AI Agent 的 skill（查询工作流 + 常见陷阱，已去敏感化），复制到你的 Hermes skills 目录即可直接使用，见下方「Agent Skill 安装」。
 
 ## 🚀 快速开始
 
@@ -64,6 +66,28 @@ curl http://127.0.0.1:8799/health
 ```
 
 正常响应：`Auth: true`、`WS: connected`、在线好友数。
+
+## 📦 Agent Skill 安装（开箱即用）
+
+仓库 `skills/` 目录自带 2 份**面向 AI Agent 的 skill 文档**（已隐去所有敏感信息，任何用户可直接使用）。安装后，Agent 无需 curl 手写 JSON-RPC，直接掌握查询工作流、正确工具选择和常见陷阱：
+
+| Skill | 内容 | 适用场景 |
+|-------|------|----------|
+| `skills/vrc-monitor-agent/` | 18 个 MCP 工具清单、5 大查询工作流（在线/同屏/时间线/上线规律/昵称）、常见陷阱、健康检查 | 日常好友查询 |
+| `skills/vrc-monitor-companion-query/` | 「谁和我/和 XX 一起玩过」同屏交叉查询的正确姿势（为何不委派子 agent） | 同屏/玩伴查询 |
+
+**安装方式**（以 Hermes 为例，其他 Agent 框架同理）——把 skill 目录复制到你的 skills 目录：
+
+```bash
+# <hermes home> 默认位置：Linux/macOS 为 ~/.hermes，Windows 为 %LOCALAPPDATA%\hermes
+mkdir -p "$HERMES_HOME/skills"
+cp -r skills/vrc-monitor-agent "$HERMES_HOME/skills/"
+cp -r skills/vrc-monitor-companion-query "$HERMES_HOME/skills/"
+```
+
+然后重启 Hermes 会话，Agent 即具备完整的 vrc-monitor 查询能力。前提：vrc-monitor 服务已按上文配置并运行（MCP 端点 `http://127.0.0.1:8799/mcp`）。
+
+> 提示：skill 里的昵称管理走 `get_nicknames` / `set_nickname` MCP 工具（存本地库），不写死在 skill 文件里——新用户给自己的好友取昵称后直接写入即可。
 
 ## 🤖 Hermes 插件（进程托管）
 
@@ -198,6 +222,9 @@ mcp_servers:
 │       └── plugin_api.py   # /status /credentials /doctor 等路由
 ├── desktop/
 │   └── plugin.js           # Hermes 桌面插件（GUI 配置面板）
+├── skills/                 # 开箱即用的 Agent skill（已去敏感化）
+│   ├── vrc-monitor-agent/          # 主使用指南（工具/工作流/陷阱）
+│   └── vrc-monitor-companion-query/ # 同屏查询专项
 ├── credentials.example.json # 凭据模板（复制为 credentials.json）
 └── README.md
 ```
@@ -219,7 +246,7 @@ node migrate-vrcx0.mjs <VRCX数据库路径> <userId>
 ## 🛠 故障排查
 
 **Q: WebSocket 连不上？**
-A: 国内网络可能需代理。服务自动直连 6s 失败后回退到 `127.0.0.1:7892` 代理，无需人工干预。
+A: 国内网络可能需代理。服务自动直连 6s 失败后回退到本地代理（默认 `127.0.0.1:7892`），无需人工干预。
 
 **Q: 登录提示 OTP 但一直失败？**
 A: 检查 `credentials.json` 的 `imap_auth_code` 是否为正确的 IMAP 授权码（非登录密码）。服务会在认证失败后冷却 120s（限流 401 则 5min）自动重试，不会高频刷验证码。

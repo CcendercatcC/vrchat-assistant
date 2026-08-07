@@ -153,7 +153,7 @@ def _credentials_path() -> Optional[Path]:
 
 
 def _mask_email(email: str) -> str:
-    """Mask email local part: 84xxxx16@qq.com -> 84***16@qq.com"""
+    """Mask email local part: user@example.com -> u***r@example.com"""
     if "@" not in email:
         return email
     local, domain = email.split("@", 1)
