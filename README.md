@@ -202,6 +202,8 @@ mcp_servers:
 | `get_server_status` | 服务/认证状态 |
 | `get_database_stats` | 数据库统计 |
 
+> **emoji 图片方形化**：VRChat 要求 emoji 为正方形。非方形图片先用 `scripts/prepare_emoji_image.py` 处理（支持中心裁剪 fit / 补边 pad / 按视觉模型主体坐标裁剪 smart，输出 1024x1024 PNG），再上传。
+
 ## 📁 目录结构
 
 ```
@@ -230,6 +232,8 @@ mcp_servers:
 ├── skills/                 # 开箱即用的 Agent skill（已去敏感化）
 │   ├── vrc-monitor-agent/          # 主使用指南（工具/工作流/陷阱）
 │   └── vrc-monitor-companion-query/ # 同屏查询专项
+├── scripts/
+│   └── prepare_emoji_image.py      # emoji 图片方形化（fit/pad/smart）
 ├── credentials.example.json # 凭据模板（复制为 credentials.json）
 └── README.md
 ```
