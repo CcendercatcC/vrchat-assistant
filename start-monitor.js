@@ -158,6 +158,27 @@ const CUSTOM_TOOLS = [
     },
   },
   {
+    name: 'get_boop_emojis',
+    description: '[query] List built-in boop emojis and their emojiId format.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'upload_emoji',
+    description: '[write·vrchat] Upload a custom boop emoji (requires VRChat Plus). Returns fileId to use as emojiId in send_boop.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        imagePath: { type: 'string', description: 'Absolute path to the image file (e.g. D:/path/emoji.png)' },
+        animated: { type: 'boolean', description: 'Upload as animated emoji', default: false },
+        animationStyle: { type: 'string', description: 'Animation style (e.g. bounce/spin), only used when animated=true' },
+      },
+      required: ['imagePath'],
+    },
+  },
+  {
     name: 'send_invite',
     description: '[write·vrchat] Send an invite to join your current instance.',
     inputSchema: {
@@ -714,6 +735,83 @@ function handleSetNickname({ userId, nickname, displayName }) {
   return result;
 }
 
+// ── 新增：boop emoji 工具 ──
+
+function handleGetBoopEmojis() {
+  const categories = [
+    {
+      name: '表情',
+      names: ['Angry', 'Blushing', 'Crying', 'Frown', 'Hand Wave', 'Hang Ten', 'In Love', 'Jack O Lantern', 'Kiss', 'Laugh', 'Skull', 'Smile', 'Spooky Ghost', 'Stoic', 'Sunglasses', 'Thinking', 'Thumbs Down', 'Thumbs Up', 'Tongue Out', 'Wow'],
+    },
+    {
+      name: '指令',
+      names: ['Arrow Point', "Can't see", 'Hourglass', 'Keyboard', 'No Headphones', 'No Mic', 'Portal', 'Shush'],
+    },
+    {
+      name: '季节/装饰',
+      names: ['Bats', 'Cloud', 'Fire', 'Snow Fall', 'Snowball', 'Splash', 'Web', 'Beer', 'Candy', 'Candy Cane', 'Candy Corn', 'Champagne', 'Drink', 'Gingerbread', 'Ice Cream', 'Pineapple', 'Pizza', 'Tomato', 'Beachball', 'Coal', 'Confetti', 'Gift', 'Gifts', 'Life Ring', 'Mistletoe', 'Money', 'Neon Shades', 'Sun Lotion'],
+    },
+    {
+      name: '通用',
+      names: ['Boo', 'Broken Heart', 'Exclamation', 'Go', 'Heart', 'Music Note', 'Question', 'Stop', 'Zzz'],
+    },
+  ];
+
+  const emojis = [];
+  for (const category of categories) {
+    for (const name of category.names) {
+      emojis.push({
+        name,
+        emojiId: `default_${name.replace(/ /g, '_').toLowerCase()}`,
+        category: category.name,
+      });
+    }
+  }
+
+  return {
+    builtinCount: emojis.length,
+    format: 'default_<name_lowercase_underscores> (e.g. "Hand Wave" -> default_hand_wave)',
+    emojis,
+    custom: {
+      endpoint: 'POST /file/image (tag: emoji)',
+      requiresVRCPlus: true,
+      note: '自定义 emoji 用 upload_emoji 工具上传，返回 fileId 用作 emojiId',
+    },
+  };
+}
+
+async function handleUploadEmoji({ imagePath, animated = false, animationStyle }) {
+  if (!imagePath) throw new Error('imagePath is required (absolute path to the image file)');
+  if (!existsSync(imagePath)) {
+    throw new Error(`图片文件不存在: ${imagePath}`);
+  }
+
+  let fileBuffer;
+  try {
+    fileBuffer = readFileSync(imagePath);
+  } catch (err) {
+    throw new Error(`读取图片失败: ${err.message}`);
+  }
+
+  const tag = animated ? 'emojianimated' : 'emoji';
+  const params = { tag, maskTag: 'square' };
+  if (animated && animationStyle) {
+    params.animationStyle = animationStyle;
+  }
+
+  const r = await api.uploadImageFile(fileBuffer, imagePath, params);
+  if (r.status >= 400) {
+    throw new Error(`API error ${r.status}: ${JSON.stringify(r.data).slice(0, 200)}`);
+  }
+
+  const fileId = r.data?.id;
+  if (!fileId) {
+    throw new Error(`API 未返回 fileId: ${JSON.stringify(r.data).slice(0, 200)}`);
+  }
+
+  return { ok: true, fileId, emojiId: fileId, tag, requiresVRCPlus: true };
+}
+
 // ── RPC 处理 ──
 
 async function handleRpc(rpc, session, res) {
@@ -756,6 +854,14 @@ async function handleRpc(rpc, session, res) {
             const r = await rateLimiter.execute(() => api.sendBoop(args.userId, args.emojiId || ''));
             if (r.status >= 400) throw new Error(`API error ${r.status}`);
             result = { success: true, userId: args.userId, booped: true };
+            break;
+          }
+          case 'get_boop_emojis': {
+            result = await rateLimiter.execute(() => handleGetBoopEmojis());
+            break;
+          }
+          case 'upload_emoji': {
+            result = await rateLimiter.execute(() => handleUploadEmoji(args));
             break;
           }
           case 'send_invite': {

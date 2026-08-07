@@ -405,4 +405,78 @@ export class VrchatApiClient {
     await this.ensureAuth();
     return await this._request('GET', `/users/${encodeURIComponent(userId)}`);
   }
+
+  /**
+   * Upload an image file via multipart/form-data (used for custom emojis)
+   */
+  async uploadImageFile(fileBuffer, filename, params) {
+    await this.ensureAuth();
+    return this._multipartRequest('POST', '/file/image', fileBuffer, filename, params);
+  }
+
+  _multipartRequest(method, path, fileBuffer, filename, params) {
+    return new Promise((resolve, reject) => {
+      const url = new URL(API_BASE + path);
+      const boundary = `----VrcMonitorBoundary${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+      const cookieStr = this.authCookie ? `auth=${this.authCookie}` : '';
+      const safeFilename = encodeURIComponent(filename || 'emoji');
+
+      const dataJson = JSON.stringify(params);
+      const pre = Buffer.from([
+        `--${boundary}\r\n`,
+        `Content-Disposition: form-data; name="data"\r\n`,
+        `Content-Type: application/json\r\n\r\n`,
+        `${dataJson}\r\n`,
+        `--${boundary}\r\n`,
+        `Content-Disposition: form-data; name="file"; filename="${safeFilename}"\r\n`,
+        `Content-Type: ${this._guessContentType(filename)}\r\n\r\n`,
+      ].join(''));
+      const post = Buffer.from(`\r\n--${boundary}--\r\n`);
+      const body = Buffer.concat([pre, fileBuffer, post]);
+
+      const options = {
+        hostname: url.hostname,
+        path: url.pathname + url.search,
+        method,
+        headers: {
+          'User-Agent': 'VRCX-0-Actions-MCP/1.0',
+          'Accept': 'application/json',
+          'Content-Type': `multipart/form-data; boundary=${boundary}`,
+          'Content-Length': body.length,
+          ...(cookieStr ? { 'Cookie': cookieStr } : {}),
+        },
+      };
+
+      const req = https.request(options, (res) => {
+        let data = '';
+        res.on('data', (chunk) => data += chunk);
+        res.on('end', () => {
+          try {
+            const parsed = JSON.parse(data);
+            resolve({ status: res.statusCode, data: parsed, headers: res.headers });
+          } catch {
+            resolve({ status: res.statusCode, data, headers: res.headers });
+          }
+        });
+      });
+
+      req.on('error', reject);
+      req.write(body);
+      req.end();
+    });
+  }
+
+  _guessContentType(filename) {
+    if (!filename) return 'application/octet-stream';
+    const ext = filename.split('.').pop().toLowerCase();
+    const map = {
+      png: 'image/png',
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      gif: 'image/gif',
+      webp: 'image/webp',
+      bmp: 'image/bmp',
+    };
+    return map[ext] || 'application/octet-stream';
+  }
 }
