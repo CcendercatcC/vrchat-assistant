@@ -1,0 +1,8 @@
+{
+  "name": "vrc-monitor",
+  "label": "VRChat Monitor",
+  "description": "VRChat 好友监控服务控制面板",
+  "icon": "Puzzle",
+  "version": "1.0.0",
+  "api": "plugin_api.py"
+}

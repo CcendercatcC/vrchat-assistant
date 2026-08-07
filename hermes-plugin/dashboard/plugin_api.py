@@ -1,0 +1,213 @@
+"""vrc-monitor dashboard plugin — backend API routes.
+
+Mounted at /api/plugins/vrc-monitor/ by the dashboard plugin system.
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+from typing import Any, Dict, Optional
+
+import json
+
+from fastapi import APIRouter
+from pydantic import BaseModel
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import process_manager as pm  # noqa: E402
+
+router = APIRouter()
+
+
+# ── /status ────────────────────────────────────────────────────────────
+
+
+@router.get("/status")
+def get_status() -> Dict[str, Any]:
+    try:
+        return pm.status()
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+# ── /start ─────────────────────────────────────────────────────────────
+
+
+@router.post("/start")
+def post_start() -> Dict[str, Any]:
+    try:
+        return pm.start()
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+# ── /stop ──────────────────────────────────────────────────────────────
+
+
+@router.post("/stop")
+def post_stop() -> Dict[str, Any]:
+    try:
+        return pm.stop()
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+# ── /restart ───────────────────────────────────────────────────────────
+
+
+@router.post("/restart")
+def post_restart() -> Dict[str, Any]:
+    try:
+        return pm.restart()
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+# ── /config (GET) ──────────────────────────────────────────────────────
+
+
+@router.get("/config")
+def get_config() -> Dict[str, Any]:
+    try:
+        return {
+            "ok": True,
+            "monitor_dir": pm._resolve_monitor_dir(),
+            "node_exe": pm._resolve_node_exe(),
+            "env_monitor_dir": os.environ.get("VRC_MONITOR_DIR"),
+            "env_node_exe": os.environ.get("VRC_MONITOR_NODE"),
+            "config_file": str(pm._config_path()),
+        }
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+# ── /doctor ─────────────────────────────────────────────────────────────
+
+
+@router.get("/doctor")
+def get_doctor() -> Dict[str, Any]:
+    try:
+        monitor_dir = pm._resolve_monitor_dir()
+        node_exe = pm._resolve_node_exe()
+
+        checks = []
+
+        checks.append({
+            "name": "服务目录",
+            "ok": monitor_dir is not None,
+            "detail": monitor_dir if monitor_dir else "未找到服务目录：请设置环境变量 VRC_MONITOR_DIR 指向克隆的仓库目录，或参考仓库 AGENTS.md 配置",
+        })
+
+        checks.append({
+            "name": "Node.js",
+            "ok": node_exe is not None,
+            "detail": node_exe if node_exe else "未找到 node：请安装 Node.js 或设置 VRC_MONITOR_NODE",
+        })
+
+        if monitor_dir:
+            cred_path = Path(monitor_dir) / "credentials.json"
+            cred_ok = cred_path.is_file()
+            checks.append({
+                "name": "凭据文件",
+                "ok": cred_ok,
+                "detail": f"credentials.json {'存在' if cred_ok else '不存在'}，位于 {monitor_dir}",
+            })
+        else:
+            checks.append({
+                "name": "凭据文件",
+                "ok": False,
+                "detail": "无法检查：服务目录未解析",
+            })
+
+        all_ok = all(c["ok"] for c in checks)
+
+        return {
+            "ok": all_ok,
+            "checks": checks,
+            "resolved": {
+                "monitor_dir": monitor_dir,
+                "node_exe": node_exe,
+            },
+        }
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+# ── credentials ───────────────────────────────────────────────────────
+
+
+class CredentialBody(BaseModel):
+    email: Optional[str] = None
+    password: Optional[str] = None
+    qqmail_auth_code: Optional[str] = None
+
+
+def _credentials_path() -> Optional[Path]:
+    monitor_dir = pm._resolve_monitor_dir()
+    if not monitor_dir:
+        return None
+    return Path(monitor_dir) / "credentials.json"
+
+
+@router.get("/credentials")
+def get_credentials() -> Dict[str, Any]:
+    try:
+        cred_path = _credentials_path()
+        if cred_path is None:
+            return {"ok": False, "error": "请先配置服务目录"}
+        email = ""
+        password_configured = False
+        qqmail_auth_code_configured = False
+        if cred_path.is_file():
+            try:
+                creds = json.loads(cred_path.read_text(encoding="utf-8"))
+            except Exception:
+                creds = {}
+            email = creds.get("email", "") or ""
+            password_configured = bool(creds.get("password"))
+            qqmail_auth_code_configured = bool(creds.get("qqmail_auth_code"))
+        return {
+            "ok": True,
+            "email": email,
+            "password_configured": password_configured,
+            "qqmail_auth_code_configured": qqmail_auth_code_configured,
+        }
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@router.post("/credentials")
+def post_credentials(body: CredentialBody) -> Dict[str, Any]:
+    try:
+        cred_path = _credentials_path()
+        if cred_path is None:
+            return {"ok": False, "error": "请先配置服务目录"}
+        if cred_path.is_file():
+            try:
+                creds = json.loads(cred_path.read_text(encoding="utf-8"))
+            except Exception:
+                creds = {}
+        else:
+            creds = {}
+        if body.email is not None and body.email != "":
+            creds["email"] = body.email
+        if body.password is not None and body.password != "":
+            creds["password"] = body.password
+        if body.qqmail_auth_code is not None and body.qqmail_auth_code != "":
+            creds["qqmail_auth_code"] = body.qqmail_auth_code
+        cred_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = cred_path.with_suffix(".json.tmp")
+        tmp.write_text(
+            json.dumps(creds, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+        tmp.replace(cred_path)
+        return {
+            "ok": True,
+            "email": creds.get("email", ""),
+            "password_configured": bool(creds.get("password")),
+            "qqmail_auth_code_configured": bool(creds.get("qqmail_auth_code")),
+        }
+    except Exception as e:
+        return {"ok": False, "error": str(e)}

@@ -28,16 +28,45 @@ from hermes_constants import get_hermes_home
 #       .active.json       # {pid, started_at, log_file}
 #       monitor.log        # stdout + stderr of the Node process
 
-# Node executable. Resolution order:
-#   VRC_MONITOR_NODE  -> explicit path/command via env (portable setups)
-#   shutil.which("node") -> node found on PATH
-#   "node"            -> last resort; let subprocess resolve it
-NODE_EXE = os.environ.get("VRC_MONITOR_NODE") or shutil.which("node") or "node"
+# ── path resolution ────────────────────────────────────────────────────
+
 MONITOR_SCRIPT = "start-monitor.js"
-# Service directory holding start-monitor.js. Default is machine-specific;
-# set VRC_MONITOR_DIR to point at your own checkout.
-MONITOR_CWD = os.environ.get("VRC_MONITOR_DIR") or r"D:\workspace\vrcx-mcp-actions"
 HEALTH_URL = "http://127.0.0.1:8799/health"
+
+
+def _config_path() -> Path:
+    """Absolute path to the plugin-local config.json."""
+    return _root() / "config.json"
+
+
+def _resolve_monitor_dir() -> Optional[str]:
+    """Resolve ``monitor_dir`` (priority):
+    1. env ``VRC_MONITOR_DIR``
+    2. auto-detect: current working directory if start-monitor.js exists
+    3. None  → caller must report error
+    """
+    env_val = os.environ.get("VRC_MONITOR_DIR")
+    if env_val:
+        return env_val
+    cwd = os.getcwd()
+    if (Path(cwd) / MONITOR_SCRIPT).is_file():
+        return cwd
+    return None
+
+
+def _resolve_node_exe() -> Optional[str]:
+    """Resolve ``node_exe`` (priority):
+    1. env ``VRC_MONITOR_NODE``
+    2. ``shutil.which("node")``
+    3. None  → caller must report error
+    """
+    env_val = os.environ.get("VRC_MONITOR_NODE")
+    if env_val:
+        return env_val
+    resolved = shutil.which("node")
+    if resolved:
+        return resolved
+    return None
 
 
 def _root() -> Path:
@@ -213,6 +242,10 @@ def status() -> Dict[str, Any]:
         "started_at": started_at,
         "log_file": log_file,
         "inferred": inferred,
+        "resolved": {
+            "monitor_dir": _resolve_monitor_dir(),
+            "node_exe": _resolve_node_exe(),
+        },
     }
 
 
@@ -275,10 +308,25 @@ def start() -> Dict[str, Any]:
             "error": f"failed to open log file {log_path}: {e}",
         }
 
+    node_exe = _resolve_node_exe()
+    if not node_exe:
+        log_fh.close()
+        return {
+            "ok": False,
+            "error": "未找到 node：请安装 Node.js 或设置 VRC_MONITOR_NODE",
+        }
+    monitor_dir = _resolve_monitor_dir()
+    if not monitor_dir:
+        log_fh.close()
+        return {
+            "ok": False,
+            "error": "未找到服务目录：请设置环境变量 VRC_MONITOR_DIR 指向克隆的仓库目录，或参考仓库 AGENTS.md 配置",
+        }
+
     try:
         proc = subprocess.Popen(
-            [NODE_EXE, MONITOR_SCRIPT],
-            cwd=MONITOR_CWD,
+            [node_exe, MONITOR_SCRIPT],
+            cwd=monitor_dir,
             stdin=subprocess.DEVNULL,
             stdout=log_fh,
             stderr=subprocess.STDOUT,
