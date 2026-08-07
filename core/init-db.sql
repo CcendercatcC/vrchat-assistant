@@ -69,3 +69,11 @@ CREATE TABLE IF NOT EXISTS watchlist (
   priority INTEGER DEFAULT 0,      -- 0=普通, 1=高关注
   created_at TEXT DEFAULT (datetime('now'))
 );
+
+-- 好友昵称映射（display_name -> 中文昵称）
+CREATE TABLE IF NOT EXISTS nicknames (
+  user_id   TEXT PRIMARY KEY,
+  display_name TEXT DEFAULT '',
+  nickname  TEXT NOT NULL,
+  updated_at TEXT DEFAULT (datetime('now'))
+);

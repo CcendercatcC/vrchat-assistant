@@ -332,6 +332,31 @@ const CUSTOM_TOOLS = [
       required: ['userId'],
     },
   },
+  // ── 新增：昵称映射 ──
+  {
+    name: 'get_nicknames',
+    description: '[manage] Query friend nickname mappings (exact by userId, fuzzy by nickname/displayName, or all).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        userId: { type: 'string', description: 'VRChat user id (usr_...)' },
+        query: { type: 'string', description: 'Fuzzy search on display_name or nickname' },
+      },
+    },
+  },
+  {
+    name: 'set_nickname',
+    description: '[manage] Set or update a friend nickname mapping (upsert).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        userId: { type: 'string', description: 'VRChat user id (usr_...)' },
+        nickname: { type: 'string', description: 'Nickname to store' },
+        displayName: { type: 'string', description: 'Optional current display name' },
+      },
+      required: ['userId', 'nickname'],
+    },
+  },
 ];
 
 // ── 工具处理器 ──
@@ -544,6 +569,20 @@ function handleGetOnlinePattern({ userId, days, startTime, endTime }) {
   return storage.getOnlinePattern(userId, opts);
 }
 
+// ── 新增：昵称映射 ──
+
+function handleGetNicknames({ userId, query }) {
+  return { nicknames: storage.getNicknames({ userId, query }) };
+}
+
+function handleSetNickname({ userId, nickname, displayName }) {
+  if (!userId) throw new Error('userId is required');
+  if (!nickname) throw new Error('nickname is required');
+  const result = storage.setNickname({ userId, nickname, displayName });
+  storage.save();
+  return result;
+}
+
 // ── RPC 处理 ──
 
 async function handleRpc(rpc, session, res) {
@@ -647,6 +686,12 @@ async function handleRpc(rpc, session, res) {
             break;
           case 'get_online_pattern':
             result = handleGetOnlinePattern(args);
+            break;
+          case 'get_nicknames':
+            result = handleGetNicknames(args);
+            break;
+          case 'set_nickname':
+            result = handleSetNickname(args);
             break;
           default:
             throw new Error(`Unknown tool: ${name}`);
