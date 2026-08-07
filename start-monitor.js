@@ -202,6 +202,51 @@ const CUSTOM_TOOLS = [
     },
   },
   {
+    name: 'get_prints',
+    description: '[query] List your VRChat prints (VRChat Plus photo album).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        limit: { type: 'number', default: 100, description: 'Max results (1-100, default 100)' },
+        userId: { type: 'string', description: 'VRChat user id (usr_...). Defaults to current user.' },
+      },
+    },
+  },
+  {
+    name: 'remove_print',
+    description: '[write·vrchat] Remove a print from your VRChat prints album. Requires printId and confirm: true to execute (irreversible).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        printId: { type: 'string', description: 'Print ID (prnt_...)' },
+        confirm: { type: 'boolean', description: 'Set true to actually remove the print (irreversible). Default false returns preview only.' },
+      },
+      required: ['printId'],
+    },
+  },
+  {
+    name: 'get_gallery_images',
+    description: '[query] List your VRChat gallery images (VRChat Plus).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        limit: { type: 'number', default: 100, description: 'Max results (1-100, default 100)' },
+      },
+    },
+  },
+  {
+    name: 'remove_gallery_image',
+    description: '[write·vrchat] Remove an image from your VRChat gallery. Requires fileId and confirm: true to execute (irreversible).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        fileId: { type: 'string', description: 'File ID (file_...)' },
+        confirm: { type: 'boolean', description: 'Set true to actually remove the gallery image (irreversible). Default false returns preview only.' },
+      },
+      required: ['fileId'],
+    },
+  },
+  {
     name: 'send_invite',
     description: '[write·vrchat] Send an invite to join your current instance.',
     inputSchema: {
@@ -885,6 +930,79 @@ async function handleUploadGalleryImage({ imagePath }) {
   return { ok: true, fileId, tag: 'gallery' };
 }
 
+// ── 新增：prints / gallery 列表与删除工具 ──
+
+async function handleGetPrints({ limit = 100, userId }) {
+  let targetId = userId;
+  if (!targetId) {
+    const r = await api._request('GET', '/auth/user');
+    if (r.status !== 200) throw new Error(`API error: ${r.status}`);
+    targetId = r.data?.id;
+  }
+  if (!targetId) throw new Error('Unable to determine current user');
+
+  const n = Math.max(1, Math.min(100, Number(limit) || 100));
+  const r = await api._request('GET', `/prints/user/${targetId}?n=${n}`);
+  if (r.status !== 200) throw new Error(`API error: ${r.status}`);
+
+  const prints = Array.isArray(r.data) ? r.data : [];
+  return {
+    userId: targetId,
+    total: prints.length,
+    prints: prints.map(p => ({
+      printId: p.id,
+      note: p.note,
+      createdAt: p.createdAt,
+      downloadUrl: p.files?.image,
+      timestamp: p.timestamp,
+      worldId: p.worldId,
+      worldName: p.worldName,
+      authorName: p.authorName,
+    })),
+  };
+}
+
+async function handleRemovePrint({ printId, confirm }) {
+  if (!printId) throw new Error('printId is required');
+  if (!confirm) {
+    return { printId, confirmRequired: true, message: '删除相册照片不可逆，请传 confirm: true 确认执行' };
+  }
+  const r = await api._request('DELETE', `/prints/${printId}`);
+  if (r.status >= 400) throw new Error(`API error ${r.status}`);
+  return { printId, ok: true };
+}
+
+async function handleGetGalleryImages({ limit = 100 }) {
+  const n = Math.max(1, Math.min(100, Number(limit) || 100));
+  const r = await api._request('GET', `/files?tag=gallery&n=${n}`);
+  if (r.status !== 200) throw new Error(`API error: ${r.status}`);
+
+  const images = Array.isArray(r.data) ? r.data : [];
+  return {
+    total: images.length,
+    images: images.map(img => {
+      const lastVersion = img.versions?.[img.versions.length - 1];
+      return {
+        fileId: img.id,
+        name: img.name,
+        extension: img.extension,
+        mimeType: img.mimeType,
+        downloadUrl: lastVersion?.file?.url,
+      };
+    }),
+  };
+}
+
+async function handleRemoveGalleryImage({ fileId, confirm }) {
+  if (!fileId) throw new Error('fileId is required');
+  if (!confirm) {
+    return { fileId, confirmRequired: true, message: '删除图库图片不可逆，请传 confirm: true 确认执行' };
+  }
+  const r = await api._request('DELETE', `/file/${fileId}`);
+  if (r.status >= 400) throw new Error(`API error ${r.status}`);
+  return { fileId, ok: true };
+}
+
 // ── RPC 处理 ──
 
 async function handleRpc(rpc, session, res) {
@@ -943,6 +1061,22 @@ async function handleRpc(rpc, session, res) {
           }
           case 'upload_gallery_image': {
             result = await rateLimiter.execute(() => handleUploadGalleryImage(args));
+            break;
+          }
+          case 'get_prints': {
+            result = await rateLimiter.execute(() => handleGetPrints(args));
+            break;
+          }
+          case 'remove_print': {
+            result = await rateLimiter.execute(() => handleRemovePrint(args));
+            break;
+          }
+          case 'get_gallery_images': {
+            result = await rateLimiter.execute(() => handleGetGalleryImages(args));
+            break;
+          }
+          case 'remove_gallery_image': {
+            result = await rateLimiter.execute(() => handleRemoveGalleryImage(args));
             break;
           }
           case 'send_invite': {
