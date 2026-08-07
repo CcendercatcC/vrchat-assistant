@@ -183,6 +183,17 @@ const CUSTOM_TOOLS = [
       required: ['userId'],
     },
   },
+  {
+    name: 'send_friend_request',
+    description: '[write·vrchat] Send a friend request to a user. Supports userId or exact displayName match.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        userId: { type: 'string', description: 'VRChat user id (usr_...)' },
+        displayName: { type: 'string', description: 'Exact display name to search and send friend request' },
+      },
+    },
+  },
   // ── Phase 1 新增的读工具 ──
   {
     name: 'get_online_friends',
@@ -433,6 +444,30 @@ async function handleSearchUsers({ query, limit = 10 }) {
   };
 }
 
+async function handleSendFriendRequest({ userId, displayName }) {
+  if (!userId && !displayName) throw new Error('userId or displayName is required');
+
+  if (userId) {
+    const r = await api.sendFriendRequest(userId);
+    if (r.status >= 400) throw new Error(`API error ${r.status}`);
+    return { userId, displayName: null, method: 'userId', ok: true };
+  }
+
+  const search = await api._request('GET', `/users?search=${encodeURIComponent(displayName)}&n=20`);
+  if (search.status !== 200) throw new Error(`API error: ${search.status}`);
+  const users = Array.isArray(search.data) ? search.data : [];
+  const matches = users.filter(u => u.displayName && u.displayName.toLowerCase() === displayName.toLowerCase());
+
+  if (matches.length === 0) throw new Error(`未找到显示名为 "${displayName}" 的用户`);
+  if (matches.length > 1) throw new Error(`显示名 "${displayName}" 匹配到多个用户，请用 userId 指定`);
+
+  const target = matches[0];
+  if (target.isFriend) throw new Error(`"${displayName}" 已经是你的好友，无需重复添加`);
+  const r = await api.sendFriendRequest(target.id);
+  if (r.status >= 400) throw new Error(`API error ${r.status}`);
+  return { userId: target.id, displayName, method: 'displayName', ok: true };
+}
+
 function handleGetDatabaseStats() {
   return {
     ...storage.getStats(),
@@ -644,6 +679,10 @@ async function handleRpc(rpc, session, res) {
             }));
             if (r.status >= 400) throw new Error(`API error ${r.status}`);
             result = { success: true, userId: args.userId, requestSent: true };
+            break;
+          }
+          case 'send_friend_request': {
+            result = await rateLimiter.execute(() => handleSendFriendRequest(args));
             break;
           }
           // 读工具

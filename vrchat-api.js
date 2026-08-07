@@ -383,6 +383,14 @@ export class VrchatApiClient {
   }
 
   /**
+   * Send a friend request to a user
+   */
+  async sendFriendRequest(userId) {
+    await this.ensureAuth();
+    return await this._request('POST', `/user/${encodeURIComponent(userId)}/friendRequest`, {});
+  }
+
+  /**
    * Get user info
    */
   async getUser(userId) {
