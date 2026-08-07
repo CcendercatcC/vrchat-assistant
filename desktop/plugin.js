@@ -108,7 +108,7 @@ function VrcMonitorPane({ ctx }) {
         })
       ]}),
 
-      jsx('hr', { className: 'border-(--ui-border)' }),
+      jsx('hr', { className: 'border-(--ui-stroke-tertiary)' }),
 
       jsx(Button, { onClick: openConfig, children: '配置' }),
 
