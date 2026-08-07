@@ -14,17 +14,14 @@
 {
   "email": "你的 VRChat 登录邮箱",
   "password": "你的 VRChat 登录密码",
-  "qqmail_auth_code": "你的 QQ 邮箱 IMAP 授权码"
+  "imap_auth_code": "你的邮箱 IMAP 授权码"
 }
 ```
 
-> 注意：**必须使用 QQ 邮箱**。OTP 验证码自动抓取脚本（`fetch-otp.py`）通过 IMAP 协议连接 `imap.qq.com`，只有 QQ 邮箱能配合自动登录。
+> 注意：支持任意提供 IMAP 服务的邮箱（QQ/163/Gmail/Outlook 等），服务根据邮箱域名自动选择 IMAP 服务器。若需手动指定服务器，可在 `credentials.json` 中添加 `imap_host` 字段。
 
-**获取 QQ 邮箱 IMAP 授权码：**
-1. 登录 QQ 邮箱网页版
-2. 设置 -> 账户 -> POP3/IMAP/SMTP/Exchange/CardDAV/CalDAV 服务
-3. 开启 IMAP/SMTP 服务，按提示发送短信后生成授权码
-4. 将授权码填入 `qqmail_auth_code` 字段
+**获取邮箱 IMAP 授权码：**
+各邮箱服务商的 IMAP 开启方式不同，通用步骤为：登录邮箱网页版 -> 设置 -> 开启 IMAP/SMTP 服务 -> 生成授权码/专用密码。以 QQ 邮箱为例：设置 -> 账户 -> POP3/IMAP/SMTP/Exchange/CardDAV/CalDAV 服务 -> 开启 IMAP/SMTP 服务，按提示发送短信后生成授权码。
 
 > `credentials.json` 已被 .gitignore 排除，不会提交到仓库。
 
@@ -39,7 +36,7 @@
 node start-monitor.js
 ```
 
-服务启动后自动完成：加载凭据 -> 校验 cookie -> 过期则自动从 QQ 邮箱抓取 OTP 验证码登录 -> 建立 WebSocket 连接。
+服务启动后自动完成：加载凭据 -> 校验 cookie -> 过期则自动从邮箱 IMAP 抓取 OTP 验证码登录 -> 建立 WebSocket 连接。
 
 健康检查：
 
@@ -78,7 +75,26 @@ cp desktop/plugin.js "$HERMES_HOME/desktop-plugins/vrc-monitor/"
 1. 重启 Hermes Gateway（加载 dashboard 后端路由）
 2. 桌面端按 ⌘K -> **Reload desktop plugins**
 
-桌面端右侧出现「VRChat Monitor」面板：显示服务运行状态，点击「配置」可填写 VRChat 邮箱/密码/QQ 邮箱授权码（保存到 credentials.json），无需手工编辑文件。
+桌面端右侧出现「VRChat Monitor」面板：显示服务运行状态，点击「配置」可填写 VRChat 邮箱/密码/邮箱 IMAP 授权码（保存到 credentials.json），无需手工编辑文件。
+
+### 6. 配置 MCP 接口（可选但推荐）
+
+服务通过 MCP 协议暴露 15 个工具（get_online_friends / get_friend_info / get_friend_events / get_companions / get_world_name / get_watchlist 等，详见 README），Hermes Agent 可直接调用，无需 curl 手写 JSON-RPC。
+
+在 Hermes 配置文件（`$HERMES_HOME/config.yaml`，Windows 为 `%LOCALAPPDATA%\hermes\config.yaml`）中添加：
+
+```yaml
+mcp_servers:
+  vrcx-monitor:
+    url: http://127.0.0.1:8799/mcp
+```
+
+添加后重启 Hermes 生效，工具以 `mcp_vrcx_monitor_*` 前缀暴露给 Agent。
+
+常用查询示例（直接对 Hermes Agent 说）：
+- "现在哪些好友在线？"
+- "XX 今天和谁一起玩？"
+- "查一下 XX 最近的活动记录"
 
 ## 常用操作
 
@@ -95,9 +111,9 @@ cp desktop/plugin.js "$HERMES_HOME/desktop-plugins/vrc-monitor/"
 
 ### OTP 验证码自动抓取失败
 
-服务通过 IMAP 协议自动抓取 QQ 邮箱中的 VRChat OTP 验证码邮件，无需手动输入验证码。排查顺序：
-1. 确认 `credentials.json` 中的 `qqmail_auth_code` 是 **IMAP 授权码**（非登录密码）
-2. 确认邮箱是 QQ 邮箱
+服务通过 IMAP 协议自动抓取邮箱中的 VRChat OTP 验证码邮件，无需手动输入验证码。排查顺序：
+1. 确认 `credentials.json` 中的 `imap_auth_code` 是 **IMAP 授权码**（非登录密码）
+2. 若自动推断的 IMAP 服务器不正确，可在 `credentials.json` 中添加 `"imap_host"` 手动指定（如 `"imap_host": "imap.gmail.com"`）
 3. 连续多次触发 OTP 时，邮箱 IMAP 同步可能有延迟，服务会在冷却后自动重试（认证失败冷却 120s，限流 401 冷却 5min），无需人工干预
 
 ### 代理说明
