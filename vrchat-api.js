@@ -391,6 +391,14 @@ export class VrchatApiClient {
   }
 
   /**
+   * Remove a friend
+   */
+  async removeFriend(userId) {
+    await this.ensureAuth();
+    return await this._request('DELETE', `/auth/user/friends/${encodeURIComponent(userId)}`);
+  }
+
+  /**
    * Get user info
    */
   async getUser(userId) {

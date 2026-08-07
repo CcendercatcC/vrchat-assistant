@@ -194,6 +194,18 @@ const CUSTOM_TOOLS = [
       },
     },
   },
+  {
+    name: 'remove_friend',
+    description: '[write·vrchat] Remove a friend. Requires userId or exact displayName match, plus confirm: true to execute (irreversible).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        userId: { type: 'string', description: 'VRChat user id (usr_...)' },
+        displayName: { type: 'string', description: 'Exact display name to search and remove friend' },
+        confirm: { type: 'boolean', description: 'Set true to actually remove the friend (irreversible). Default false returns preview only.' },
+      },
+    },
+  },
   // ── Phase 1 新增的读工具 ──
   {
     name: 'get_online_friends',
@@ -468,6 +480,33 @@ async function handleSendFriendRequest({ userId, displayName }) {
   return { userId: target.id, displayName, method: 'displayName', ok: true };
 }
 
+async function handleRemoveFriend({ userId, displayName, confirm }) {
+  if (!userId && !displayName) throw new Error('userId or displayName is required');
+
+  let target = { userId, displayName };
+  if (!userId) {
+    const search = await api._request('GET', `/users?search=${encodeURIComponent(displayName)}&n=20`);
+    if (search.status !== 200) throw new Error(`API error: ${search.status}`);
+    const users = Array.isArray(search.data) ? search.data : [];
+    const matches = users.filter(u => u.displayName && u.displayName.toLowerCase() === displayName.toLowerCase());
+
+    if (matches.length === 0) throw new Error(`未找到显示名为 "${displayName}" 的用户`);
+    if (matches.length > 1) throw new Error(`显示名 "${displayName}" 匹配到多个用户，请用 userId 指定`);
+
+    const found = matches[0];
+    if (found.isFriend === false) throw new Error(`"${displayName}" 不是你的好友，无需删除`);
+    target = { userId: found.id, displayName };
+  }
+
+  if (!confirm) {
+    return { userId: target.userId, displayName: target.displayName, confirmRequired: true, message: '删除好友不可逆，请传 confirm: true 确认执行' };
+  }
+
+  const r = await api.removeFriend(target.userId);
+  if (r.status >= 400) throw new Error(`API error ${r.status}`);
+  return { userId: target.userId, displayName: target.displayName, ok: true };
+}
+
 function handleGetDatabaseStats() {
   return {
     ...storage.getStats(),
@@ -683,6 +722,10 @@ async function handleRpc(rpc, session, res) {
           }
           case 'send_friend_request': {
             result = await rateLimiter.execute(() => handleSendFriendRequest(args));
+            break;
+          }
+          case 'remove_friend': {
+            result = await rateLimiter.execute(() => handleRemoveFriend(args));
             break;
           }
           // 读工具
