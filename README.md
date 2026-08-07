@@ -195,6 +195,20 @@ mcp_servers:
 └── README.md
 ```
 
+## 📦 数据迁移（从 VRCX）
+
+从 VRCX 的 SQLite 数据库导入历史数据，包括事件流（位置变更/上下线/Avatar 变更/状态变更/Bio 变更）、好友列表、世界缓存和备注。
+
+```bash
+# 自动模式（推荐）— 自动探测默认数据库路径 + 自动识别用户表前缀
+node migrate-vrcx0.mjs
+
+# 手动模式 — 显式指定数据库路径和 userId
+node migrate-vrcx0.mjs <VRCX数据库路径> <userId>
+```
+
+> **注意**：userId 可在 VRChat 官网个人资料页查看，格式如 `usr_xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`。脚本会自动去掉横线匹配 VRCX 数据库表名格式。
+
 ## 🛠 故障排查
 
 **Q: WebSocket 连不上？**

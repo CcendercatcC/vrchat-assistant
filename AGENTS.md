@@ -106,6 +106,7 @@ mcp_servers:
 | 查看服务状态 | Hermes 工具 `vrc_status` 或桌面插件面板 |
 | 配置账号 | 桌面插件「配置」弹窗，或编辑 `credentials.json` |
 | 重启服务 | Hermes 工具 `vrc_restart` |
+| 迁移 VRCX 数据 | `node migrate-vrcx0.mjs` |
 
 ## 常见问题
 

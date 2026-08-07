@@ -1,27 +1,68 @@
 /**
  * VRChat 好友监控系统 — 数据迁移脚本
  * 
- * 从 VRCX-0 SQLite 数据库导入历史数据到新系统
+ * 从 VRCX SQLite 数据库导入历史数据到新系统
  * 
- * VRCX-0 数据库路径: C:/Users/MECHREVO/AppData/Roaming/VRCX-0/VRCX-0.sqlite3
- * 新系统数据库路径: ./vrc-monitor.sqlite3
+ * 使用:
+ *   自动模式:  node migrate-vrcx0.mjs                                   （自动探测数据库路径 + userId）
+ *   手动模式:  node migrate-vrcx0.mjs <VRCX数据库路径> <userId>
  * 
- * 使用: node migrate-vrcx0.mjs
+ * 迁移内容: 事件流（位置/上下线/Avatar/状态/Bio）、好友列表、世界缓存、备注
  */
 import initSqlJs from 'sql.js';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
+import os from 'node:os';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// 路径配置
-const VRCX0_DB = 'C:/Users/MECHREVO/AppData/Roaming/VRCX-0/VRCX-0.sqlite3';
 const MONITOR_DB = path.join(__dirname, 'vrc-monitor.sqlite3');
 const DDL_PATH = path.join(__dirname, 'core', 'init-db.sql');
 
-// 用户表前缀（从 VRCX-0 数据库分析得出）
-const USER_PREFIX = 'usraa57de30516b404795b630601a6c91a2';
+// ── 数据库路径解析（优先级：命令行参数 > 新版默认 > 旧版兜底）──
+function resolve_vrcx0_db(argv) {
+  // 1. 命令行显式指定
+  if (argv[2]) return argv[2];
+
+  // 2. 新版 VRCX 默认路径
+  const newPath = path.join(os.homedir(), 'AppData', 'Roaming', 'VRCX', 'VRCX.sqlite3');
+  if (existsSync(newPath)) return newPath;
+
+  // 3. 旧版 VRCX-0 兜底路径
+  const oldPath = path.join(os.homedir(), 'AppData', 'Roaming', 'VRCX-0', 'VRCX-0.sqlite3');
+  if (existsSync(oldPath)) return oldPath;
+
+  // 4. 都找不到
+  console.log('❌ 未找到 VRCX 数据库文件');
+  console.log(`   已尝试: ${newPath}`);
+  console.log(`            ${oldPath}`);
+  console.log('   请提供正确的数据库路径: node migrate-vrcx0.mjs <VRCX数据库路径>');
+  process.exit(1);
+}
+
+// ── 用户前缀解析（优先级：命令行参数 > 自动探测）──
+function resolve_user_prefix(argv, vrcx0db) {
+  // 1. 命令行显式指定（去掉横线兼容 usr_xxx-xxx 格式）
+  if (argv[3]) return argv[3].replace(/-/g, '');
+
+  // 2. 自动探测：查询 _feed_gps 表名提取前缀
+  try {
+    const result = vrcx0db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE '%_feed_gps'");
+    if (result.length > 0 && result[0].values.length > 0) {
+      const tableName = result[0].values[0][0];
+      return tableName.replace(/_feed_gps$/, '');
+    }
+  } catch (_) {
+    // 探测失败继续走下面的错误提示
+  }
+
+  // 3. 探测不到
+  console.log('❌ 无法从数据库自动识别用户表前缀');
+  console.log('   请提供你的 VRChat userId: node migrate-vrcx0.mjs <数据库路径> <userId>');
+  console.log('   (userId 可在 VRChat 官网个人资料页查看，格式如 usr_xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)');
+  process.exit(1);
+}
 
 // 统计
 const stats = {
@@ -53,19 +94,22 @@ function worldIdFromLocation(location) {
 
 // ── 主函数 ──
 async function main() {
+  const VRCX0_DB = resolve_vrcx0_db(process.argv);
+
   console.log('══════════════════════════════════════════════');
-  console.log('  VRCX-0 数据迁移工具');
+  console.log('  VRCX 数据迁移工具');
   console.log('══════════════════════════════════════════════\n');
 
   // 1. 打开数据库
-  log('📂 打开数据库...');
+  log(`📂 打开数据库: ${VRCX0_DB}`);
   if (!existsSync(VRCX0_DB)) {
-    log(`❌ VRCX-0 数据库不存在: ${VRCX0_DB}`);
+    log(`❌ 数据库不存在: ${VRCX0_DB}`);
     process.exit(1);
   }
 
   const SQL = await initSqlJs();
   const vrcx0 = new SQL.Database(readFileSync(VRCX0_DB));
+  const USER_PREFIX = resolve_user_prefix(process.argv, vrcx0);
 
   // 初始化新数据库（如果已存在则加载）
   let monitorDb;
@@ -561,7 +605,10 @@ function insertBatch(db, events) {
   stmt.free();
 }
 
-main().catch(err => {
-  console.error('\n❌ 迁移脚本异常:', err);
-  process.exit(1);
-});
+// 仅作为主入口运行时执行（防止被 import 时意外触发迁移）
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch(err => {
+    console.error('\n❌ 迁移脚本异常:', err);
+    process.exit(1);
+  });
+}
