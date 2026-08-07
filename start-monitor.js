@@ -179,6 +179,29 @@ const CUSTOM_TOOLS = [
     },
   },
   {
+    name: 'upload_print',
+    description: '[write·vrchat] Upload a photo to your VRChat prints album (requires VRChat Plus).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        imagePath: { type: 'string', description: 'Absolute path to the image file' },
+        note: { type: 'string', description: 'Optional photo note' },
+      },
+      required: ['imagePath'],
+    },
+  },
+  {
+    name: 'upload_gallery_image',
+    description: '[write·vrchat] Upload an image to your VRC+ gallery (requires VRChat Plus).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        imagePath: { type: 'string', description: 'Absolute path to the image file' },
+      },
+      required: ['imagePath'],
+    },
+  },
+  {
     name: 'send_invite',
     description: '[write·vrchat] Send an invite to join your current instance.',
     inputSchema: {
@@ -794,10 +817,7 @@ async function handleUploadEmoji({ imagePath, animated = false, animationStyle }
   }
 
   const tag = animated ? 'emojianimated' : 'emoji';
-  const params = { tag, maskTag: 'square' };
-  if (animated && animationStyle) {
-    params.animationStyle = animationStyle;
-  }
+  const params = { tag, maskTag: 'square', animationStyle: (animationStyle || 'stop').toLowerCase() };
 
   const r = await api.uploadImageFile(fileBuffer, imagePath, params);
   if (r.status >= 400) {
@@ -810,6 +830,59 @@ async function handleUploadEmoji({ imagePath, animated = false, animationStyle }
   }
 
   return { ok: true, fileId, emojiId: fileId, tag, requiresVRCPlus: true };
+}
+
+async function handleUploadPrint({ imagePath, note }) {
+  if (!imagePath) throw new Error('imagePath is required (absolute path to the image file)');
+  if (!existsSync(imagePath)) {
+    throw new Error(`图片文件不存在: ${imagePath}`);
+  }
+
+  let fileBuffer;
+  try {
+    fileBuffer = readFileSync(imagePath);
+  } catch (err) {
+    throw new Error(`读取图片失败: ${err.message}`);
+  }
+
+  const timestamp = new Date().toISOString().slice(0, 19);
+  const r = await api.uploadPrint(fileBuffer, imagePath, { note, timestamp });
+  if (r.status >= 400) {
+    throw new Error(`API error ${r.status}: ${JSON.stringify(r.data).slice(0, 200)}`);
+  }
+
+  const printId = r.data?.id;
+  if (!printId) {
+    throw new Error(`API 未返回 printId: ${JSON.stringify(r.data).slice(0, 200)}`);
+  }
+
+  return { ok: true, printId, note, timestamp };
+}
+
+async function handleUploadGalleryImage({ imagePath }) {
+  if (!imagePath) throw new Error('imagePath is required (absolute path to the image file)');
+  if (!existsSync(imagePath)) {
+    throw new Error(`图片文件不存在: ${imagePath}`);
+  }
+
+  let fileBuffer;
+  try {
+    fileBuffer = readFileSync(imagePath);
+  } catch (err) {
+    throw new Error(`读取图片失败: ${err.message}`);
+  }
+
+  const r = await api.uploadGalleryImage(fileBuffer, imagePath);
+  if (r.status >= 400) {
+    throw new Error(`API error ${r.status}: ${JSON.stringify(r.data).slice(0, 200)}`);
+  }
+
+  const fileId = r.data?.id;
+  if (!fileId) {
+    throw new Error(`API 未返回 fileId: ${JSON.stringify(r.data).slice(0, 200)}`);
+  }
+
+  return { ok: true, fileId, tag: 'gallery' };
 }
 
 // ── RPC 处理 ──
@@ -862,6 +935,14 @@ async function handleRpc(rpc, session, res) {
           }
           case 'upload_emoji': {
             result = await rateLimiter.execute(() => handleUploadEmoji(args));
+            break;
+          }
+          case 'upload_print': {
+            result = await rateLimiter.execute(() => handleUploadPrint(args));
+            break;
+          }
+          case 'upload_gallery_image': {
+            result = await rateLimiter.execute(() => handleUploadGalleryImage(args));
             break;
           }
           case 'send_invite': {

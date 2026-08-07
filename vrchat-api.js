@@ -414,23 +414,49 @@ export class VrchatApiClient {
     return this._multipartRequest('POST', '/file/image', fileBuffer, filename, params);
   }
 
-  _multipartRequest(method, path, fileBuffer, filename, params) {
+  /**
+   * Upload a photo to VRChat Plus prints album
+   */
+  async uploadPrint(fileBuffer, filename, { note = '', timestamp } = {}) {
+    await this.ensureAuth();
+    return this._multipartRequest('POST', '/prints', fileBuffer, filename, { note, timestamp }, { fileFieldName: 'image', fileDisplayName: 'image', contentType: 'image/png' });
+  }
+
+  /**
+   * Upload an image to VRChat Plus gallery
+   */
+  async uploadGalleryImage(fileBuffer, filename) {
+    await this.ensureAuth();
+    // 文件字段名 "file"/"blob"；显式指定 image/png（blob 无扩展名会被识别为 octet-stream 导致服务端拒收）
+    return this._multipartRequest('POST', '/file/image', fileBuffer, filename, { tag: 'gallery' }, { fileFieldName: 'file', fileDisplayName: 'blob', contentType: 'image/png' });
+  }
+
+  _multipartRequest(method, path, fileBuffer, filename, params, { fileFieldName = 'file', fileDisplayName = 'blob', contentType } = {}) {
     return new Promise((resolve, reject) => {
       const url = new URL(API_BASE + path);
       const boundary = `----VrcMonitorBoundary${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
       const cookieStr = this.authCookie ? `auth=${this.authCookie}` : '';
-      const safeFilename = encodeURIComponent(filename || 'emoji');
+      const fieldName = fileFieldName || 'file';
+      const displayName = fileDisplayName || 'blob';
 
-      const dataJson = JSON.stringify(params);
-      const pre = Buffer.from([
-        `--${boundary}\r\n`,
-        `Content-Disposition: form-data; name="data"\r\n`,
-        `Content-Type: application/json\r\n\r\n`,
-        `${dataJson}\r\n`,
-        `--${boundary}\r\n`,
-        `Content-Disposition: form-data; name="file"; filename="${safeFilename}"\r\n`,
-        `Content-Type: ${this._guessContentType(filename)}\r\n\r\n`,
-      ].join(''));
+      // VRChat /file/image 期望每个 JSON 参数作为独立 multipart 字段（VRCX BuildImageUploadRequest 实测）
+      // 文件字段名/文件名可配置，默认 "file"/"blob"
+      const parts = [];
+      for (const [key, value] of Object.entries(params || {})) {
+        if (value === undefined || value === null) continue;
+        parts.push(
+          `--${boundary}\r\n` +
+          `Content-Disposition: form-data; name="${key}"\r\n` +
+          `\r\n${value}\r\n`
+        );
+      }
+      const ct = contentType || this._guessContentType(displayName);
+      parts.push(
+        `--${boundary}\r\n` +
+        `Content-Disposition: form-data; name="${fieldName}"; filename="${displayName}"\r\n` +
+        `Content-Type: ${ct}\r\n\r\n`
+      );
+      const pre = Buffer.from(parts.join(''));
       const post = Buffer.from(`\r\n--${boundary}--\r\n`);
       const body = Buffer.concat([pre, fileBuffer, post]);
 

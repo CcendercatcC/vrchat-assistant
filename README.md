@@ -15,7 +15,7 @@
 - ✅ **历史数据迁移** — 从 VRCX-0 导入 10 个月的 33 万条活动记录
 - ✅ **世界名缓存** — 自动解析 `wrld_xxx` 为可读世界名（24h TTL 防改名陈旧）
 - ✅ **关注名单** — 标记核心好友，活动时特别通知
-- ✅ **MCP 工具接口** — 23 个工具供 Hermes / 任意 MCP 客户端调用
+- ✅ **MCP 工具接口** — 25 个工具供 Hermes / 任意 MCP 客户端调用
 - ✅ **Hermes 插件托管** — 会话自动拉起、崩溃自愈、`vrc_status` 等管理工具
 
 ---
@@ -136,7 +136,7 @@ cp desktop/plugin.js "$HERMES_HOME/desktop-plugins/vrc-monitor/"
 - **双路检测**：状态文件 pid 存活 **或** 端口探测成功，均可识别为运行中（防状态文件丢失误判）
 - **日志**：`$HERMES_HOME/workspace/vrc-monitor/monitor.log`
 
-## 🔌 MCP 工具（23 个）
+## 🔌 MCP 工具（25 个）
 
 服务监听 `http://127.0.0.1:8799/mcp`，通过 HTTP SSE 提供 MCP 协议。Hermes 用户可在 `$HERMES_HOME/config.yaml`（Windows 为 `%LOCALAPPDATA%\hermes\config.yaml`）配置：
 
@@ -190,6 +190,8 @@ mcp_servers:
 | `send_boop` | 戳一戳好友（Boop），对方收到戳戳通知 | `userId` | `emojiId`（戳戳表情，见 `get_boop_emojis`） |
 | `get_boop_emojis` | 列出内置 boop 表情（65 个）及 emojiId 格式 | — | — |
 | `upload_emoji` | 上传自定义 boop 表情（需 VRChat Plus），返回 fileId 用作 emojiId | `imagePath` | `animated`、`animationStyle` |
+| `upload_print` | 上传照片到 VRChat **相册**（Prints，需 VRC+） | `imagePath` | `note`（备注） |
+| `upload_gallery_image` | 上传图片到 VRC+ **图库**（Gallery，需 VRC+） | `imagePath` | — |
 | `send_invite` | 邀请好友加入**你当前所在房间**（拉人进房） | `userId`、`worldId`、`instanceId` | `message`（附带消息） |
 | `request_invite` | 请求好友**邀请你加入 TA 的房间**（默认消息 "Can I join you?"） | `userId` | `message` |
 | `send_friend_request` | **发送好友请求**（添加好友）：`userId` 直接加，或 `displayName` 精确匹配（不区分大小写）后加 | `userId` 或 `displayName` 至少一个 | — |
