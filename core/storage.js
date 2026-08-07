@@ -382,6 +382,152 @@ export class Storage {
     };
   }
 
+  // ── 新增：分析好友上线规律 ──
+
+  getOnlinePattern(userId, { startTime, endTime, days } = {}) {
+    let start, end, windowDays;
+    if (startTime && endTime) {
+      start = startTime;
+      end = endTime;
+      const startMs = Date.parse(start);
+      const endMs = Date.parse(end);
+      if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) {
+        throw new Error('Invalid startTime or endTime');
+      }
+      if (startMs > endMs) {
+        throw new Error('startTime must be <= endTime');
+      }
+      windowDays = Math.max(1, Math.ceil((endMs - startMs) / (24 * 60 * 60 * 1000)));
+    } else {
+      const effectiveDays = Number.isFinite(Number(days)) && Number(days) > 0 ? Number(days) : 30;
+      const now = new Date();
+      const beijingNow = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+      const beijingDateStr = beijingNow.toISOString().slice(0, 10);
+      const endDate = new Date(`${beijingDateStr}T23:59:59.999+08:00`);
+      const startDate = new Date(`${beijingDateStr}T00:00:00.000+08:00`);
+      startDate.setDate(startDate.getDate() - effectiveDays + 1);
+      start = startDate.toISOString();
+      end = endDate.toISOString();
+      windowDays = effectiveDays;
+    }
+
+    const rows = this._query(
+      `SELECT * FROM events WHERE user_id = $userId
+       AND (
+         type LIKE 'friend-online%' OR type LIKE 'user-online%'
+         OR type LIKE 'friend-offline%' OR type LIKE 'user-offline%'
+         OR type LIKE 'friend-location%' OR type LIKE 'user-location%'
+       )
+       AND created_at >= $start AND created_at <= $end
+       ORDER BY created_at ASC`,
+      { $userId: userId, $start: start, $end: end }
+    );
+
+    const hourly = { online: {}, offline: {}, location: {} };
+    const activeDatesSet = new Set();
+    let displayName = '';
+
+    for (const ev of rows) {
+      if (!displayName && ev.display_name) displayName = ev.display_name;
+      const date = new Date(ev.created_at);
+      if (Number.isNaN(date.getTime())) continue;
+      const beijingDate = new Date(date.getTime() + 8 * 60 * 60 * 1000);
+      const hour = String(beijingDate.getUTCHours());
+      const dateStr = beijingDate.toISOString().slice(0, 10);
+      activeDatesSet.add(dateStr);
+
+      if (ev.type.endsWith('-online')) {
+        hourly.online[hour] = (hourly.online[hour] || 0) + 1;
+      } else if (ev.type.endsWith('-offline')) {
+        hourly.offline[hour] = (hourly.offline[hour] || 0) + 1;
+      } else if (ev.type.endsWith('-location')) {
+        hourly.location[hour] = (hourly.location[hour] || 0) + 1;
+      }
+    }
+
+    if (!displayName) {
+      const friend = this.getFriend(userId);
+      if (friend) displayName = friend.display_name || '';
+    }
+
+    const total = {
+      online: Object.values(hourly.online).reduce((a, b) => a + b, 0),
+      offline: Object.values(hourly.offline).reduce((a, b) => a + b, 0),
+      location: Object.values(hourly.location).reduce((a, b) => a + b, 0),
+      activeDays: activeDatesSet.size,
+    };
+
+    const sortedDates = [...activeDatesSet].sort((a, b) => (a < b ? -1 : 1));
+    const activeDates = [...sortedDates].reverse();
+
+    const gaps = [];
+    for (let i = 1; i < sortedDates.length; i++) {
+      const diff = (new Date(sortedDates[i]) - new Date(sortedDates[i - 1])) / (24 * 60 * 60 * 1000);
+      gaps.push(diff);
+    }
+    const avgGapDays = gaps.length > 0 ? gaps.reduce((a, b) => a + b, 0) / gaps.length : 0;
+    const longestGapDays = gaps.length > 0 ? Math.max(...gaps) : 0;
+
+    const endMs = Date.parse(end);
+    const last30Start = new Date(endMs - 30 * 24 * 60 * 60 * 1000);
+    const last30ActiveDays = [...activeDatesSet].filter(d => {
+      const t = new Date(d).getTime();
+      return t >= last30Start.getTime() && t <= endMs;
+    }).length;
+
+    const frequency = {
+      windowDays,
+      activeDays: activeDatesSet.size,
+      activityRatio: windowDays > 0 ? activeDatesSet.size / windowDays : 0,
+      last30ActiveDays,
+      avgGapDays,
+      longestGapDays,
+    };
+
+    function peakHour(dist) {
+      let bestHour = null;
+      let bestCount = -1;
+      for (const [h, c] of Object.entries(dist)) {
+        if (c > bestCount) {
+          bestCount = c;
+          bestHour = Number(h);
+        }
+      }
+      return bestHour;
+    }
+
+    const loginPeakHour = peakHour(hourly.online);
+    const activePeakHour = peakHour(hourly.location);
+    const offlinePeakHour = peakHour(hourly.offline);
+
+    function formatSuggestedWindow(h1, h2) {
+      if (h1 === null && h2 === null) return null;
+      if (h1 === null) return `${h2}:00`;
+      if (h2 === null) return `${h1}:00`;
+      if (h1 === h2) return `${h1}:00`;
+      if (Math.abs(h1 - h2) === 1) return `${Math.min(h1, h2)}:00-${Math.max(h1, h2)}:00`;
+      return `${h1}:00/${h2}:00`;
+    }
+
+    const suggestedWindow = formatSuggestedWindow(loginPeakHour, activePeakHour);
+
+    return {
+      userId,
+      displayName,
+      window: { start, end, days: windowDays },
+      total,
+      hourly,
+      activeDates,
+      frequency,
+      peak: {
+        loginPeakHour,
+        activePeakHour,
+        offlinePeakHour,
+        suggestedWindow,
+      },
+    };
+  }
+
   getStats() {
     const result = {};
     for (const table of ['events', 'friends', 'world_cache', 'watchlist']) {

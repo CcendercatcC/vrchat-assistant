@@ -15,7 +15,7 @@
 - ✅ **历史数据迁移** — 从 VRCX-0 导入 10 个月的 33 万条活动记录
 - ✅ **世界名缓存** — 自动解析 `wrld_xxx` 为可读世界名（24h TTL 防改名陈旧）
 - ✅ **关注名单** — 标记核心好友，活动时特别通知
-- ✅ **MCP 工具接口** — 15 个工具供 Hermes / 任意 MCP 客户端调用
+- ✅ **MCP 工具接口** — 16 个工具供 Hermes / 任意 MCP 客户端调用
 - ✅ **Hermes 插件托管** — 会话自动拉起、崩溃自愈、`vrc_status` 等管理工具
 
 ---
@@ -112,7 +112,7 @@ cp desktop/plugin.js "$HERMES_HOME/desktop-plugins/vrc-monitor/"
 - **双路检测**：状态文件 pid 存活 **或** 端口探测成功，均可识别为运行中（防状态文件丢失误判）
 - **日志**：`$HERMES_HOME/workspace/vrc-monitor/monitor.log`
 
-## 🔌 MCP 工具（15 个）
+## 🔌 MCP 工具（16 个）
 
 服务监听 `http://127.0.0.1:8799/mcp`，通过 HTTP SSE 提供 MCP 协议。Hermes 用户可在 `$HERMES_HOME/config.yaml`（Windows 为 `%LOCALAPPDATA%\hermes\config.yaml`）配置：
 
@@ -137,6 +137,7 @@ mcp_servers:
 | `get_friend_events` | 某好友的事件历史（本地数据库） |
 | `get_recent_events` | 最新事件流 |
 | `get_companions` | 同屏交叉查询（指定时间窗口内同实例的好友） |
+| `get_online_pattern` | 上线规律分析：上线/下线/活跃时段分布（北京小时）+ 活跃天数/频率 + 最佳相遇时段建议 |
 
 ### 世界名
 

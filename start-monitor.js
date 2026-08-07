@@ -317,6 +317,21 @@ const CUSTOM_TOOLS = [
       required: ['startTime', 'endTime'],
     },
   },
+  // ── 新增：好友上线规律分析 ──
+  {
+    name: 'get_online_pattern',
+    description: '[query] Analyze a friend\'s online activity pattern (hourly distribution and frequency in Beijing time).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        userId: { type: 'string', description: 'VRChat user id (usr_...)' },
+        days: { type: 'number', default: 30, description: 'Analyze last N days (Beijing time natural days, default 30)' },
+        startTime: { type: 'string', description: 'Optional exact start time (ISO 8601 UTC); if provided with endTime, overrides days' },
+        endTime: { type: 'string', description: 'Optional exact end time (ISO 8601 UTC); if provided with startTime, overrides days' },
+      },
+      required: ['userId'],
+    },
+  },
 ];
 
 // ── 工具处理器 ──
@@ -515,6 +530,20 @@ function handleGetCompanions({ startTime, endTime, userId }) {
   return storage.findCompanions(targetUserId, startTime, endTime);
 }
 
+// ── 新增：好友上线规律分析 ──
+
+function handleGetOnlinePattern({ userId, days, startTime, endTime }) {
+  if (!userId) throw new Error('userId is required');
+  const opts = {};
+  if (startTime && endTime) {
+    opts.startTime = startTime;
+    opts.endTime = endTime;
+  } else if (days !== undefined && days !== null) {
+    opts.days = days;
+  }
+  return storage.getOnlinePattern(userId, opts);
+}
+
 // ── RPC 处理 ──
 
 async function handleRpc(rpc, session, res) {
@@ -615,6 +644,9 @@ async function handleRpc(rpc, session, res) {
             break;
           case 'get_companions':
             result = handleGetCompanions(args);
+            break;
+          case 'get_online_pattern':
+            result = handleGetOnlinePattern(args);
             break;
           default:
             throw new Error(`Unknown tool: ${name}`);
