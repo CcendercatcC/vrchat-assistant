@@ -71,8 +71,9 @@ curl http://127.0.0.1:8799/health
 
 ```bash
 # 1. 复制插件到 Hermes 用户插件目录（含 dashboard 后端子目录，必须带 -r）
-mkdir -p ~/.hermes/plugins/vrc-monitor
-cp -r hermes-plugin/* ~/.hermes/plugins/vrc-monitor/
+#    <hermes home> 默认位置：Linux/macOS 为 ~/.hermes，Windows 为 %LOCALAPPDATA%\hermes
+mkdir -p "$HERMES_HOME/plugins/vrc-monitor"
+cp -r hermes-plugin/* "$HERMES_HOME/plugins/vrc-monitor/"
 
 # 2. 启用（需要 hermes 环境）
 hermes plugins enable vrc-monitor
@@ -83,8 +84,8 @@ hermes plugins enable vrc-monitor
 桌面插件（GUI 配置入口，可选）：
 
 ```bash
-mkdir -p ~/.hermes/desktop-plugins/vrc-monitor
-cp desktop/plugin.js ~/.hermes/desktop-plugins/vrc-monitor/
+mkdir -p "$HERMES_HOME/desktop-plugins/vrc-monitor"
+cp desktop/plugin.js "$HERMES_HOME/desktop-plugins/vrc-monitor/"
 # 重启 Gateway + 桌面端 ⌘K → Reload desktop plugins
 ```
 
@@ -113,7 +114,7 @@ cp desktop/plugin.js ~/.hermes/desktop-plugins/vrc-monitor/
 
 ## 🔌 MCP 工具（15 个）
 
-服务监听 `http://127.0.0.1:8799/mcp`，通过 HTTP SSE 提供 MCP 协议。Hermes 用户可在 `~/.hermes/config.yaml` 配置：
+服务监听 `http://127.0.0.1:8799/mcp`，通过 HTTP SSE 提供 MCP 协议。Hermes 用户可在 `$HERMES_HOME/config.yaml`（Windows 为 `%LOCALAPPDATA%\hermes\config.yaml`）配置：
 
 ```yaml
 mcp_servers:

@@ -18,11 +18,11 @@
 }
 ```
 
-> ⚠️ **必须使用 QQ 邮箱**：OTP 验证码自动抓取脚本（`fetch-otp.py`）通过 IMAP 协议连接 `imap.qq.com`，只有 QQ 邮箱能配合自动登录。
+> 注意：**必须使用 QQ 邮箱**。OTP 验证码自动抓取脚本（`fetch-otp.py`）通过 IMAP 协议连接 `imap.qq.com`，只有 QQ 邮箱能配合自动登录。
 
 **获取 QQ 邮箱 IMAP 授权码：**
 1. 登录 QQ 邮箱网页版
-2. 设置 → 账户 → POP3/IMAP/SMTP/Exchange/CardDAV/CalDAV 服务
+2. 设置 -> 账户 -> POP3/IMAP/SMTP/Exchange/CardDAV/CalDAV 服务
 3. 开启 IMAP/SMTP 服务，按提示发送短信后生成授权码
 4. 将授权码填入 `qqmail_auth_code` 字段
 
@@ -39,7 +39,7 @@
 node start-monitor.js
 ```
 
-服务启动后自动完成：加载凭据 → 校验 cookie → 过期则自动从 QQ 邮箱抓取 OTP 验证码登录 → 建立 WebSocket 连接。
+服务启动后自动完成：加载凭据 -> 校验 cookie -> 过期则自动从 QQ 邮箱抓取 OTP 验证码登录 -> 建立 WebSocket 连接。
 
 健康检查：
 
@@ -53,8 +53,9 @@ curl http://127.0.0.1:8799/health
 
 ```bash
 # 复制整个插件目录（含 dashboard 后端子目录，必须带 -r）
-mkdir -p ~/.hermes/plugins/vrc-monitor
-cp -r hermes-plugin/* ~/.hermes/plugins/vrc-monitor/
+# <hermes home> 默认位置：Linux/macOS 为 ~/.hermes，Windows 为 %LOCALAPPDATA%\hermes
+mkdir -p "$HERMES_HOME/plugins/vrc-monitor"
+cp -r hermes-plugin/* "$HERMES_HOME/plugins/vrc-monitor/"
 
 # 启用
 hermes plugins enable vrc-monitor
@@ -62,18 +63,20 @@ hermes plugins enable vrc-monitor
 
 插件提供 `vrc_status` / `vrc_start` / `vrc_stop` / `vrc_restart` 工具，并在每次 Hermes 会话开始时自动拉起服务（on_session_start 钩子）。
 
-> ⚠️ `dashboard/` 子目录（manifest.json + plugin_api.py）是桌面插件和 `hermes dashboard` 的后端 API，复制时**不能遗漏**，否则桌面端「配置」功能不可用。
+> 注意：`dashboard/` 子目录（manifest.json + plugin_api.py）是桌面插件和 `hermes dashboard` 的后端 API，复制时**不能遗漏**，否则桌面端「配置」功能不可用。
+>
+> 关于自动拉起：on_session_start 钩子依赖 `VRC_MONITOR_DIR` 环境变量或「agent 在仓库目录内运行」才能定位服务目录。**首次配置完成前（未设置环境变量且不在仓库目录内运行时）服务不会自动启动**，这是预期行为——先完成步骤 1-3 或在仓库目录内重启 Hermes 会话即可。
 
 ### 5. 安装桌面插件（GUI 配置入口）
 
 ```bash
-mkdir -p ~/.hermes/desktop-plugins/vrc-monitor
-cp desktop/plugin.js ~/.hermes/desktop-plugins/vrc-monitor/
+mkdir -p "$HERMES_HOME/desktop-plugins/vrc-monitor"
+cp desktop/plugin.js "$HERMES_HOME/desktop-plugins/vrc-monitor/"
 ```
 
 然后：
 1. 重启 Hermes Gateway（加载 dashboard 后端路由）
-2. 桌面端按 ⌘K → **Reload desktop plugins**
+2. 桌面端按 ⌘K -> **Reload desktop plugins**
 
 桌面端右侧出现「VRChat Monitor」面板：显示服务运行状态，点击「配置」可填写 VRChat 邮箱/密码/QQ 邮箱授权码（保存到 credentials.json），无需手工编辑文件。
 
@@ -103,4 +106,4 @@ cp desktop/plugin.js ~/.hermes/desktop-plugins/vrc-monitor/
 
 ### 服务目录找不到
 
-如果 `vrc_status` 或桌面端显示"未找到服务目录"，说明 `VRC_MONITOR_DIR` 未设置且 agent 不在仓库目录内运行。解决：设置 `VRC_MONITOR_DIR` 指向本仓库目录，或在仓库目录内重启服务。
+如果 `vrc_status` 或桌面端显示「未找到服务目录」，说明 `VRC_MONITOR_DIR` 未设置且 agent 不在仓库目录内运行。解决：设置 `VRC_MONITOR_DIR` 指向本仓库目录，或在仓库目录内重启服务。
