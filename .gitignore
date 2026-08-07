@@ -1,0 +1,26 @@
+# ── 凭据与隐私（绝不入库）──
+credentials.json
+credentials.local.json
+auth_cookie.txt
+auth_cookie.txt.bak
+*.sqlite3
+*.sqlite3-journal
+monitor.log
+
+# ── 环境与运行时 ──
+.env
+.env.*
+!.env.example
+node_modules/
+__pycache__/
+*.pyc
+
+# ── Hermes 插件本地文件 ──
+.hermes/
+workspace/
+
+# ── 编辑器/系统 ──
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

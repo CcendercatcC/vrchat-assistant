@@ -1,0 +1,71 @@
+-- VRChat 好友监控系统 — 数据库初始化 DDL
+-- 文件: core/init-db.sql
+
+-- 事件流：所有 WebSocket 事件 + 迁移的历史数据
+CREATE TABLE IF NOT EXISTS events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  type TEXT NOT NULL,              -- 'friend-online', 'friend-location', 'friend-offline' 等
+  user_id TEXT NOT NULL,           -- usr_xxx
+  display_name TEXT,               -- 事件发生时用户名（可能已改名）
+  content_json TEXT NOT NULL,      -- 原始事件 JSON
+  world_id TEXT,                   -- 从 content 提取的世界 ID
+  world_name TEXT,                 -- 解析后的世界名
+  created_at TEXT NOT NULL,
+  source TEXT DEFAULT 'websocket'  -- 'websocket', 'migrate', 'api_poll'
+);
+
+CREATE INDEX IF NOT EXISTS idx_events_user_id ON events(user_id);
+CREATE INDEX IF NOT EXISTS idx_events_type ON events(type);
+CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at);
+CREATE INDEX IF NOT EXISTS idx_events_user_time ON events(user_id, created_at);
+
+-- 好友当前状态
+CREATE TABLE IF NOT EXISTS friends (
+  user_id TEXT PRIMARY KEY,
+  display_name TEXT NOT NULL DEFAULT '',
+  memo TEXT,                       -- 备注昵称（从 VRCX-0 memos 迁移）
+  trust_level TEXT,                -- 信任等级
+  is_online INTEGER DEFAULT 0,     -- 0=离线, 1=在线
+  location TEXT,                   -- 当前位置
+  world_id TEXT,                   -- 当前世界 ID
+  world_name TEXT,                 -- 当前世界名
+  platform TEXT,
+  status TEXT,
+  status_description TEXT,
+  avatar_image_url TEXT,
+  last_seen TEXT,                  -- 最后一次见到（任意活动）
+  last_online TEXT,                -- 最后一次上线
+  last_offline TEXT,               -- 最后一次下线
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
+-- 世界名缓存
+CREATE TABLE IF NOT EXISTS world_cache (
+  world_id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  author_id TEXT,
+  author_name TEXT,
+  description TEXT,
+  image_url TEXT,
+  release_status TEXT,
+  capacity INTEGER,
+  favorites INTEGER,
+  tags TEXT,                       -- JSON array
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
+-- 本地配置（键值对）
+CREATE TABLE IF NOT EXISTS config (
+  key TEXT PRIMARY KEY,
+  value TEXT
+);
+
+-- 关注的特定好友（核心关注名单）
+CREATE TABLE IF NOT EXISTS watchlist (
+  user_id TEXT PRIMARY KEY,
+  display_name TEXT,
+  memo TEXT,
+  priority INTEGER DEFAULT 0,      -- 0=普通, 1=高关注
+  created_at TEXT DEFAULT (datetime('now'))
+);
