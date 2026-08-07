@@ -189,7 +189,11 @@ export default {
       id: 'pane',
       area: 'panes',
       title: 'VRChat Monitor',
-      data: { placement: 'right' },
+      data: {
+        placement: 'right',
+        dock: { pane: 'files', pos: 'bottom' },
+        height: '220px'
+      },
       render: () => jsx(VrcMonitorPane, { ctx })
     })
   }
