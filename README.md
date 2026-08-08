@@ -15,7 +15,7 @@
 - ✅ **历史数据迁移** — 从 VRCX-0 导入 10 个月的 33 万条活动记录
 - ✅ **世界名缓存** — 自动解析 `wrld_xxx` 为可读世界名（24h TTL 防改名陈旧）
 - ✅ **关注名单** — 标记核心好友，活动时特别通知
-- ✅ **MCP 工具接口** — 27 个工具供 Hermes / 任意 MCP 客户端调用
+- ✅ **MCP 工具接口** — 35 个工具供 Hermes / 任意 MCP 客户端调用
 - ✅ **Hermes 插件托管** — 会话自动拉起、崩溃自愈、`vrc_status` 等管理工具
 
 ---
@@ -73,7 +73,7 @@ curl http://127.0.0.1:8799/health
 
 | Skill | 内容 | 适用场景 |
 |-------|------|----------|
-| `skills/vrc-monitor-agent/` | 27 个 MCP 工具清单、5 大查询工作流（在线/同屏/时间线/上线规律/昵称）、常见陷阱、健康检查 | 日常好友查询 |
+| `skills/vrc-monitor-agent/` | 35 个 MCP 工具清单、5 大查询工作流（在线/同屏/时间线/上线规律/昵称）、常见陷阱、健康检查 | 日常好友查询 |
 | `skills/vrc-monitor-companion-query/` | 「谁和我/和 XX 一起玩过」同屏交叉查询的正确姿势（为何不委派子 agent） | 同屏/玩伴查询 |
 
 **安装方式**（以 Hermes 为例，其他 Agent 框架同理）——把 skill 目录复制到你的 skills 目录：
@@ -136,7 +136,7 @@ cp desktop/plugin.js "$HERMES_HOME/desktop-plugins/vrc-monitor/"
 - **双路检测**：状态文件 pid 存活 **或** 端口探测成功，均可识别为运行中（防状态文件丢失误判）
 - **日志**：`$HERMES_HOME/workspace/vrc-monitor/monitor.log`
 
-## 🔌 MCP 工具（27 个）
+## 🔌 MCP 工具（35 个）
 
 服务监听 `http://127.0.0.1:8799/mcp`，通过 HTTP SSE 提供 MCP 协议。Hermes 用户可在 `$HERMES_HOME/config.yaml`（Windows 为 `%LOCALAPPDATA%\hermes\config.yaml`）配置：
 
@@ -205,6 +205,15 @@ mcp_servers:
 |------|------|
 | `get_server_status` | 服务/认证状态 |
 | `get_database_stats` | 数据库统计 |
+
+### 群组（2026-08-08 新增）
+
+| 工具 | 说明 |
+|------|------|
+| `get_user_groups` | 查询用户加入的群组列表（`userId` 可选，省略 = 当前账号；端点 `GET /users/{userId}/groups`，注意 `/auth/user/groups` 是 404 无效端点） |
+| `get_group_info` | 群组详情（名称/成员数/shortCode/描述/认证状态等；`groupId` 必填） |
+| `get_group_instances` | **群组当前开放的实例（群组房）**：返回 instanceId/location/memberCount + 世界信息；空数组 = 没开房（`groupId` 必填） |
+| `get_group_announcement` | 群组公告（title/text/作者/时间；无公告返回 null；`groupId` 必填） |
 
 > **上传前图片处理**：emoji 需正方形（`square` 模式，fit/pad/smart）；Prints/Gallery 照片不强制方形（`landscape` 模式，竖图自动旋转90° + `auto` 策略——比较裁剪损失 vs 填充白边，选损失小的；可 `--strategy crop|fill` 强制）。脚本：`scripts/prepare_image.py`。
 

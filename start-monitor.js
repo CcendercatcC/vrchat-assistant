@@ -505,6 +505,50 @@ const CUSTOM_TOOLS = [
       required: ['userId', 'nickname'],
     },
   },
+  // ── 新增：group 查询工具 ──
+  {
+    name: 'get_user_groups',
+    description: '[group] List groups a user has joined (default: current account).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        userId: { type: 'string', description: 'VRChat user id (usr_...); omit to use the authenticated account' },
+      },
+    },
+  },
+  {
+    name: 'get_group_info',
+    description: '[group] Get a VRChat group\'s details (name, member count, description, verified status).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        groupId: { type: 'string', description: 'VRChat group id (grp_...)' },
+      },
+      required: ['groupId'],
+    },
+  },
+  {
+    name: 'get_group_instances',
+    description: '[group] List a group\'s currently open group instances (rooms). Empty array = no rooms open.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        groupId: { type: 'string', description: 'VRChat group id (grp_...)' },
+      },
+      required: ['groupId'],
+    },
+  },
+  {
+    name: 'get_group_announcement',
+    description: '[group] Get a group\'s announcement post (title/text/author/createdAt). null if none.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        groupId: { type: 'string', description: 'VRChat group id (grp_...)' },
+      },
+      required: ['groupId'],
+    },
+  },
 ];
 
 // ── 工具处理器 ──
@@ -860,6 +904,93 @@ function handleSetNickname({ userId, nickname, displayName }) {
   const result = storage.setNickname({ userId, nickname, displayName });
   storage.save();
   return result;
+}
+
+// ── 新增：group 查询工具 ──
+
+async function handleGetUserGroups({ userId }) {
+  let targetId = userId;
+  if (!targetId) {
+    targetId = serverState.authUser?.id;
+    if (!targetId) {
+      const r = await api._request('GET', '/auth/user');
+      if (r.status !== 200) throw new Error(`API error: ${r.status}`);
+      targetId = r.data?.id;
+    }
+  }
+  if (!targetId) throw new Error('Unable to determine target user id');
+  const r = await api._request('GET', `/users/${targetId}/groups`);
+  if (r.status !== 200) throw new Error(`API error: ${r.status}`);
+  const groups = (r.data || []).map((g) => {
+    const item = {};
+    if (g.groupId !== undefined && g.groupId !== null) item.groupId = g.groupId;
+    if (g.name !== undefined && g.name !== null) item.name = g.name;
+    if (g.shortCode !== undefined && g.shortCode !== null) item.shortCode = g.shortCode;
+    if (g.memberCount !== undefined && g.memberCount !== null) item.memberCount = g.memberCount;
+    if (g.isVerified !== undefined && g.isVerified !== null) item.isVerified = g.isVerified;
+    if (g.myRank !== undefined && g.myRank !== null) {
+      item.myRank = typeof g.myRank === 'object' ? (g.myRank.id || null) : g.myRank;
+    }
+    return item;
+  });
+  return { userId: targetId, count: groups.length, groups };
+}
+
+async function handleGetGroupInfo({ groupId }) {
+  if (!groupId) throw new Error('groupId is required');
+  const r = await api._request('GET', `/groups/${groupId}`);
+  if (r.status !== 200) throw new Error(`API error: ${r.status}`);
+  const d = r.data;
+  const result = { groupId: d.id };
+  if (d.name !== undefined && d.name !== null) result.name = d.name;
+  if (d.shortCode !== undefined && d.shortCode !== null) result.shortCode = d.shortCode;
+  if (d.memberCount !== undefined && d.memberCount !== null) result.memberCount = d.memberCount;
+  if (d.isVerified !== undefined && d.isVerified !== null) result.isVerified = d.isVerified;
+  if (d.description !== undefined && d.description !== null) result.description = d.description;
+  if (d.discordId !== undefined && d.discordId !== null) result.discordId = d.discordId;
+  if (d.bannerId !== undefined && d.bannerId !== null) result.bannerId = d.bannerId;
+  if (d.tags !== undefined && d.tags !== null) result.tags = d.tags;
+  return result;
+}
+
+async function handleGetGroupInstances({ groupId }) {
+  if (!groupId) throw new Error('groupId is required');
+  const r = await api._request('GET', `/groups/${groupId}/instances`);
+  if (r.status !== 200) throw new Error(`API error: ${r.status}`);
+  const instances = (r.data || []).map((inst) => ({
+    instanceId: inst.instanceId,
+    location: inst.location,
+    memberCount: inst.memberCount,
+    worldId: inst.world?.id || null,
+    worldName: inst.world?.name || null,
+    worldAuthor: inst.world?.authorName || null,
+    worldCapacity: inst.world?.capacity || null,
+    worldImageUrl: inst.world?.imageUrl || null,
+  }));
+  return { groupId, count: instances.length, instances };
+}
+
+async function handleGetGroupAnnouncement({ groupId }) {
+  if (!groupId) throw new Error('groupId is required');
+  const r = await api._request('GET', `/groups/${groupId}/announcement`);
+  if (r.status !== 200) throw new Error(`API error: ${r.status}`);
+  const d = r.data;
+  if (!d || typeof d !== 'object' || !d.text) {
+    return { groupId, announcement: null };
+  }
+  return {
+    groupId,
+    announcement: {
+      id: d.id,
+      title: d.title,
+      text: d.text,
+      authorId: d.authorId,
+      createdAt: d.createdAt,
+      updatedAt: d.updatedAt,
+      visibility: d.visibility,
+      imageUrl: d.imageUrl,
+    },
+  };
 }
 
 // ── 新增：boop emoji 工具 ──
@@ -1294,6 +1425,18 @@ async function handleRpc(rpc, session, res) {
             break;
           case 'set_nickname':
             result = handleSetNickname(args);
+            break;
+          case 'get_user_groups':
+            result = await rateLimiter.execute(() => handleGetUserGroups(args));
+            break;
+          case 'get_group_info':
+            result = await rateLimiter.execute(() => handleGetGroupInfo(args));
+            break;
+          case 'get_group_instances':
+            result = await rateLimiter.execute(() => handleGetGroupInstances(args));
+            break;
+          case 'get_group_announcement':
+            result = await rateLimiter.execute(() => handleGetGroupAnnouncement(args));
             break;
           default:
             throw new Error(`Unknown tool: ${name}`);

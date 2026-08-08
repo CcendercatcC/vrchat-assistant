@@ -15,7 +15,7 @@ metadata:
 - 服务启动：项目目录下 `node start-monitor.js`（首次需配置 `credentials.json`，见 AGENTS.md）
 - 数据库：本地 SQLite（WebSocket 实时采集事件，含历史上线/位置/同屏记录）
 
-## MCP 工具（27 个）
+## MCP 工具（35 个）
 
 | 工具 | 说明 |
 |------|------|
@@ -47,6 +47,10 @@ metadata:
 | `remove_friend` | 删除好友（不可逆！userId 或 displayName 精确匹配，必须传 confirm: true 才执行，否则只预览目标） |
 | `get_server_status` | 服务/认证状态 |
 | `get_database_stats` | 数据库统计 |
+| `get_user_groups` | 用户加入的群组列表（`userId` 可选，省略 = 当前账号；`GET /users/{userId}/groups`） |
+| `get_group_info` | 群组详情（名称/成员数/shortCode/描述/认证状态） |
+| `get_group_instances` | **群组当前开的房**（group rooms）：instanceId/location/memberCount + 世界信息；空 = 没开房。适合"XX 群今晚有没有活动房"类问题 |
+| `get_group_announcement` | 群组公告（title/text/作者/时间；无公告返回 null） |
 
 调用方式（HTTP SSE JSON-RPC）：
 
