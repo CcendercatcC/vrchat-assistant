@@ -15,7 +15,7 @@ metadata:
 - 服务启动：项目目录下 `node start-monitor.js`（首次需配置 `credentials.json`，见 AGENTS.md）
 - 数据库：本地 SQLite（WebSocket 实时采集事件，含历史上线/位置/同屏记录）
 
-## MCP 工具（35 个）
+## MCP 工具（38 个）
 
 | 工具 | 说明 |
 |------|------|
@@ -48,9 +48,12 @@ metadata:
 | `get_server_status` | 服务/认证状态 |
 | `get_database_stats` | 数据库统计 |
 | `get_user_groups` | 用户加入的群组列表（`userId` 可选，省略 = 当前账号；`withDetails: true` 批量带简介；`GET /users/{userId}/groups`） |
-| `get_group_info` | 群组详情（名称/成员数/shortCode/描述/认证状态；`includeAnnouncement: true` 附带公告，非成员为 null） |
+| `get_group_info` | 群组详情（名称/成员数/shortCode/描述/认证状态/joinState(open/request/invite)；`includeAnnouncement: true` 附带公告，非成员为 null） |
 | `get_group_instances` | **群组当前开的房**（group rooms）：instanceId/location/memberCount + 世界信息；空 = 没开房。适合"XX 群今晚有没有活动房"类问题 |
 | `get_group_announcement` | 群组公告（title/text/作者/时间；无公告或非成员返回 null 不报错） |
+| `join_group` | 加入群组（open 群直接加入；已是成员返回 alreadyMember:true；`groupId` 必填） |
+| `leave_group` | 退出群组（`POST /groups/{id}/leave`；必须 `confirm: true`；非成员返回 notMember） |
+| `peek_group_announcement` | **窥探群公告**：一键「加入→读公告→退出」，仅对 open 群生效，需 `confirm: true` |
 
 调用方式（HTTP SSE JSON-RPC）：
 

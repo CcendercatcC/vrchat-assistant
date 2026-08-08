@@ -551,6 +551,41 @@ const CUSTOM_TOOLS = [
       required: ['groupId'],
     },
   },
+  {
+    name: 'join_group',
+    description: '[group] Join a group. Open groups join instantly; 400 already-member is returned as alreadyMember:true (no error).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        groupId: { type: 'string', description: 'VRChat group id (grp_...)' },
+      },
+      required: ['groupId'],
+    },
+  },
+  {
+    name: 'leave_group',
+    description: '[group] Leave a group (removes your membership). Requires confirm: true. 404 non-member returns notMember:true.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        groupId: { type: 'string', description: 'VRChat group id (grp_...)' },
+        confirm: { type: 'boolean', description: 'Must be true to actually leave; otherwise returns preview only' },
+      },
+      required: ['groupId'],
+    },
+  },
+  {
+    name: 'peek_group_announcement',
+    description: '[group] Peek a group announcement: joins if joinState=open, reads announcement, then leaves. Requires confirm: true. Non-open groups return peekable:false.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        groupId: { type: 'string', description: 'VRChat group id (grp_...)' },
+        confirm: { type: 'boolean', description: 'Must be true to auto-join (members see the join feed)' },
+      },
+      required: ['groupId'],
+    },
+  },
 ];
 
 // ── 工具处理器 ──
@@ -971,6 +1006,8 @@ async function handleGetGroupInfo({ groupId, includeAnnouncement }) {
   if (d.discordId !== undefined && d.discordId !== null) result.discordId = d.discordId;
   if (d.bannerId !== undefined && d.bannerId !== null) result.bannerId = d.bannerId;
   if (d.tags !== undefined && d.tags !== null) result.tags = d.tags;
+  if (d.joinState !== undefined && d.joinState !== null) result.joinState = d.joinState;
+  if (d.allowGroupJoinPrompt !== undefined && d.allowGroupJoinPrompt !== null) result.allowGroupJoinPrompt = d.allowGroupJoinPrompt;
   if (includeAnnouncement) {
     try {
       const a = await api._request('GET', `/groups/${groupId}/announcement`);
@@ -1031,6 +1068,69 @@ async function handleGetGroupAnnouncement({ groupId }) {
       imageUrl: d.imageUrl,
     },
   };
+}
+
+async function handleJoinGroup({ groupId }) {
+  if (!groupId) throw new Error('groupId is required');
+  const r = await api._request('POST', `/groups/${groupId}/join`);
+  if (r.status === 200 && r.data) {
+    return { groupId, joined: true, membership: r.data.membershipId ? { membershipId: r.data.membershipId } : undefined };
+  }
+  if (r.status === 400 && typeof r.data?.error?.message === 'string' && r.data.error.message.includes('already a member')) {
+    return { groupId, joined: false, alreadyMember: true };
+  }
+  throw new Error(`API error: ${r.status}`);
+}
+
+async function handleLeaveGroup({ groupId, confirm }) {
+  if (!groupId) throw new Error('groupId is required');
+  if (confirm !== true) {
+    return { groupId, confirmRequired: true, message: 'Leaving a group removes you from it. Pass confirm: true to actually leave.' };
+  }
+  // 自己退出用 POST /groups/{id}/leave；DELETE /members/{userId} 是管理员移除成员（普通成员 403，实测 2026-08-09）
+  const r = await api._request('POST', `/groups/${groupId}/leave`);
+  if (r.status === 200) return { groupId, left: true };
+  // 403 = 不是成员/群不存在（实测：POST leave 对无效群返回 403 而非 404）
+  if (r.status === 403 || r.status === 404 || r.status === 400) return { groupId, left: false, notMember: true };
+  throw new Error(`API error: ${r.status}`);
+}
+
+async function handlePeekGroupAnnouncement({ groupId, confirm }) {
+  if (!groupId) throw new Error('groupId is required');
+  if (confirm !== true) {
+    return { groupId, confirmRequired: true, message: 'This auto-joins the group, reads its announcement, then leaves (members see the join feed). Pass confirm: true to proceed.' };
+  }
+  const g = await api._request('GET', `/groups/${groupId}`);
+  if (g.status !== 200) throw new Error(`API error: ${g.status}`);
+  const joinState = g.data?.joinState;
+  if (joinState !== 'open') {
+    return { groupId, joinState: joinState || 'unknown', peekable: false,
+             message: joinState === 'request' ? 'Group requires request/approval - cannot auto-join.' :
+                      joinState === 'invite' ? 'Group is invite-only - cannot auto-join.' : 'Group join state unknown.' };
+  }
+  let joinedNow = false;
+  const j = await api._request('POST', `/groups/${groupId}/join`);
+  if (j.status === 200) joinedNow = true;
+  else if (!(j.status === 400 && typeof j.data?.error?.message === 'string' && j.data.error.message.includes('already a member'))) {
+    throw new Error(`join failed: ${j.status}`);
+  }
+  try {
+    const a = await api._request('GET', `/groups/${groupId}/announcement`);
+    let announcement = null;
+    if (a.status === 200 && a.data && typeof a.data === 'object' && a.data.text) {
+      announcement = {
+        id: a.data.id, title: a.data.title, text: a.data.text,
+        authorId: a.data.authorId, createdAt: a.data.createdAt,
+        updatedAt: a.data.updatedAt, visibility: a.data.visibility,
+      };
+    }
+    return { groupId, joinState, peekable: true, joinedNow, announcement };
+  } finally {
+    // 4. 无论公告读取成功与否，刚加入就退出（POST leave，2026-08-09 实测正确端点）
+    if (joinedNow) {
+      try { await api._request('POST', `/groups/${groupId}/leave`); } catch (e) { /* 退出失败忽略 */ }
+    }
+  }
 }
 
 // ── 新增：boop emoji 工具 ──
@@ -1477,6 +1577,15 @@ async function handleRpc(rpc, session, res) {
             break;
           case 'get_group_announcement':
             result = await rateLimiter.execute(() => handleGetGroupAnnouncement(args));
+            break;
+          case 'join_group':
+            result = await rateLimiter.execute(() => handleJoinGroup(args));
+            break;
+          case 'leave_group':
+            result = await rateLimiter.execute(() => handleLeaveGroup(args));
+            break;
+          case 'peek_group_announcement':
+            result = await rateLimiter.execute(() => handlePeekGroupAnnouncement(args));
             break;
           default:
             throw new Error(`Unknown tool: ${name}`);
