@@ -26,7 +26,7 @@ metadata:
 | `get_recent_events` | 最新事件流 |
 | `get_companions` | **同屏交叉查询**（指定时间窗口内同实例的好友；可查自己或任意好友） |
 | `get_online_pattern` | **上线规律分析**（上线/下线/活跃时段分布 + 活跃天数/频率 + 峰值建议） |
-| `get_world_name` | 世界名查询（缓存+API 回退） |
+| `get_world_name` | 世界名查询（缓存+API 回退；含作者/容量/简介/标签；缓存带简介） |
 | `get_nicknames` / `set_nickname` | 好友昵称映射（查询/写入，本地库） |
 | `get_mutual_friends` | 共同好友列表：你与目标用户（userId 或 displayName 精确匹配）的共同好友，自动带本地昵称 |
 | `get_watchlist` / `add_to_watchlist` / `remove_from_watchlist` | 关注名单 |
@@ -47,10 +47,10 @@ metadata:
 | `remove_friend` | 删除好友（不可逆！userId 或 displayName 精确匹配，必须传 confirm: true 才执行，否则只预览目标） |
 | `get_server_status` | 服务/认证状态 |
 | `get_database_stats` | 数据库统计 |
-| `get_user_groups` | 用户加入的群组列表（`userId` 可选，省略 = 当前账号；`GET /users/{userId}/groups`） |
-| `get_group_info` | 群组详情（名称/成员数/shortCode/描述/认证状态） |
+| `get_user_groups` | 用户加入的群组列表（`userId` 可选，省略 = 当前账号；`withDetails: true` 批量带简介；`GET /users/{userId}/groups`） |
+| `get_group_info` | 群组详情（名称/成员数/shortCode/描述/认证状态；`includeAnnouncement: true` 附带公告，非成员为 null） |
 | `get_group_instances` | **群组当前开的房**（group rooms）：instanceId/location/memberCount + 世界信息；空 = 没开房。适合"XX 群今晚有没有活动房"类问题 |
-| `get_group_announcement` | 群组公告（title/text/作者/时间；无公告返回 null） |
+| `get_group_announcement` | 群组公告（title/text/作者/时间；无公告或非成员返回 null 不报错） |
 
 调用方式（HTTP SSE JSON-RPC）：
 

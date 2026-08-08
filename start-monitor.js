@@ -508,21 +508,23 @@ const CUSTOM_TOOLS = [
   // ── 新增：group 查询工具 ──
   {
     name: 'get_user_groups',
-    description: '[group] List groups a user has joined (default: current account).',
+    description: '[group] List groups a user has joined (default: current account). withDetails=true also fetches descriptions.',
     inputSchema: {
       type: 'object',
       properties: {
         userId: { type: 'string', description: 'VRChat user id (usr_...); omit to use the authenticated account' },
+        withDetails: { type: 'boolean', description: 'When true, also fetch each group\'s description (slower, ~1 req/group; failures skipped)' },
       },
     },
   },
   {
     name: 'get_group_info',
-    description: '[group] Get a VRChat group\'s details (name, member count, description, verified status).',
+    description: '[group] Get a VRChat group\'s details (name, member count, description, verified status). includeAnnouncement=true also fetches the announcement.',
     inputSchema: {
       type: 'object',
       properties: {
         groupId: { type: 'string', description: 'VRChat group id (grp_...)' },
+        includeAnnouncement: { type: 'boolean', description: 'When true, also fetch the group announcement (null if none / not a member)' },
       },
       required: ['groupId'],
     },
@@ -540,7 +542,7 @@ const CUSTOM_TOOLS = [
   },
   {
     name: 'get_group_announcement',
-    description: '[group] Get a group\'s announcement post (title/text/author/createdAt). null if none.',
+    description: '[group] Get a group\'s announcement post (title/text/author/createdAt). null if none or not a member.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -848,6 +850,7 @@ async function handleGetWorldName({ worldId, forceRefresh }) {
     worldId: w.id, name: w.name, authorName: w.authorName,
     capacity: w.capacity, favorites: w.favorites,
     releaseStatus: w.releaseStatus, tags: w.tags || [],
+    description: w.description || '', imageUrl: w.imageUrl || '',
   });
   return result;
 }
@@ -908,7 +911,7 @@ function handleSetNickname({ userId, nickname, displayName }) {
 
 // ── 新增：group 查询工具 ──
 
-async function handleGetUserGroups({ userId }) {
+async function handleGetUserGroups({ userId, withDetails }) {
   let targetId = userId;
   if (!targetId) {
     targetId = serverState.authUser?.id;
@@ -933,10 +936,28 @@ async function handleGetUserGroups({ userId }) {
     }
     return item;
   });
+  if (withDetails && groups.length > 0) {
+    const CONCURRENCY = 5;
+    let idx = 0;
+    const workers = Array.from({ length: Math.min(CONCURRENCY, groups.length) }, async () => {
+      while (idx < groups.length) {
+        const i = idx++;
+        const g = groups[i];
+        try {
+          const d = await api._request('GET', `/groups/${g.groupId}`);
+          if (d.status === 200 && d.data) {
+            if (d.data.description) g.description = d.data.description;
+            if (d.data.isVerified !== undefined && d.data.isVerified !== null) g.isVerified = d.data.isVerified;
+          }
+        } catch (e) { /* 单群失败忽略 */ }
+      }
+    });
+    await Promise.all(workers);
+  }
   return { userId: targetId, count: groups.length, groups };
 }
 
-async function handleGetGroupInfo({ groupId }) {
+async function handleGetGroupInfo({ groupId, includeAnnouncement }) {
   if (!groupId) throw new Error('groupId is required');
   const r = await api._request('GET', `/groups/${groupId}`);
   if (r.status !== 200) throw new Error(`API error: ${r.status}`);
@@ -950,6 +971,22 @@ async function handleGetGroupInfo({ groupId }) {
   if (d.discordId !== undefined && d.discordId !== null) result.discordId = d.discordId;
   if (d.bannerId !== undefined && d.bannerId !== null) result.bannerId = d.bannerId;
   if (d.tags !== undefined && d.tags !== null) result.tags = d.tags;
+  if (includeAnnouncement) {
+    try {
+      const a = await api._request('GET', `/groups/${groupId}/announcement`);
+      if (a.status === 200 && a.data && typeof a.data === 'object' && a.data.text) {
+        result.announcement = {
+          id: a.data.id, title: a.data.title, text: a.data.text,
+          authorId: a.data.authorId, createdAt: a.data.createdAt,
+          updatedAt: a.data.updatedAt, visibility: a.data.visibility,
+        };
+      } else {
+        result.announcement = null;
+      }
+    } catch (e) {
+      result.announcement = null;
+    }
+  }
   return result;
 }
 
@@ -973,7 +1010,10 @@ async function handleGetGroupInstances({ groupId }) {
 async function handleGetGroupAnnouncement({ groupId }) {
   if (!groupId) throw new Error('groupId is required');
   const r = await api._request('GET', `/groups/${groupId}/announcement`);
-  if (r.status !== 200) throw new Error(`API error: ${r.status}`);
+  if (r.status !== 200) {
+    if (r.status === 403 || r.status === 404) return { groupId, announcement: null };
+    throw new Error(`API error: ${r.status}`);
+  }
   const d = r.data;
   if (!d || typeof d !== 'object' || !d.text) {
     return { groupId, announcement: null };

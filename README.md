@@ -175,7 +175,7 @@ mcp_servers:
 
 | 工具 | 说明 |
 |------|------|
-| `get_world_name` | 世界名查询（缓存+API 回退，24h TTL） |
+| `get_world_name` | 世界名查询（缓存+API 回退，24h TTL；返回作者/容量/简介/标签/收藏数，缓存含简介） |
 
 ### 关注名单
 
@@ -210,10 +210,10 @@ mcp_servers:
 
 | 工具 | 说明 |
 |------|------|
-| `get_user_groups` | 查询用户加入的群组列表（`userId` 可选，省略 = 当前账号；端点 `GET /users/{userId}/groups`，注意 `/auth/user/groups` 是 404 无效端点） |
-| `get_group_info` | 群组详情（名称/成员数/shortCode/描述/认证状态等；`groupId` 必填） |
+| `get_user_groups` | 查询用户加入的群组列表（`userId` 可选，省略 = 当前账号；`withDetails: true` 时批量带简介，~1req/群；端点 `GET /users/{userId}/groups`，注意 `/auth/user/groups` 是 404 无效端点） |
+| `get_group_info` | 群组详情（名称/成员数/shortCode/描述/认证状态等；`includeAnnouncement: true` 时附带公告，非成员为 null；`groupId` 必填） |
 | `get_group_instances` | **群组当前开放的实例（群组房）**：返回 instanceId/location/memberCount + 世界信息；空数组 = 没开房（`groupId` 必填） |
-| `get_group_announcement` | 群组公告（title/text/作者/时间；无公告返回 null；`groupId` 必填） |
+| `get_group_announcement` | 群组公告（title/text/作者/时间；无公告或非成员返回 null 不报错；`groupId` 必填） |
 
 > **上传前图片处理**：emoji 需正方形（`square` 模式，fit/pad/smart）；Prints/Gallery 照片不强制方形（`landscape` 模式，竖图自动旋转90° + `auto` 策略——比较裁剪损失 vs 填充白边，选损失小的；可 `--strategy crop|fill` 强制）。脚本：`scripts/prepare_image.py`。
 
