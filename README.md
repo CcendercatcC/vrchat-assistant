@@ -5,6 +5,8 @@
 
 监控 VRChat 好友的上下线、世界切换、Avatar/状态变化，通过 WebSocket 实时采集入库，经 MCP 协议暴露给 AI Agent（Hermes）查询，并附带 Hermes 插件实现进程托管。
 
+> 🤝 **想 fork 或贡献代码？** 开发规范见 [DEVELOPMENT.md](./DEVELOPMENT.md)（fork 自由，PR 有要求，跨平台约束必读）。
+
 ---
 
 ## ✨ 功能
@@ -129,6 +131,7 @@ cp desktop/plugin.js "$HERMES_HOME/desktop-plugins/vrc-monitor/"
 |------|--------|------|
 | `VRC_MONITOR_DIR` | 自动探测（agent 在仓库目录内运行） | 服务目录（含 start-monitor.js），未探测到时需显式设置 |
 | `VRC_MONITOR_NODE` | PATH 中的 node | Node 可执行文件路径 |
+| `VRC_MONITOR_WS_PROXY` | `http://127.0.0.1:7892` | WebSocket 直连超时后的代理回退地址（可覆盖默认值） |
 
 ### 进程托管原理
 
@@ -137,7 +140,7 @@ cp desktop/plugin.js "$HERMES_HOME/desktop-plugins/vrc-monitor/"
 - **双路检测**：状态文件 pid 存活 **或** 端口探测成功，均可识别为运行中（防状态文件丢失误判）
 - **日志**：`$HERMES_HOME/workspace/vrc-monitor/monitor.log`
 
-## 🔌 MCP 工具（38 个）
+## 🔌 MCP 工具（44 个）
 
 服务监听 `http://127.0.0.1:8799/mcp`，通过 HTTP SSE 提供 MCP 协议。Hermes 用户可在 `$HERMES_HOME/config.yaml`（Windows 为 `%LOCALAPPDATA%\hermes\config.yaml`）配置：
 
@@ -200,6 +203,10 @@ mcp_servers:
 | `upload_gallery_image` | 上传图片到 VRC+ **图库**（Gallery，需 VRC+） | `imagePath` | — |
 | `download_print` | 从相册下载照片到本地，返回路径（可 `MEDIA:` 发送） | `printId` | `outputDir` |
 | `download_gallery_image` | 从图库下载图片到本地，返回路径 | `fileId` | `outputDir` |
+| `get_prints` | 列出 VRC+ 相册（Prints）照片列表 | — | `limit`（默认 100）、`userId` |
+| `remove_print` | 删除相册照片（不可逆，需 `confirm: true`） | `printId` | `confirm` |
+| `get_gallery_images` | 列出 VRC+ 图库（Gallery）图片列表 | — | `limit`（默认 100） |
+| `remove_gallery_image` | 删除图库图片（不可逆，需 `confirm: true`） | `fileId` | `confirm` |
 | `send_invite` | 邀请好友加入**你当前所在房间**（拉人进房） | `userId`、`worldId`、`instanceId` | `message`（附带消息） |
 | `request_invite` | 请求好友**邀请你加入 TA 的房间**（默认消息 "Can I join you?"） | `userId` | `message` |
 | `send_friend_request` | **发送好友请求**（添加好友）：`userId` 直接加，或 `displayName` 精确匹配（不区分大小写）后加 | `userId` 或 `displayName` 至少一个 | — |
@@ -211,6 +218,7 @@ mcp_servers:
 |------|------|
 | `get_server_status` | 服务/认证状态 |
 | `get_database_stats` | 数据库统计 |
+| `backup_database` | 立即备份数据库（WAL 在线备份，无需重启；保留最近 2 份在 `backups/`） |
 
 ### 群组（2026-08-08 新增）
 
@@ -277,7 +285,7 @@ node migrate-vrcx0.mjs <VRCX数据库路径> <userId>
 ## 🛠 故障排查
 
 **Q: WebSocket 连不上？**
-A: 国内网络可能需代理。服务自动直连 6s 失败后回退到本地代理（默认 `127.0.0.1:7892`），无需人工干预。
+A: 国内网络可能需代理。服务自动直连 6s 失败后回退到本地代理（默认 `127.0.0.1:7892`，可用 `VRC_MONITOR_WS_PROXY` 环境变量覆盖），无需人工干预。
 
 **Q: 登录提示 OTP 但一直失败？**
 A: 检查 `credentials.json` 的 `imap_auth_code` 是否为正确的 IMAP 授权码（非登录密码）。服务会在认证失败后冷却 120s（限流 401 则 5min）自动重试，不会高频刷验证码。

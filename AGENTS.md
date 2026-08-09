@@ -2,6 +2,8 @@
 
 基于 Node.js 的 VRChat 好友在线状态监控服务，配合 Hermes 插件和桌面插件使用，支持自动抓取 OTP 验证码登录。
 
+> 💡 **想 fork 或贡献代码？** 先读 [DEVELOPMENT.md](./DEVELOPMENT.md) 开发规范——fork 自由，但提交 PR 有要求，跨平台约束必读（本服务不一定跑在运行 VRChat 的机器上）。
+
 **面向 AI Agent 的配置引导**：以下步骤可由 Agent 自动完成。建议 agent 在本仓库目录内运行（服务目录可自动探测，无需设置环境变量）。
 
 ## 配置步骤
@@ -131,7 +133,7 @@ cp -r skills/vrc-monitor-companion-query "$HERMES_HOME/skills/"
 
 ### 代理说明
 
-如需通过代理访问 VRChat API，请在启动前设置 `HTTPS_PROXY` 或 `HTTP_PROXY` 环境变量。WebSocket 连接默认直连，6 秒超时后自动回退到 `127.0.0.1:7892` 代理。
+如需通过代理访问 VRChat API，请在启动前设置 `HTTPS_PROXY` 或 `HTTP_PROXY` 环境变量。WebSocket 连接默认直连，6 秒超时后自动回退到代理（默认 `127.0.0.1:7892`，可用 `VRC_MONITOR_WS_PROXY` 环境变量覆盖）。
 
 ### 服务目录找不到
 
