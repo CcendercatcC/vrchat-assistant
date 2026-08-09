@@ -5,7 +5,24 @@
 
 监控 VRChat 好友的上下线、世界切换、Avatar/状态变化，通过 WebSocket 实时采集入库，经 MCP 协议暴露给 AI Agent（Hermes）查询，并附带 Hermes 插件实现进程托管。
 
-> 🤖 **AI Agent 优先项目**：本程序面向 AI Agent 使用与扩展（MCP 接口 + 文档引导），配置 / 使用 / 加功能均由 AI Agent 完成，人类不直接编码。开发规范见 [DEVELOPMENT.md](./DEVELOPMENT.md)（fork 自由，PR 有要求，跨平台约束必读）。
+> 🤖 **AI Agent 优先项目**：程序只面向 AI Agent 使用与开发，人类不直接编码。详见下方「[项目定位](#-ai-agent-优先项目定位)」与 [DEVELOPMENT.md](./DEVELOPMENT.md)。
+
+---
+
+## 🤖 AI Agent 优先（项目定位）
+
+本项目的定位是 **AI Agent 优先（AI-first）**——程序只面向 AI Agent 使用与扩展，默认不考虑人类直接使用或编码：
+
+- **只面向 AI Agent 使用**：程序通过 MCP 接口 + 文档引导面向 Agent，配置、部署、查询全部由 AI Agent 完成，不设计人类直接操作的界面。
+- **开发由 AI 完成，人类只提需求**：添加 / 修改功能不要求人类直接编码。标准流程：
+  1. 使用者（人类）向 AI Agent 提出功能需求
+  2. Agent 阅读开发规范与相关代码
+  3. Agent 实现功能并自测验证
+  4. 使用者验收
+  5. （可选）Agent 提交 PR 惠及上游
+- **fork 自由**：MIT 协议，任何人可以 fork，让 AI Agent 按自己的需求扩展，无需事先征得同意。
+- **提交 PR 有要求**：单一职责、不破坏现有行为、DB 变更带迁移、文档同步、不提交密钥等 11 条硬性要求，详见 [DEVELOPMENT.md](./DEVELOPMENT.md)。
+- 面向 AI Agent 的部署配置引导见 [AGENTS.md](./AGENTS.md)。
 
 ---
 
