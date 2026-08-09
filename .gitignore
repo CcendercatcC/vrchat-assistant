@@ -27,3 +27,5 @@ api-test-results.json
 downloads/
 *.bak
 backups/
+*.sqlite3-wal
+*.sqlite3-shm
