@@ -2,6 +2,9 @@
 /**
  * VRChat 新地图追踪器 (new-worlds-tracker.mjs)
  *
+ * 核心逻辑已抽到 core/new-worlds.js，本脚本保留独立 CLI 能力
+ * （独立进程没有主服务登录态，因此仍自己完成认证 + DB 打开）。
+ *
  * 功能：
  * 1. 从 VRChat API 拉取最近 N 天创建的新世界（游戏内「新地图-推荐」分类的判定：
  *    tags 含 system_created_recently，且 created_at 在窗口内）
@@ -19,6 +22,7 @@
  */
 import { VrchatApiClient } from './vrchat-api.js';
 import { RateLimiter } from './core/rate-limiter.js';
+import { isJunkWorld, worldScore, classifyWorlds, fetchFreshWorlds } from './core/new-worlds.js';
 import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -48,29 +52,6 @@ async function fetchOtp() {
   return execSync(cmd, { timeout: 15000, encoding: 'utf-8' }).trim();
 }
 
-/**
- * 过滤测试图/垃圾图/开发中世界
- * 规则：名字含测试关键词（子串），或作者信息缺失，或容量异常
- */
-function isJunkWorld(w) {
-  const name = (w.name || '').toLowerCase().trim();
-  // 子串匹配：test/test1/测试/习作/示例/临时/新建世界 等
-  const junkPatterns = [
-    /test/i, /测试/i, /習作/i, /习作/i, /sample/i, /示例/i,
-    /placeholder/i, /wip/i, /untitled/i, /tmp/i, /temp/i,
-    /new world/i, /新建世界/i, /frist create/i, /first create/i,
-    /^0+[0-9]{0,3}$/, /^room\d*$/i, /^a room$/i, /^\[?beta\]?$/i,
-    /unity input/i, /tutorial/i, /sdk test/i, /do not use/i,
-  ];
-  const hitJunk = junkPatterns.some(re => re.test(name));
-  const hasAuthor = w.authorName && w.authorName !== 'Unknown' && w.authorName !== 'unknown';
-  return (
-    hitJunk ||
-    !hasAuthor ||
-    (typeof w.capacity === 'number' && w.capacity < 4)
-  );
-}
-
 const creds = JSON.parse(readFileSync(CRED_FILE, 'utf-8'));
 const api = new VrchatApiClient(creds.email, creds.password);
 if (existsSync(COOKIE_FILE)) api.loadCookieFromFile(COOKIE_FILE);
@@ -87,30 +68,9 @@ try {
   process.exit(1);
 }
 
-// ── 1. 拉新世界（按创建时间倒序，翻页，全部走限流器）──
-const cutoff = new Date(Date.now() - DAYS * 24 * 3600 * 1000);
-const candidates = [];
-for (let offset = 0; offset < MAX_FETCH; offset += 100) {
-  const r = await rateLimiter.execute(() =>
-    api._request('GET', `/worlds?sort=created&order=descending&n=100&offset=${offset}`));
-  if (r.status !== 200 || !Array.isArray(r.data) || r.data.length === 0) break;
-  candidates.push(...r.data);
-  if (r.data.length < 100) break;
-}
-console.error(`[fetch] 候选世界 ${candidates.length} 个`);
-
-const fresh = candidates
-  .filter(w => {
-    const created = new Date(w.created_at);
-    const isFresh = created >= cutoff;
-    const tagged = Array.isArray(w.tags) && w.tags.includes('system_created_recently');
-    // 必须同时满足：创建时间在窗口内 + 有 recent 标签（避免捞到旧图/测试图）
-    return isFresh && tagged;
-  })
-  .filter(w => w.releaseStatus === 'public')   // 只要公开世界
-  .filter(w => !isJunkWorld(w));               // 过滤测试图/垃圾图
-
-console.error(`[filter] 窗口内新世界 ${fresh.length} 个`);
+// ── 1. 拉新世界（核心逻辑复用 core/new-worlds.js）──
+const { fresh, candidates } = await fetchFreshWorlds(api, rateLimiter, { days: DAYS, maxFetch: MAX_FETCH });
+console.error(`[fetch] 候选世界 ${candidates.length} 个，窗口内新世界 ${fresh.length} 个`);
 
 // ── 2. 读本仓库数据库：visited（events.user-location）+ 已跟踪（new_worlds）──
 let db;
@@ -142,15 +102,13 @@ const visited = new Set(visitedRows.map(r => r.world_id));
 const existingRows = db.prepare('SELECT world_id FROM new_worlds').all();
 const existingTracked = new Set(existingRows.map(r => r.world_id));
 
-// ── 3. 分类 ──
-const unvisited = fresh.filter(w => !visited.has(w.id));
-const visitedFresh = fresh.filter(w => visited.has(w.id));
-const toAdd = unvisited.filter(w => !existingTracked.has(w.id));  // 未逛且未跟踪 -> 写入
-const alreadyTracked = fresh.filter(w => existingTracked.has(w.id));
+// ── 3. 分类（核心逻辑复用 core/new-worlds.js）──
+const { unvisited, visitedFresh, toAdd, alreadyTracked } = classifyWorlds(fresh, visited, existingTracked);
 
-// 热度排序（favorites 收藏数 + occupants 在线 + popularity）
-const score = w => (w.favorites || 0) * 2 + (w.occupants || 0) * 10 + (w.popularity || 0);
-const recommended = [...unvisited].sort((a, b) => score(b) - score(a)).slice(0, 10);
+// 热度排序取前 10 推荐
+const recommended = [...unvisited]
+  .sort((a, b) => worldScore(b) - worldScore(a))
+  .slice(0, 10);
 
 // ── 4. 写入本仓库数据库（非 dry-run）──
 let written = 0;
@@ -173,8 +131,8 @@ if (!DRY) {
      WHERE world_id = @world_id AND visited = 0`
   );
 
-  const tx = db.transaction(items => {
-    for (const w of items) {
+  const tx = db.transaction(() => {
+    for (const w of toAdd) {
       upsert.run({
         world_id: w.id,
         world_name: w.name || '',
@@ -199,7 +157,7 @@ if (!DRY) {
   });
 
   try {
-    tx(toAdd);
+    tx();
     console.error(`[write] 新增跟踪 ${written} 个，更新 visited 标记 ${updated} 个`);
   } catch (e) {
     console.error('[write] 写入失败:', e.message);

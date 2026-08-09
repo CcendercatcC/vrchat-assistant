@@ -34,7 +34,7 @@
 - ✅ **历史数据迁移** — 从 VRCX-0 导入 10 个月的 33 万条活动记录
 - ✅ **世界名缓存** — 自动解析 `wrld_xxx` 为可读世界名（懒刷新：缓存命中直接用，`forceRefresh: true` 手动刷新防改名陈旧）
 - ✅ **关注名单** — 标记核心好友，活动时特别通知
-- ✅ **MCP 工具接口** — 44 个工具供 Hermes / 任意 MCP 客户端调用
+- ✅ **MCP 工具接口** — 46 个工具供 Hermes / 任意 MCP 客户端调用
 - ✅ **数据库自动备份** — 启动 + 每 24h 自动备份（WAL 在线备份，无需停机），保留最近 2 份到 `backups/`；`backup_database` 工具可随时手动触发
 - ✅ **Hermes 插件托管** — 会话自动拉起、崩溃自愈、`vrc_status` 等管理工具
 
@@ -166,7 +166,7 @@ cp desktop/plugin.js "$HERMES_HOME/desktop-plugins/vrc-monitor/"
 - **双路检测**：状态文件 pid 存活 **或** 端口探测成功，均可识别为运行中（防状态文件丢失误判）
 - **日志**：`$HERMES_HOME/workspace/vrc-monitor/monitor.log`
 
-## 🔌 MCP 工具（44 个）
+## 🔌 MCP 工具（46 个）
 
 服务监听 `http://127.0.0.1:8799/mcp`，通过 HTTP SSE 提供 MCP 协议。Hermes 用户可在 `$HERMES_HOME/config.yaml`（Windows 为 `%LOCALAPPDATA%\hermes\config.yaml`）配置：
 
@@ -211,6 +211,13 @@ mcp_servers:
 | `set_world_note` | 写入/更新世界用户备注（本地存储，API 刷新不覆盖；空字符串清除） |
 | `get_world_history` | 世界信息变更历史（name/description/author/image_url/release_status/capacity/tags 字段级变化记录） |
 | `get_weekly_report` | 一周游戏周报（活跃天数/时长/世界 Top/同屏伙伴带昵称/自己的上线规律/群组活动/圈内活动日历；`days` 默认 7） |
+
+### 新世界追踪
+
+| 工具 | 说明 |
+|------|------|
+| `scan_new_worlds` | 扫描最近 N 天创建的新世界（默认 7，1-30），过滤测试/垃圾图后写入 `new_worlds` 表，按热度返回推荐 TOP10；`dryRun: true` 只看不写。认证复用主服务登录态 |
+| `get_new_worlds` | 只读查询已跟踪的新世界：`onlyUnvisited` 只看未逛过、`sortBy`（favorites/occupants/popularity/created_at）、`limit`（默认 10，最大 50） |
 
 ### 关注名单
 
