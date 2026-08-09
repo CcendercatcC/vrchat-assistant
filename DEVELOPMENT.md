@@ -118,7 +118,7 @@ PR 由 AI Agent 编写提交（人类只提出需求、不直接编码）。以�
 - **模块划分**：`start-monitor.js` 已经很大（2000+ 行），新增功能优先放 `core/` 下独立模块（参考 `storage.js` / `ws-manager.js` / `friend-state.js` 的拆分方式），保持入口文件克制。
 - **新功能默认做成 MCP 工具，禁止只写孤立 CLI 脚本**（2026-08-09 用户要求固化）：本项目面向 AI Agent，Agent 通过 MCP 接口（`tools/call`）与功能交互；独立脚本无法被 Agent 直接调用，等于功能不可达。开发要求：
   - 新功能的标准形态是注册 MCP 工具（工具注册表 + handler + RPC case 三件套），Agent 一条 `tools/call` 即可使用。
-  - 若确需保留独立入口（如 CLI 脚本 / 定时任务），**核心逻辑必须抽到 `core/` 下的共享模块**，CLI 与 MCP handler 双复用——禁止同一逻辑在两处各写一份（2026-08-09 实操：`new-worlds-tracker.mjs` 的拉取/过滤/评分/分类逻辑抽到 `core/new-worlds.js`，CLI 降级为薄封装）。
+  - 若确需保留独立入口（如 CLI 脚本 / 定时任务），**核心逻辑必须抽到 `core/` 下的共享模块**，CLI 与 MCP handler 双复用——禁止同一逻辑在两处各写一份（2026-08-09 实操：`new-worlds-tracker.mjs` 的拉取/过滤/评分/分类逻辑抽到 `core/new-worlds.js`，CLI 降级为薄封装；2026-08-10 该 CLI 薄封装已被移除，功能仅保留 MCP 工具形态，规范得到验证）。
   - MCP handler **复用主服务登录态**（`serverState.authUser` + 现有 `api` 实例），不要重复实现登录 / OTP / 凭据读取（参考 `handleGetWeeklyReport`）；只有独立 CLI 场景才自带认证。
   - 数据库读写走 `storage`（`_query` / `_run` / `db.transaction`），建表沿用 `core/init-db.sql` 幂等写法。
   - 文档同步：新增工具后 README / AGENTS.md / `skills/vrc-monitor-agent/SKILL.md` 三处工具表 + 工具数必须同步（`grep '个工具'` 核对）。
