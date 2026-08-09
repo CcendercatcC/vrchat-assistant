@@ -194,6 +194,26 @@ export class Storage {
     return rows[0] || null;
   }
 
+  searchWorldsByName(keyword) {
+    const like = `%${keyword}%`;
+    const rows = this._query(
+      `SELECT world_id, name FROM world_cache WHERE name LIKE $like ORDER BY name LIMIT 20`,
+      { $like: like }
+    );
+    const eventRows = this._query(
+      `SELECT world_id, world_name AS name FROM events WHERE world_name LIKE $like AND world_id != '' GROUP BY world_id, world_name ORDER BY world_name LIMIT 20`,
+      { $like: like }
+    );
+    const seen = new Set();
+    const merged = [];
+    for (const r of [...rows, ...eventRows]) {
+      if (!r.world_id || seen.has(r.world_id)) continue;
+      seen.add(r.world_id);
+      merged.push({ worldId: r.world_id, name: r.name || '' });
+    }
+    return merged;
+  }
+
   _recordWorldChanges(world) {
     const old = this.getWorldName(world.worldId);
     if (!old) return;

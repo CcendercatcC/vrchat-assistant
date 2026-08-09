@@ -25,3 +25,5 @@ workspace/
 Thumbs.db
 api-test-results.json
 downloads/
+*.bak
+backups/

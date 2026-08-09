@@ -22,6 +22,8 @@ metadata:
 | `get_online_friends` | 当前在线好友列表（含昵称 nickname + 房型解析 locationParsed：worldId/instanceId/type/ownerId/region） |
 | `get_friend_info` | 好友详细信息 |
 | `search_users` | 按名字搜索用户 |
+| `search_groups` | 按名字搜索群组（API 用 query 参数，不是 search） |
+| `search_worlds` | 按名字搜索世界（英文/日文走 API；中文自动加本地缓存兜底） |
 | `get_friend_events` | 某好友的事件历史（本地库） |
 | `get_recent_events` | 最新事件流 |
 | `get_companions` | **同屏交叉查询**（指定时间窗口内同实例的好友；可查自己或任意好友） |
