@@ -5,7 +5,7 @@
 
 监控 VRChat 好友的上下线、世界切换、Avatar/状态变化，通过 WebSocket 实时采集入库，经 MCP 协议暴露给 AI Agent（Hermes）查询，并附带 Hermes 插件实现进程托管。
 
-> 🤝 **想 fork 或贡献代码？** 开发规范见 [DEVELOPMENT.md](./DEVELOPMENT.md)（fork 自由，PR 有要求，跨平台约束必读）。
+> 🤖 **AI Agent 优先项目**：本程序面向 AI Agent 使用与扩展（MCP 接口 + 文档引导），配置 / 使用 / 加功能均由 AI Agent 完成，人类不直接编码。开发规范见 [DEVELOPMENT.md](./DEVELOPMENT.md)（fork 自由，PR 有要求，跨平台约束必读）。
 
 ---
 

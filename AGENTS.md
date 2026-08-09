@@ -2,7 +2,7 @@
 
 基于 Node.js 的 VRChat 好友在线状态监控服务，配合 Hermes 插件和桌面插件使用，支持自动抓取 OTP 验证码登录。
 
-> 💡 **想 fork 或贡献代码？** 先读 [DEVELOPMENT.md](./DEVELOPMENT.md) 开发规范——fork 自由，但提交 PR 有要求，跨平台约束必读（本服务不一定跑在运行 VRChat 的机器上）。
+> 🤖 **AI-first 项目**：本程序只面向 AI Agent 使用与扩展，人类不直接编码；加功能 = 人类向 Agent 提需求 → Agent 实现。开发规范见 [DEVELOPMENT.md](./DEVELOPMENT.md)。
 
 **面向 AI Agent 的配置引导**：以下步骤可由 Agent 自动完成。建议 agent 在本仓库目录内运行（服务目录可自动探测，无需设置环境变量）。
 
