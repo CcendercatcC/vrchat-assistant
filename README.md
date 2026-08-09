@@ -288,6 +288,14 @@ A: 系统内置 2.6s 间隔限流器。可在 `core/rate-limiter.js` 中调整 `
 **Q: 数据库文件太大？**
 A: 正常。约 28 万行事件 ≈ 200+ MB，sql.js 启动时全量加载到内存。
 
+## ☕ Sponsor
+
+如果你觉得这个项目有用，欢迎请我喝杯咖啡：
+
+![收款码](assets/sponsor-qrcodes.png)
+
+**请给我报销 token** 🙏
+
 ## 📄 License
 
 MIT — 见 [LICENSE](LICENSE)。
