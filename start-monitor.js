@@ -301,6 +301,33 @@ const CUSTOM_TOOLS = [
     },
   },
   {
+    name: 'create_instance',
+    description: '[write·vrchat] Create a new instance (room) for a world. Returns instance location ready for invite_myself. Region defaults to jp.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        worldId: { type: 'string', description: 'World id (wrld_...)' },
+        type: { type: 'string', description: 'Instance type: public/hidden/friends/private/group (default hidden)' },
+        region: { type: 'string', description: 'Region: us/eu/jp (default jp)' },
+        instanceId: { type: 'string', description: 'Optional: existing instance id (shortName or full) to join instead of creating fresh' },
+        groupAccessType: { type: 'string', description: 'Required when type=group: members/plus/public' },
+      },
+      required: ['worldId'],
+    },
+  },
+  {
+    name: 'invite_myself',
+    description: '[write·vrchat] Send yourself an invite to an instance (client teleports on accept). Accepts location (worldId:instanceId) or worldId+instanceId separately.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        location: { type: 'string', description: 'Full location string, e.g. wrld_x:12345~hidden(usr_x)~region(jp). If provided, worldId/instanceId are ignored.' },
+        worldId: { type: 'string', description: 'World id (wrld_...) — ignored if location is provided' },
+        instanceId: { type: 'string', description: 'Instance id (full format with ~region etc.) — ignored if location is provided' },
+      },
+    },
+  },
+  {
     name: 'send_friend_request',
     description: '[write·vrchat] Send a friend request to a user. Supports userId or exact displayName match.',
     inputSchema: {
@@ -857,6 +884,67 @@ async function handleSendFriendRequest({ userId, displayName }) {
   const r = await api.sendFriendRequest(target.id);
   if (r.status >= 400) throw new Error(`API error ${r.status}`);
   return { userId: target.id, displayName, method: 'displayName', ok: true };
+}
+
+async function handleCreateInstance({ worldId, type, region, instanceId, groupAccessType }) {
+  if (!worldId || !String(worldId).startsWith('wrld_')) {
+    throw new Error('worldId 必须是 wrld_ 开头（如 wrld_xxxx）');
+  }
+  const instType = type || 'hidden';
+  const body = {
+    worldId,
+    type: instType,
+    region: region || 'jp',
+  };
+  if (instanceId) body.instanceId = instanceId;
+  if (groupAccessType) body.groupAccessType = groupAccessType;
+  // 非 public 实例必须显式带 ownerId（=当前用户），否则 API 400 "Invalid owner ID"（2026-08-09 实测）
+  if (instType !== 'public') {
+    await api.ensureAuth();
+    const me = (api.currentUser && api.currentUser.id) || null;
+    if (!me) throw new Error('无法获取当前用户 ID，不能创建非公开实例');
+    body.ownerId = me;
+  }
+  const r = await api._request('POST', '/instances', body);
+  if (r.status >= 400) {
+    throw new Error(`创建实例失败 API ${r.status}: ${JSON.stringify(r.data).slice(0, 200)}`);
+  }
+  const d = r.data || {};
+  return {
+    success: true,
+    worldId: d.worldId || worldId,
+    type: d.type || body.type,
+    region: d.region || body.region,
+    instanceId: d.instanceId || d.id || null,
+    location: d.location || null,
+    shortName: d.shortName || null,
+    capacity: d.capacity || null,
+  };
+}
+
+async function handleInviteMyself({ location, worldId, instanceId }) {
+  let wId = worldId;
+  let iId = instanceId;
+  if (location && typeof location === 'string') {
+    const idx = location.indexOf(':');
+    if (idx <= 0) throw new Error('location 格式应为 worldId:instanceId（如 wrld_x:12345~hidden(usr_x)~region(jp)）');
+    wId = location.slice(0, idx);
+    iId = location.slice(idx + 1);
+  }
+  if (!wId || !String(wId).startsWith('wrld_')) throw new Error('worldId 必须是 wrld_ 开头');
+  if (!iId) throw new Error('instanceId 不能为空（可用 create_instance 返回的 location）');
+  const r = await api._request('POST', `/invite/myself/to/${wId}:${iId}`);
+  if (r.status >= 400) {
+    throw new Error(`邀请自己失败 API ${r.status}: ${JSON.stringify(r.data).slice(0, 200)}（404=实例无效或不是合法参与者）`);
+  }
+  const d = r.data || {};
+  return {
+    success: true,
+    worldId: wId,
+    instanceId: iId,
+    notificationId: d.id || null,
+    notificationType: d.type || null,
+  };
 }
 
 async function handleRemoveFriend({ userId, displayName, confirm }) {
@@ -1957,6 +2045,14 @@ async function handleRpc(rpc, session, res) {
             }));
             if (r.status >= 400) throw new Error(`API error ${r.status}`);
             result = { success: true, userId: args.userId, requestSent: true };
+            break;
+          }
+          case 'create_instance': {
+            result = await rateLimiter.execute(() => handleCreateInstance(args));
+            break;
+          }
+          case 'invite_myself': {
+            result = await rateLimiter.execute(() => handleInviteMyself(args));
             break;
           }
           case 'send_friend_request': {
