@@ -15,7 +15,7 @@
 - ✅ **历史数据迁移** — 从 VRCX-0 导入 10 个月的 33 万条活动记录
 - ✅ **世界名缓存** — 自动解析 `wrld_xxx` 为可读世界名（懒刷新：缓存命中直接用，`forceRefresh: true` 手动刷新防改名陈旧）
 - ✅ **关注名单** — 标记核心好友，活动时特别通知
-- ✅ **MCP 工具接口** — 40 个工具供 Hermes / 任意 MCP 客户端调用
+- ✅ **MCP 工具接口** — 41 个工具供 Hermes / 任意 MCP 客户端调用
 - ✅ **Hermes 插件托管** — 会话自动拉起、崩溃自愈、`vrc_status` 等管理工具
 
 ---
@@ -160,7 +160,7 @@ mcp_servers:
 |------|------|
 | `get_friend_events` | 某好友的事件历史（本地数据库） |
 | `get_recent_events` | 最新事件流 |
-| `get_companions` | 同屏交叉查询（指定时间窗口内同实例的好友） |
+| `get_companions` | 同屏交叉查询（指定时间窗口内同实例的好友；每条含 userId/displayName/firstSeen/lastSeen/matchCount/worlds，**worlds 是字符串数组**（世界名或 worldId），不是对象） |
 | `get_online_pattern` | 上线规律分析：上线/下线/活跃时段分布（北京小时）+ 活跃天数/频率 + 最佳相遇时段建议 |
 
 ### 昵称映射
@@ -178,6 +178,7 @@ mcp_servers:
 | `get_world_name` | 世界信息查询（懒刷新：缓存命中直接返回，`forceRefresh: true` 才走 API；返回作者/容量/简介/标签/收藏数/用户备注 note，缓存含简介） |
 | `set_world_note` | 写入/更新世界用户备注（本地存储，API 刷新不覆盖；空字符串清除） |
 | `get_world_history` | 世界信息变更历史（name/description/author/image_url/release_status/capacity/tags 字段级变化记录） |
+| `get_weekly_report` | 一周游戏周报（活跃天数/时长/世界 Top/同屏伙伴带昵称/自己的上线规律/群组活动/圈内活动日历；`days` 默认 7） |
 
 ### 关注名单
 

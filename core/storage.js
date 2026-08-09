@@ -289,6 +289,24 @@ export class Storage {
     stmt.free();
   }
 
+  // ── 群组缓存 ──
+
+  getGroupCached(groupId) {
+    const rows = this._query(`SELECT * FROM group_cache WHERE group_id = $g`, { $g: groupId });
+    return rows[0] || null;
+  }
+
+  upsertGroupCache({ groupId, name, description, memberCount }) {
+    this._run(
+      `INSERT INTO group_cache (group_id, name, description, member_count, updated_at)
+       VALUES ($g, $name, $desc, $mc, datetime('now'))
+       ON CONFLICT(group_id) DO UPDATE SET
+         name = excluded.name, description = excluded.description,
+         member_count = excluded.member_count, updated_at = datetime('now')`,
+      { $g: groupId, $name: name || '', $desc: description || '', $mc: memberCount || 0 }
+    );
+  }
+
   setWorldNote({ worldId, note = '' }) {
     this._run(
       `INSERT INTO world_cache (world_id, name, note)
@@ -649,6 +667,86 @@ export class Storage {
         suggestedWindow,
       },
     };
+  }
+
+  // ── 周报专用方法 ──
+
+  getOwnWorldSessions(startTime, endTime) {
+    const rows = this._query(
+      `SELECT content_json, created_at FROM events WHERE type='user-location' AND created_at >= $start AND created_at <= $end ORDER BY created_at ASC`,
+      { $start: startTime, $end: endTime }
+    );
+    const sessions = []; // {worldId, start, end, minutes}
+    let curWorld = null, curStart = null;
+    for (const row of rows) {
+      let loc = '';
+      try { loc = JSON.parse(row.content_json).location || ''; } catch {}
+      const dt = row.created_at;
+      if (loc.startsWith('wrld_')) {
+        const wid = loc.split(':')[0];
+        if (curWorld && wid !== curWorld) {
+          sessions.push({ worldId: curWorld, start: curStart, end: dt });
+        }
+        curWorld = wid; curStart = dt;
+      } else {
+        if (curWorld) { sessions.push({ worldId: curWorld, start: curStart, end: dt }); curWorld = null; }
+      }
+    }
+    if (curWorld) sessions.push({ worldId: curWorld, start: curStart, end: rows.length ? rows[rows.length-1].created_at : curStart });
+    // 过滤 <3 分钟的跳转会话，计算 minutes
+    return sessions.filter(s => (Date.parse(s.end) - Date.parse(s.start)) / 60000 >= 3)
+      .map(s => ({ ...s, minutes: (Date.parse(s.end) - Date.parse(s.start)) / 60000 }));
+  }
+
+  getWeeklyCompanions(userId, startTime, endTime) {
+    // startTime/endTime 为 UTC ISO；按北京自然日（UTC 16:00 日界）切分
+    const BJ_OFFSET = 8 * 3600 * 1000;
+    const startMs = Date.parse(startTime), endMs = Date.parse(endTime);
+    const merged = new Map();
+
+    // 对齐到北京天边界：北京 00:00 = UTC 16:00 前一天
+    let dayStart = Math.floor((startMs + BJ_OFFSET) / 86400000) * 86400000 - BJ_OFFSET;
+
+    while (dayStart < endMs) {
+      const dayEnd = Math.min(dayStart + 86400000, endMs);
+      const utcDayStart = new Date(dayStart).toISOString();
+      const utcDayEnd = new Date(dayEnd).toISOString();
+      const r = this.findCompanions(userId, utcDayStart, utcDayEnd);
+      const dayLabel = new Date(dayStart + BJ_OFFSET).toISOString().slice(5, 10); // MM-DD 北京
+      for (const c of (r.companions || [])) {
+        if (!merged.has(c.userId)) {
+          merged.set(c.userId, { displayName: c.displayName, matchCount: 0, days: new Set(), worlds: new Set() });
+        }
+        const m = merged.get(c.userId);
+        m.matchCount += c.matchCount || 0;
+        m.days.add(dayLabel);
+        for (const w of (c.worlds || [])) m.worlds.add(w);
+      }
+      dayStart += 86400000;
+    }
+    return merged;
+  }
+
+  getFriendGroupStats(startTime, endTime) {
+    const rows = this._query(
+      `SELECT content_json FROM events WHERE type='friend-location' AND content_json LIKE '%~group(grp_%' AND created_at >= $start AND created_at <= $end`,
+      { $start: startTime, $end: endTime }
+    );
+    const stats = new Map(); // groupId -> {count, users:Set, worlds:Set}
+    for (const row of rows) {
+      try {
+        const c = JSON.parse(row.content_json);
+        const loc = c.location || '';
+        const m = loc.match(/~group\((grp_[a-f0-9-]+)\)/);
+        if (m && loc.startsWith('wrld_')) {
+          const gid = m[1];
+          if (!stats.has(gid)) stats.set(gid, { count: 0, users: new Set(), worlds: new Set() });
+          const s = stats.get(gid);
+          s.count++; s.users.add(c.userId || ''); s.worlds.add(loc.split(':')[0]);
+        }
+      } catch {}
+    }
+    return stats;
   }
 
   getStats() {

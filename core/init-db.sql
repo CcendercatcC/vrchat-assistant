@@ -89,3 +89,12 @@ CREATE TABLE IF NOT EXISTS world_history (
   changed_at TEXT DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_world_history_world ON world_history(world_id);
+
+-- 群组信息缓存（周报/活动日历用，TTL 7 天）
+CREATE TABLE IF NOT EXISTS group_cache (
+  group_id TEXT PRIMARY KEY,
+  name TEXT NOT NULL DEFAULT '',
+  description TEXT DEFAULT '',
+  member_count INTEGER DEFAULT 0,
+  updated_at TEXT DEFAULT (datetime('now'))
+);
