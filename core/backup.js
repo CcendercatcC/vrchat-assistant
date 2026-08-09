@@ -8,6 +8,7 @@
  * - MCP 工具 backup_database 可随时手动触发
  */
 import { mkdirSync, readdirSync, unlinkSync, statSync } from 'node:fs';
+import Database from 'better-sqlite3';
 import path from 'node:path';
 
 const KEEP = 2;
@@ -26,6 +27,17 @@ export async function backupDatabase(db, backupsDir) {
   const dest = path.join(backupsDir, `${BACKUP_PREFIX}${stamp}.sqlite3`);
 
   await db.backup(dest);
+  // 备份文件转 DELETE journal 模式（单文件自包含，恢复时无需伴生文件）
+  try {
+    const backupDb = new Database(dest);
+    backupDb.pragma('journal_mode = DELETE');
+    backupDb.close();
+  } catch { /* 转换失败不阻塞备份流程 */ }
+  // 清理可能残留的伴生文件
+  try {
+    unlinkSync(dest + '-wal');
+    unlinkSync(dest + '-shm');
+  } catch { /* 没有伴生文件就跳过 */ }
   const pruned = pruneOldBackups(backupsDir);
   return {
     ok: true,
