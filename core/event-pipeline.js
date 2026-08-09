@@ -40,6 +40,9 @@ export class EventPipeline {
         return await this._handleOffline(event);
       case 'friend-location':
         return await this._handleLocation(event);
+      case 'user-location':
+        // 自己的位置事件：content 无独立 worldId 字段（只有 location 字符串），需解析
+        return await this._handleUserLocation(event);
       case 'friend-update':
         return await this._handleUpdate(event);
       case 'friend-active':
@@ -125,6 +128,17 @@ export class EventPipeline {
     // 导致 updated_at 永远新鲜、TTL 失效。
 
     this._storeEvent(event, worldName);
+  }
+
+  async _handleUserLocation(event) {
+    // 自己的位置变化：user-location 事件的 content 没有独立 worldId 字段，
+    // 只有 location 字符串（如 "wrld_xxx:123~hidden(usr)~region(jp)"），
+    // 从 location 解析 worldId 落库，便于查询自己的世界访问历史。
+    const location = event.location || '';
+    const worldId = location.startsWith('wrld_') ? location.split(':')[0] : '';
+    const worldName = worldId ? await this._resolveWorldName(worldId) : '';
+    // 仅存事件（不 upsertFriend——user-location 是自己的位置，不更新好友状态表）
+    this._storeEvent({ ...event, worldId }, worldName);
   }
 
   async _handleUpdate(event) {
