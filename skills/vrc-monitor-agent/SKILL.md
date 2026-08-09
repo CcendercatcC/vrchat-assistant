@@ -26,7 +26,9 @@ metadata:
 | `get_recent_events` | 最新事件流 |
 | `get_companions` | **同屏交叉查询**（指定时间窗口内同实例的好友；可查自己或任意好友） |
 | `get_online_pattern` | **上线规律分析**（上线/下线/活跃时段分布 + 活跃天数/频率 + 峰值建议） |
-| `get_world_name` | 世界名查询（缓存+API 回退；含作者/容量/简介/标签；缓存带简介） |
+| `get_world_name` | 世界信息查询（懒刷新：缓存命中直接返回，forceRefresh 才走 API；含作者/容量/简介/标签/用户备注 note） |
+| `set_world_note` | 世界用户备注写入/更新（本地存储，API 刷新不覆盖；空串清除） |
+| `get_world_history` | 世界信息变更历史（name/description/author/image_url/release_status/capacity/tags 字段级记录） |
 | `get_nicknames` / `set_nickname` | 好友昵称映射（查询/写入，本地库） |
 | `get_mutual_friends` | 共同好友列表：你与目标用户（userId 或 displayName 精确匹配）的共同好友，自动带本地昵称 |
 | `get_watchlist` / `add_to_watchlist` / `remove_from_watchlist` | 关注名单 |
@@ -144,7 +146,7 @@ curl -s http://127.0.0.1:8799/mcp -X POST -H "Content-Type: application/json" \
 ### 世界名可能为空 / 缓存陈旧
 
 - `get_friend_events` 的 world_name 字段经常空，用 `get_world_name(worldId)` 单独查
-- VRChat 世界可以改名，world_cache 有 24h TTL 防陈旧；用户否认世界名时用 `get_world_name` 带 `forceRefresh: true` 强制刷新
+- VRChat 世界可以改名，world_cache 懒刷新（缓存命中直接返回，无 TTL）；用户否认世界名时用 `get_world_name` 带 `forceRefresh: true` 强制刷新
 
 ### traveling 状态
 

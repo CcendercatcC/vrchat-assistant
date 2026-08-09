@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS friends (
 CREATE TABLE IF NOT EXISTS world_cache (
   world_id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
+  note TEXT,                       -- 用户自定义备注（API 刷新不覆盖）
   author_id TEXT,
   author_name TEXT,
   description TEXT,
@@ -77,3 +78,14 @@ CREATE TABLE IF NOT EXISTS nicknames (
   nickname  TEXT NOT NULL,
   updated_at TEXT DEFAULT (datetime('now'))
 );
+
+-- 世界信息变更历史
+CREATE TABLE IF NOT EXISTS world_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  world_id TEXT NOT NULL,
+  field TEXT NOT NULL,           -- name / description / author_name / image_url / release_status / capacity / tags
+  old_value TEXT,
+  new_value TEXT,
+  changed_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_world_history_world ON world_history(world_id);

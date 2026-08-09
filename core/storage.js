@@ -29,6 +29,11 @@ export class Storage {
 
     const ddl = readFileSync(DDL_PATH, 'utf-8');
     this.db.run(ddl);
+    // 迁移：旧库 world_cache 缺 note 列
+    const worldCols = this._query(`PRAGMA table_info(world_cache)`);
+    if (!worldCols.some(c => c.name === 'note')) {
+      this._run(`ALTER TABLE world_cache ADD COLUMN note TEXT`);
+    }
     this._save();
     return this;
   }
@@ -189,13 +194,53 @@ export class Storage {
     return rows[0] || null;
   }
 
+  _recordWorldChanges(world) {
+    const old = this.getWorldName(world.worldId);
+    if (!old) return;
+    // 数据库列名 → upsertWorld 传入对象的驼峰字段名映射（避免取到 undefined）
+    const fieldMap = {
+      name: 'name',
+      description: 'description',
+      author_name: 'authorName',
+      image_url: 'imageUrl',
+      release_status: 'releaseStatus',
+      capacity: 'capacity',
+      tags: 'tags',
+    };
+    const fields = ['name', 'description', 'author_name', 'image_url', 'release_status', 'capacity', 'tags'];
+    const newTags = JSON.stringify(world.tags || []);
+    for (const f of fields) {
+      const oldValue = f === 'tags' ? String(old.tags ?? '') : String(old[f] ?? '');
+      const newValue = f === 'tags' ? newTags : String(world[fieldMap[f]] ?? '');
+      if (oldValue !== newValue) {
+        this._run(
+          `INSERT INTO world_history (world_id, field, old_value, new_value)
+           VALUES ($worldId, $field, $oldValue, $newValue)`,
+          { $worldId: world.worldId, $field: f, $oldValue: oldValue, $newValue: newValue }
+        );
+      }
+    }
+  }
+
   upsertWorld(world) {
+    this._recordWorldChanges(world);
     this._run(
-      `INSERT OR REPLACE INTO world_cache
+      `INSERT INTO world_cache
        (world_id, name, author_id, author_name, description, image_url,
         release_status, capacity, favorites, tags, updated_at)
        VALUES ($worldId, $name, $authorId, $authorName, $description, $imageUrl,
-        $releaseStatus, $capacity, $favorites, $tags, datetime('now'))`,
+        $releaseStatus, $capacity, $favorites, $tags, datetime('now'))
+       ON CONFLICT(world_id) DO UPDATE SET
+        name = excluded.name,
+        author_id = excluded.author_id,
+        author_name = excluded.author_name,
+        description = excluded.description,
+        image_url = excluded.image_url,
+        release_status = excluded.release_status,
+        capacity = excluded.capacity,
+        favorites = excluded.favorites,
+        tags = excluded.tags,
+        updated_at = datetime('now')`,
       {
         $worldId: world.worldId, $name: world.name || '',
         $authorId: world.authorId || '', $authorName: world.authorName || '',
@@ -208,12 +253,26 @@ export class Storage {
   }
 
   upsertWorldsBatch(worlds) {
+    for (const w of worlds) {
+      this._recordWorldChanges(w);
+    }
     const stmt = this.db.prepare(
-      `INSERT OR REPLACE INTO world_cache
+      `INSERT INTO world_cache
        (world_id, name, author_id, author_name, description, image_url,
         release_status, capacity, favorites, tags, updated_at)
        VALUES ($worldId, $name, $authorId, $authorName, $description, $imageUrl,
-        $releaseStatus, $capacity, $favorites, $tags, datetime('now'))`
+        $releaseStatus, $capacity, $favorites, $tags, datetime('now'))
+       ON CONFLICT(world_id) DO UPDATE SET
+        name = excluded.name,
+        author_id = excluded.author_id,
+        author_name = excluded.author_name,
+        description = excluded.description,
+        image_url = excluded.image_url,
+        release_status = excluded.release_status,
+        capacity = excluded.capacity,
+        favorites = excluded.favorites,
+        tags = excluded.tags,
+        updated_at = datetime('now')`
     );
     for (const w of worlds) {
       stmt.bind({
@@ -228,6 +287,26 @@ export class Storage {
       stmt.reset();
     }
     stmt.free();
+  }
+
+  setWorldNote({ worldId, note = '' }) {
+    this._run(
+      `INSERT INTO world_cache (world_id, name, note)
+       VALUES ($worldId, '', $note)
+       ON CONFLICT(world_id) DO UPDATE SET note = $note, updated_at = datetime('now')`,
+      { $worldId: worldId, $note: note }
+    );
+    const rows = this._query(`SELECT world_id, note FROM world_cache WHERE world_id = $worldId`, { $worldId: worldId });
+    const r = rows[0];
+    return { worldId: r.world_id, note: r.note };
+  }
+
+  getWorldHistory(worldId, limit = 50) {
+    const rows = this._query(
+      `SELECT field, old_value, new_value, changed_at FROM world_history WHERE world_id = $worldId ORDER BY id DESC LIMIT $limit`,
+      { $worldId: worldId, $limit: limit }
+    );
+    return rows.map(r => ({ field: r.field, oldValue: r.old_value, newValue: r.new_value, changedAt: r.changed_at }));
   }
 
   // ── 关注名单 ──

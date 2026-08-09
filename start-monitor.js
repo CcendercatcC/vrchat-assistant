@@ -420,6 +420,30 @@ const CUSTOM_TOOLS = [
     },
   },
   {
+    name: 'set_world_note',
+    description: '[manage] Set or update a user note for a world (stored locally, never overwritten by API refresh). Empty string clears the note.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        worldId: { type: 'string', description: 'World ID (wrld_...)' },
+        note: { type: 'string', description: 'User note text; empty string clears' },
+      },
+      required: ['worldId', 'note'],
+    },
+  },
+  {
+    name: 'get_world_history',
+    description: '[query] Get change history of a world\'s info (name, description, capacity, etc.).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        worldId: { type: 'string', description: 'World ID (wrld_...)' },
+        limit: { type: 'number', default: 50, description: 'Max history entries' },
+      },
+      required: ['worldId'],
+    },
+  },
+  {
     name: 'get_watchlist',
     description: '[manage] List all watched friends.',
     inputSchema: {
@@ -849,21 +873,15 @@ function handleGetRecentEvents({ limit = 30, offset = 0, typeFilter, userIdFilte
 }
 
 async function handleGetWorldName({ worldId, forceRefresh }) {
-  const WORLD_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h：世界名会变（改名），缓存不能永远新鲜
-  // 查缓存（带 TTL：超过 24h 的缓存视为陈旧，重新走 API）
+  // 懒刷新：缓存命中直接返回，只有 forceRefresh 或缓存不存在时才走 API
   if (!forceRefresh) {
     const cached = storage.getWorldName(worldId);
     if (cached) {
-      let fresh = true;
-      if (cached.updated_at) {
-        const updated = Date.parse(String(cached.updated_at).replace(' ', 'T') + 'Z');
-        const ageMs = Number.isFinite(updated) ? Date.now() - updated : NaN;
-        if (!(ageMs >= 0 && ageMs < WORLD_CACHE_TTL_MS)) fresh = false;
-      }
-      if (fresh) return { worldId, name: cached.name, source: 'cache', ...cached };
+      return { worldId, name: cached.name, source: 'cache', ...cached };
     }
   }
   // 调 API
+  const prev = storage.getWorldName(worldId);
   const r = await api._request('GET', `/worlds/${worldId}`);
   if (r.status !== 200) throw new Error(`API error: ${r.status}`);
   const w = r.data;
@@ -878,9 +896,10 @@ async function handleGetWorldName({ worldId, forceRefresh }) {
     description: (w.description || '').slice(0, 200),
     imageUrl: w.imageUrl,
     favorites: w.favorites,
+    note: prev?.note ?? null,
     source: 'api',
   };
-  // 写入缓存
+  // 写入缓存（不覆盖 note）
   storage.upsertWorld({
     worldId: w.id, name: w.name, authorName: w.authorName,
     capacity: w.capacity, favorites: w.favorites,
@@ -888,6 +907,19 @@ async function handleGetWorldName({ worldId, forceRefresh }) {
     description: w.description || '', imageUrl: w.imageUrl || '',
   });
   return result;
+}
+
+function handleSetWorldNote({ worldId, note }) {
+  if (!worldId) throw new Error('worldId is required');
+  if (note === undefined || note === null) throw new Error('note is required (empty string clears)');
+  const result = storage.setWorldNote({ worldId, note });
+  storage.save();
+  return result;
+}
+
+function handleGetWorldHistory({ worldId, limit = 50 }) {
+  if (!worldId) throw new Error('worldId is required');
+  return { worldId, history: storage.getWorldHistory(worldId, limit) };
 }
 
 function handleGetWatchlist() {
@@ -1544,6 +1576,12 @@ async function handleRpc(rpc, session, res) {
             break;
           case 'get_world_name':
             result = await rateLimiter.execute(() => handleGetWorldName(args));
+            break;
+          case 'set_world_note':
+            result = handleSetWorldNote(args);
+            break;
+          case 'get_world_history':
+            result = handleGetWorldHistory(args);
             break;
           case 'get_watchlist':
             result = handleGetWatchlist();

@@ -13,9 +13,9 @@
 - ✅ **自动重连 + 认证自愈** — 指数退避（1s→60s）+ cookie 过期自动 OTP 邮箱取码登录，无需人工干预
 - ✅ **自动 OTP 登录** — 邮箱验证码自动从邮箱 IMAP 抓取，全链路无人值守
 - ✅ **历史数据迁移** — 从 VRCX-0 导入 10 个月的 33 万条活动记录
-- ✅ **世界名缓存** — 自动解析 `wrld_xxx` 为可读世界名（24h TTL 防改名陈旧）
+- ✅ **世界名缓存** — 自动解析 `wrld_xxx` 为可读世界名（懒刷新：缓存命中直接用，`forceRefresh: true` 手动刷新防改名陈旧）
 - ✅ **关注名单** — 标记核心好友，活动时特别通知
-- ✅ **MCP 工具接口** — 38 个工具供 Hermes / 任意 MCP 客户端调用
+- ✅ **MCP 工具接口** — 40 个工具供 Hermes / 任意 MCP 客户端调用
 - ✅ **Hermes 插件托管** — 会话自动拉起、崩溃自愈、`vrc_status` 等管理工具
 
 ---
@@ -175,7 +175,9 @@ mcp_servers:
 
 | 工具 | 说明 |
 |------|------|
-| `get_world_name` | 世界名查询（缓存+API 回退，24h TTL；返回作者/容量/简介/标签/收藏数，缓存含简介） |
+| `get_world_name` | 世界信息查询（懒刷新：缓存命中直接返回，`forceRefresh: true` 才走 API；返回作者/容量/简介/标签/收藏数/用户备注 note，缓存含简介） |
+| `set_world_note` | 写入/更新世界用户备注（本地存储，API 刷新不覆盖；空字符串清除） |
+| `get_world_history` | 世界信息变更历史（name/description/author/image_url/release_status/capacity/tags 字段级变化记录） |
 
 ### 关注名单
 
