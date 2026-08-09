@@ -46,15 +46,19 @@
 
 ## 🚀 快速开始
 
+> 本节全部步骤由 **AI Agent 执行**。作为使用者，你只需要做两件事：**① 提供 VRChat 账号与邮箱 IMAP 授权码（第 1 步）**，**② 在 Agent 完成后验收结果（第 3 步）**。其余交给 Agent。
+
 ### 0. 准备
 
-- Node.js ≥ 18
-- 一个 VRChat 账号（需开启邮箱 2FA）
-- 一个支持 IMAP 的邮箱（用于接收 OTP 验证码，需生成 IMAP 授权码/专用密码）
+Agent 先检查环境（其余前置条件由使用者确认）：
+
+- Node.js ≥ 18（`node --version` 验证）
+- 一个 VRChat 账号（需开启邮箱 2FA）—— 使用者提供
+- 一个支持 IMAP 的邮箱（用于接收 OTP 验证码，需生成 IMAP 授权码/专用密码）—— 使用者提供
 
 ### 1. 配置凭据
 
-复制模板并填入真实凭据（**该文件不会入库**）：
+由 Agent 复制模板并写入真实凭据（**该文件不会入库**）：
 
 ```bash
 cp credentials.example.json credentials.json
@@ -68,24 +72,29 @@ cp credentials.example.json credentials.json
 }
 ```
 
-> IMAP 授权码获取：登录邮箱网页版 → 设置 → 开启 IMAP/SMTP → 生成授权码/专用密码。以 QQ 邮箱为例：设置 → 账号 → 开启 IMAP/SMTP → 生成授权码。
+> 🔑 **需要使用者操作（Agent 无法代办）**：IMAP 授权码必须由使用者登录邮箱网页版自行生成——设置 → 开启 IMAP/SMTP → 生成授权码/专用密码（QQ 邮箱：设置 → 账号 → 开启 IMAP/SMTP → 生成授权码）。支持任意 IMAP 邮箱（QQ/163/Gmail/Outlook 等），服务按邮箱域名自动选择服务器；可加 `imap_host` 字段手动指定。
+> Agent 在配置完成后应确认 `credentials.json` 已落盘且格式正确，并将该文件保持在 .gitignore 内（**禁止提交**）。
 
 ### 2. 启动服务
+
+由 Agent 执行并跟踪启动日志：
 
 ```bash
 cd <本仓库目录>
 node start-monitor.js
 ```
 
-首次启动会提示邮箱验证码，系统自动从 QQ 邮箱抓取并完成登录，随后保持运行。
+首次启动服务会自动从配置的邮箱（IMAP）抓取 OTP 验证码完成登录，随后保持运行。Agent 应确认日志无认证/限流错误，再进入第 3 步验收。
 
-### 3. 健康检查
+### 3. 健康检查（验收标准）
+
+Agent 执行验收：
 
 ```bash
 curl http://127.0.0.1:8799/health
 ```
 
-正常响应：`Auth: true`、`WS: connected`、在线好友数。
+**验收通过标准**：`Auth: true`、`WS: connected`、返回在线好友数。达标后向使用者报告「部署完成」，未达标则排查后重试。
 
 ## 📦 Agent Skill 安装（开箱即用）
 
