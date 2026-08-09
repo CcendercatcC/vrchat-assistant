@@ -288,7 +288,7 @@ A: 不需要。服务启动和 WS 重连都会自动走 OTP 取码登录，有�
 A: 系统内置 2.6s 间隔限流器。可在 `core/rate-limiter.js` 中调整 `minInterval`。
 
 **Q: 数据库文件太大？**
-A: 正常。约 28 万行事件 ≈ 200+ MB，sql.js 启动时全量加载到内存。
+A: 正常。约 30 万行事件 ≈ 300+ MB。better-sqlite3（WAL 模式）按需读取，不整库载入内存。
 
 ## ☕ Sponsor
 
