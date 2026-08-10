@@ -1,4 +1,4 @@
-# VRChat 好友监控系统 (vrc-monitor)
+# VRChat 助手 (vrchat-assistant)
 
 > 自建 VRChat 好友动态监控系统 · 替代 VRCX-0
 > 技术栈：Node.js + SQLite + WebSocket + MCP + Hermes 插件

@@ -1,4 +1,4 @@
-# VRChat 好友监控服务 (vrc-monitor)
+# VRChat 助手 (vrchat-assistant)
 
 基于 Node.js 的 VRChat 好友在线状态监控服务，配合 Hermes 插件和桌面插件使用，支持自动抓取 OTP 验证码登录。
 
