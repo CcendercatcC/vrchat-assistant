@@ -244,7 +244,7 @@ mcp_servers:
 | `send_invite` | 邀请好友加入**你当前所在房间**（拉人进房） | `userId`、`worldId`、`instanceId` | `message`（附带消息） |
 | `request_invite` | 请求好友**邀请你加入 TA 的房间**（默认消息 "Can I join you?"） | `userId` | `message` |
 | `create_instance` | **创建新房间**：worldId 必填；type（public/hidden/friends/private/group，默认 hidden）、region（us/eu/jp，默认 jp）可选；非 public 自动带 ownerId=当前用户（不带会 400 "Invalid owner ID"）；返回 `location` 可直接给 invite_myself | `worldId` | `type`、`region`、`instanceId`、`groupAccessType` |
-| `invite_myself` | **邀请自己传送进指定实例**：`location`（worldId:instanceId 完整串）或 `worldId`+`instanceId` 分开传；客户端收到 invite 通知后接受即传送 | `location` 或 `worldId`+`instanceId` | — |
+| `invite_myself` | **打开指定实例**（与 open_world 同一引擎，静默回退）：命名管道直发优先（Windows 游戏内静默弹加入菜单），管道不可用自动回退 API 自我邀请（客户端收到通知接受后传送）；`location`（worldId:instanceId 完整串）或 `worldId`+`instanceId` 分开传 | `location` 或 `worldId`+`instanceId` | `forceApi` |
 | `open_world` | **一键打开世界/实例**：`worldId`（自动建实例，type/region 可指定）或 `location`（完整实例串直接开）；命名管道直发（游戏内静默弹加入菜单，仅 Windows，1 步直达）失败自动回退 API 自我邀请 | `worldId` 或 `location` | `type`、`region`、`shortName`、`forceApi` |
 | `send_friend_request` | **发送好友请求**（添加好友）：`userId` 直接加，或 `displayName` 精确匹配（不区分大小写）后加 | `userId` 或 `displayName` 至少一个 | — |
 | `remove_friend` | **删除好友**（不可逆）：`userId` 或 `displayName` 精确匹配；**必须 `confirm: true` 才执行**，否则只返回目标信息预览 | `userId` 或 `displayName` 至少一个 | `confirm`（默认 false） |

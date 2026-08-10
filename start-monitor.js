@@ -318,13 +318,14 @@ const CUSTOM_TOOLS = [
   },
   {
     name: 'invite_myself',
-    description: '[write·vrchat] Send yourself an invite to an instance (client teleports on accept). Accepts location (worldId:instanceId) or worldId+instanceId separately.',
+    description: '[write·vrchat] Open an instance in the running VRChat client (same engine as open_world): named-pipe launch first (Windows, silent in-game join dialog), falls back to API self-invite (client teleports on accept) when pipe unavailable. Accepts location (worldId:instanceId) or worldId+instanceId separately.',
     inputSchema: {
       type: 'object',
       properties: {
         location: { type: 'string', description: 'Full location string, e.g. wrld_x:12345~hidden(usr_x)~region(jp). If provided, worldId/instanceId are ignored.' },
         worldId: { type: 'string', description: 'World id (wrld_...) — ignored if location is provided' },
         instanceId: { type: 'string', description: 'Instance id (full format with ~region etc.) — ignored if location is provided' },
+        forceApi: { type: 'boolean', description: 'Skip pipe detection and force API self-invite (remote/test scenarios)' },
       },
     },
   },
@@ -938,28 +939,31 @@ async function handleCreateInstance({ worldId, type, region, instanceId, groupAc
   };
 }
 
-async function handleInviteMyself({ location, worldId, instanceId }) {
-  let wId = worldId;
-  let iId = instanceId;
-  if (location && typeof location === 'string') {
-    const idx = location.indexOf(':');
+async function handleInviteMyself({ location, worldId, instanceId, forceApi }) {
+  // 统一入口（与 open_world 同一套）：管道直发优先（游戏内静默弹加入菜单），
+  // 管道不可用/非 Windows 时静默回退 API 自我邀请（客户端收到通知接受后传送）
+  let loc = location;
+  if (loc && typeof loc === 'string') {
+    const idx = loc.indexOf(':');
     if (idx <= 0) throw new Error('location 格式应为 worldId:instanceId（如 wrld_x:12345~hidden(usr_x)~region(jp)）');
-    wId = location.slice(0, idx);
-    iId = location.slice(idx + 1);
+    if (!String(loc).startsWith('wrld_')) throw new Error('location 必须是 wrld_ 开头的完整实例串');
+  } else {
+    if (!worldId || !String(worldId).startsWith('wrld_')) throw new Error('worldId 必须是 wrld_ 开头');
+    if (!instanceId) throw new Error('instanceId 不能为空（可用 create_instance 返回的 location）');
+    loc = `${worldId}:${instanceId}`;
   }
-  if (!wId || !String(wId).startsWith('wrld_')) throw new Error('worldId 必须是 wrld_ 开头');
-  if (!iId) throw new Error('instanceId 不能为空（可用 create_instance 返回的 location）');
-  const r = await api._request('POST', `/invite/myself/to/${wId}:${iId}`);
-  if (r.status >= 400) {
-    throw new Error(`邀请自己失败 API ${r.status}: ${JSON.stringify(r.data).slice(0, 200)}（404=实例无效或不是合法参与者）`);
-  }
-  const d = r.data || {};
+  const res = await openInstance({ location: loc, api, forceApi: !!forceApi });
+  if (!res.success) throw new Error(res.error || '邀请自己失败');
+  const wId = loc.slice(0, loc.indexOf(':'));
+  const iId = loc.slice(loc.indexOf(':') + 1);
   return {
     success: true,
+    method: res.method,
     worldId: wId,
     instanceId: iId,
-    notificationId: d.id || null,
-    notificationType: d.type || null,
+    notificationId: res.notificationId || null,
+    notificationType: null,
+    detail: res.detail || null,
   };
 }
 
