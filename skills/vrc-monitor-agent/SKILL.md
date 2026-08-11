@@ -1,7 +1,7 @@
 ---
 name: vrc-monitor-agent
-description: "Use when answering questions about VRChat friends (online status, who played with whom, activity timelines, online patterns) via the vrc-monitor MCP server on port 8799."
-version: 1.0.0
+description: "Use for VRChat friend queries (online status, who played with whom, activity timelines, online patterns) and VRChat social actions (boop, invite, join world, friend management, group operations, image uploads) via the vrc-monitor MCP server on port 8799."
+version: 1.1.0
 metadata:
   hermes:
     tags: [vrchat, gaming, social, mcp, monitoring]
@@ -65,6 +65,12 @@ metadata:
 | `join_group` | 加入群组（open 群直接加入；已是成员返回 alreadyMember:true；`groupId` 必填） |
 | `leave_group` | 退出群组（`POST /groups/{id}/leave`；必须 `confirm: true`；非成员返回 notMember） |
 | `peek_group_announcement` | **窥探群公告**：一键「加入→读公告→退出」，仅对 open 群生效，需 `confirm: true` |
+| `get_favorite_friends_locations` | **好友收藏夹位置**：列出收藏分组内好友当前位置（支持 `searchName` 按名直查），按推荐度排序，private 自动排除 |
+| `recommend_join` | **推荐加入**：全部在线好友综合评分推荐（熟悉度 + 收藏夹权重 + 圿间场景 + 实例人数/类型） |
+| `set_join_preference` | 设置推荐偏好（自然语言，如「我不喜欢人太多」→ 爆满重罚） |
+| `get_join_preference` | 查询当前推荐偏好 |
+| `record_join_choice` | 记录一次推荐选择（自动补全上下文，≥5 次后自动学习权重） |
+| `get_join_learning` | 查看选择学习状态与生效的权重调整 |
 
 调用方式（HTTP SSE JSON-RPC）：
 
@@ -140,7 +146,7 @@ curl -s http://127.0.0.1:8799/mcp -X POST -H "Content-Type: application/json" \
 
 ## 结果格式
 
-用户偏好带昵称列的紧凑表格，不用原始显示名。companion 数据展示：`| 排名 | 好友 | 共处时间 | 同屏实例 | 最近一次 |`，一行小结总结社交模式。
+建议用昵称代替原始显示名以提高可读性。companion 数据可展示为：`| 排名 | 好友 | 共处时间 | 同屏实例 | 最近一次 |`，并附一行小结总结社交模式。
 
 ## 常见陷阱
 

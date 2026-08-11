@@ -121,9 +121,9 @@ PR 由 AI Agent 编写提交（人类只提出需求、不直接编码）。以�
 ## 5. 代码规范
 
 - **语言**：JavaScript，ESM（`package.json` 中 `"type": "module"`）。
-- **Node 版本**：≥ 18（better-sqlite3 v12 的要求；本地开发推荐 22.x）。建议在 package.json 补充 `engines` 字段。
+- **Node 版本**：≥ 18（better-sqlite3 v12 的要求；本地开发推荐 22.x）。`package.json` 已声明 `engines` 字段约束。
 - **风格**：跟随现有代码风格（`start-monitor.js` 与 `core/` 下的模块）。
-- **模块划分**：`start-monitor.js` 已经很大（2000+ 行），新增功能优先放 `core/` 下独立模块（参考 `storage.js` / `ws-manager.js` / `friend-state.js` 的拆分方式），保持入口文件克制。
+- **模块划分**：`start-monitor.js` 已经很大（3000+ 行），新增功能优先放 `core/` 下独立模块（参考 `storage.js` / `ws-manager.js` / `friend-state.js` 的拆分方式），保持入口文件克制。
 - **平台专属逻辑**：Windows 专属增强（命名管道等）一律封装进 `core/` 独立模块，运行时探测 + 静默回退（见 §3.1），禁止散落在 CLI 脚本或 MCP handler 里。
 - **新功能默认做成 MCP 工具，禁止只写孤立 CLI 脚本**（2026-08-09 用户要求固化）：本项目面向 AI Agent，Agent 通过 MCP 接口（`tools/call`）与功能交互；独立脚本无法被 Agent 直接调用，等于功能不可达。开发要求：
   - 新功能的标准形态是注册 MCP 工具（工具注册表 + handler + RPC case 三件套），Agent 一条 `tools/call` 即可使用。

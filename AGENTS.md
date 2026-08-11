@@ -33,10 +33,26 @@
 | Bio 变更 | `feed_bio` | 好友个人简介变更 |
 
 > **数据库位置**：迁移脚本会自动探测以下路径（Windows）：
-> - 新版 VRCX：`%USERPROFILE%\AppData\Roaming\VRCX\VRCX.sqlite3`
-> - 旧版 VRCX-0：`%USERPROFILE%\AppData\Roaming\VRCX-0\VRCX-0.sqlite3`
+> -  VRCX：`%USERPROFILE%\AppData\Roaming\VRCX\VRCX.sqlite3`
+> -  VRCX-0：`%USERPROFILE%\AppData\Roaming\VRCX-0\VRCX-0.sqlite3`
 >
 > 若自动探测失败，Agent 可让用户提供数据库路径手动指定：`node migrate-vrcx0.mjs <VRCX数据库路径> <userId>`。
+
+## 获取代码（Fork & Clone）
+
+> 💡 本项目是 AI-first 项目，用户会持续向 Agent 提需求、由 Agent 实现功能。为保留这些变更并便于同步上游更新，**建议 Agent 先 Fork 本仓库到用户自己的 GitHub 账号，再克隆 Fork 到本地**，而非直接 clone 原仓库。
+
+- **推荐**：Fork 后克隆
+  ```bash
+  # Agent 通过 GitHub 工具完成 fork，然后：
+  git clone https://github.com/<用户名>/vrchat-assistant.git
+  cd vrchat-assistant
+  # upstream 指向原仓库（fork 来源），可从 GitHub fork 页面获取原作者用户名
+  git remote add upstream https://github.com/<原作者GitHub用户名>/vrchat-assistant.git
+  ```
+  之后 Agent 实现的新功能可直接 `git push origin` 保存到用户的 Fork；需要同步官方更新时执行 `git pull upstream main`。
+
+- **可选**：仅直接 clone 原仓库（适用于不打算修改代码、只用现成功能的用户）。注意此方式下 Agent 产生的代码变更无法推送到远程，仅保留在本地，存在丢失风险。
 
 ## 配置步骤
 
@@ -107,7 +123,7 @@ cp desktop/plugin.js "$HERMES_HOME/desktop-plugins/vrc-monitor/"
 
 然后：
 1. 重启 Hermes Gateway（加载 dashboard 后端路由）
-2. 桌面端按 ⌘K -> **Reload desktop plugins**
+2. 桌面端按 Ctrl+K (Windows) / ⌘K (macOS) -> **Reload desktop plugins**
 
 桌面端右侧出现「VRChat Monitor」面板：显示服务运行状态，点击「配置」可填写 VRChat 邮箱/密码/邮箱 IMAP 授权码（保存到 credentials.json），无需手工编辑文件。
 

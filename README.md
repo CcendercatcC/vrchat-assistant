@@ -32,7 +32,7 @@
 - ✅ **WebSocket 实时监控** — 好友上线/下线/换世界即时入库
 - ✅ **自动重连 + 认证自愈** — 指数退避（1s→60s）+ cookie 过期自动 OTP 邮箱取码登录，无需人工干预
 - ✅ **自动 OTP 登录** — 邮箱验证码自动从邮箱 IMAP 抓取，全链路无人值守
-- ✅ **历史数据迁移** — 从 VRCX-0 导入 10 个月的 33 万条活动记录
+- ✅ **历史数据迁移** — 从 VRCX 导入历史活动记录（上下线/位置/Avatar/状态/Bio 变更、好友列表、世界缓存等）
 - ✅ **世界名缓存** — 自动解析 `wrld_xxx` 为可读世界名（懒刷新：缓存命中直接用，`forceRefresh: true` 手动刷新防改名陈旧）
 - ✅ **关注名单** — 标记核心好友，活动时特别通知
 - ✅ **MCP 工具接口** — 55 个工具供 Hermes / 任意 MCP 客户端调用
@@ -103,7 +103,7 @@ curl http://127.0.0.1:8799/health
 
 | Skill | 内容 | 适用场景 |
 |-------|------|----------|
-| `skills/vrc-monitor-agent/` | 38 个 MCP 工具清单、5 大查询工作流（在线/同屏/时间线/上线规律/昵称）、常见陷阱、健康检查 | 日常好友查询 |
+| `skills/vrc-monitor-agent/` | 55 个 MCP 工具清单、5 大查询工作流（在线/同屏/时间线/上线规律/昵称）、常见陷阱、健康检查 | 日常好友查询与社交操作 |
 | `skills/vrc-monitor-companion-query/` | 「谁和我/和 XX 一起玩过」同屏交叉查询的正确姿势（为何不委派子 agent） | 同屏/玩伴查询 |
 
 **安装方式**（以 Hermes 为例，其他 Agent 框架同理）——把 skill 目录复制到你的 skills 目录：
@@ -140,7 +140,7 @@ hermes plugins enable vrc-monitor
 ```bash
 mkdir -p "$HERMES_HOME/desktop-plugins/vrc-monitor"
 cp desktop/plugin.js "$HERMES_HOME/desktop-plugins/vrc-monitor/"
-# 重启 Gateway + 桌面端 ⌘K → Reload desktop plugins
+# 重启 Gateway + 桌面端 Ctrl+K (Windows) / ⌘K (macOS) → Reload desktop plugins
 ```
 
 ### 插件提供的工具
