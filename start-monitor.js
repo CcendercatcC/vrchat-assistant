@@ -15,12 +15,12 @@ import { randomUUID } from 'node:crypto';
 import { Storage } from './core/storage.js';
 import { RateLimiter } from './core/rate-limiter.js';
 import { VrchatApiClient } from './vrchat-api.js';
+import { openInstance } from './core/vrchat-launch.js';
 import { WsManager } from './core/ws-manager.js';
 import { EventPipeline } from './core/event-pipeline.js';
 import { backupDatabase } from './core/backup.js';
 import { FriendStateManager } from './core/friend-state.js';
 import { isJunkWorld, worldScore, classifyWorlds, fetchFreshWorlds } from './core/new-worlds.js';
-import { openInstance } from './core/vrchat-launch.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = 8799;
@@ -359,6 +359,7 @@ const CUSTOM_TOOLS = [
       },
     },
   },
+
   {
     name: 'send_friend_request',
     description: '[write·vrchat] Send a friend request to a user. Supports userId or exact displayName match.',
@@ -728,7 +729,7 @@ const CUSTOM_TOOLS = [
   },
   {
     name: 'peek_group_announcement',
-    description: '[group] Peek a group announcement: joins if joinState=open, reads announcement, then leaves. Requires confirm: true. Non-open groups return peekable:false.',
+    description: '[group] Peek a group announcement: joins if joinState=open, reads announcement, then leaves. Non-open groups return peekable:false.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -823,6 +824,42 @@ function parseLocation(loc) {
   };
 }
 
+async function handleGetOnlineFriends() {
+  const r = await api._request('GET', '/auth/user/friends?offline=false');
+  if (r.status !== 200) throw new Error(`API error: ${r.status}`);
+  const friends = Array.isArray(r.data) ? r.data : [];
+  const online = friends.filter(f => f.location && f.location !== 'offline');
+
+  const nicknames = storage.getNicknames({});
+  const nicknameMap = new Map();
+  for (const item of nicknames) {
+    if (item.userId) nicknameMap.set(item.userId, item.nickname);
+  }
+
+  return {
+    online: online.length,
+    total: friends.length,
+    friends: online.map(f => ({
+      userId: f.id,
+      displayName: f.displayName,
+      location: f.location || 'private',
+      status: f.status,
+      statusDescription: f.statusDescription,
+      platform: f.platform,
+      avatarImageUrl: f.currentAvatarThumbnailImageUrl,
+      nickname: nicknameMap.get(f.id) || null,
+      locationParsed: parseLocation(f.location || 'private'),
+    })),
+  };
+}
+
+/**
+ * 好友收藏夹位置列表
+ * 1. 拉取全部好友收藏分组（/favorite/groups?type=friend）
+ * 2. 指定分组：拉组内好友（/favorites?type=friend&groupId=xxx），逐个查 /users/{id} 拿在线状态与位置
+ * 3. 推荐度排序：在线 + 实例可加入（public/friends/group，排除 private）在前，
+ *    按实例玩家数/容量比 + 好友收藏热度综合评分
+ */
 // ── 共享评分系统（recommend_join 与 get_favorite_friends_locations 共用同一套）──
 // 两个工具只是从不同集合选人（全部在线好友 / 收藏夹成员），评分逻辑完全一致
 
@@ -842,9 +879,11 @@ function buildScoreContext() {
   }
   const isExplicitPref = joinPrefs.crowd && joinPrefs.crowd !== 'normal';
   const CROWD = joinPrefs.crowd || (learning && learning.crowd) || 'normal';
-  const famMult = isExplicitPref ? 1 : (learning ? learning.familiarityMult : 1);
-  const crowdMult = CROWD === 'avoid' ? 1.5 : (CROWD === 'love' ? 4 : 3);
-  const fullPenalty = CROWD === 'avoid' ? 80 : (CROWD === 'love' ? 20 : 40);
+  // 动态调整保持均衡（成对系数，比例受控 0.72~1.55）：人数权重降 ↔ 熟悉度反向升
+  const famAdjust = CROWD === 'avoid' ? 1.15 : (CROWD === 'love' ? 0.9 : 1);
+  const famMult = Math.min((isExplicitPref ? 1 : (learning ? learning.familiarityMult : 1)) * famAdjust, 1.3);
+  const crowdMult = CROWD === 'avoid' ? 0.75 : (CROWD === 'love' ? 1.25 : 1);
+  const fullPenalty = CROWD === 'avoid' ? 60 : (CROWD === 'love' ? 30 : 50);
   const coldPenalty = CROWD === 'avoid' ? 0 : (CROWD === 'love' ? 15 : 10);
   const prefTag = CROWD === 'normal' ? '' : (isExplicitPref ? `偏好[${CROWD === 'avoid' ? '避人潮' : '爱热闹'}]` : `学习[${CROWD === 'avoid' ? '避人潮' : '爱热闹'}]`);
   // 睡觉图集合（new_worlds.sleep_ok=1）+ 安静图名字判定
@@ -913,14 +952,15 @@ async function buildGroupMap() {
 function computeEntryScore(ctx, entry) {
   // 统一评分：熟悉度 + 收藏夹权重 + 安静图场景 + 实例人数/类型 + 偏好/学习调节
   const { CROWD, famMult, crowdMult, fullPenalty, coldPenalty, prefTag, sleepWorlds, isQuietWorldName, learning } = ctx;
-  const { loc, worldName, instanceUsers, fillRatio, status, groupName, groupWeight, isContact, familiarity } = entry;
+  const { loc, worldName, worldTags, instanceUsers, fillRatio, status, groupName, groupWeight, isContact, familiarity } = entry;
   let score = 0;
   const reasons = [];
   if (isContact) { score -= 40; reasons.push('活动联系人-40'); }
   else {
-    const famScore = famMult !== 1 ? Math.min(Math.round(familiarity.score * famMult), 100) : Math.min(familiarity.score, 100);
+    // 熟悉度（×1.5，上限 132）与地图属性（人数×1+黄金区30 等）同量级——均衡，互不碾压
+    const famScore = famMult !== 1 ? Math.min(Math.round(familiarity.score * famMult * 1.5), 132) : Math.min(familiarity.score * 1.5, 132);
     score += famScore;
-    reasons.push(`熟悉度${famScore}${famMult !== 1 ? `(学习加权×${famMult})` : ''}(30天${familiarity.recentMatchCount}次)`);
+    reasons.push(`熟悉度${famScore}${famMult !== 1 ? `(加权×${Math.round(famMult*10)/10})` : ''}(30天${familiarity.recentMatchCount}次)`);
     if (groupName) {
       const bonus = Math.min(groupWeight, 10);
       if (bonus !== 0) { score += bonus; reasons.push(`[${groupName}]+${bonus}`); }
@@ -939,16 +979,34 @@ function computeEntryScore(ctx, entry) {
     } else {
       // 热闹图：人多正向，黄金区最理想（人数权重/爆满/冷清受偏好调节）
       if (instanceUsers < 3 && instanceUsers > 0) { score -= 15; reasons.push(`人少${instanceUsers}人可能私聊-15`); }
-      if (fillRatio >= 0.3 && fillRatio <= 0.8) { score += 50; reasons.push(`黄金区${Math.round(fillRatio*100)}%+50`); }
-      else if (fillRatio > 0.9) { score -= fullPenalty; reasons.push(`${prefTag}爆满-${fullPenalty}`); }
+      // 个性化黄金区：学习到人数舒适区时按绝对人数判断，否则用固定填充率 30-80%
+      const comfy = learning && learning.preferredCrowdRange;
+      let inComfort = false;
+      if (comfy) {
+        // 兼容「4-8人」和「61+人」两种格式（61+ 无连字符）
+        const m = comfy.match(/^(\d+)(?:-(\d+))?\+?人?$/);
+        if (m) {
+          const lo = parseInt(m[1], 10), hi = m[2] ? parseInt(m[2], 10) : Infinity;
+          inComfort = instanceUsers >= lo && instanceUsers <= hi;
+        }
+      }
+      if (comfy && inComfort) { score += 30; reasons.push(`舒适区${comfy}+30`); }
+      else if (comfy) { score -= 10; reasons.push(`舒适区${comfy}外-10`); }
+      else if (fillRatio >= 0.3 && fillRatio <= 0.8) { score += 30; reasons.push(`黄金区${Math.round(fillRatio*100)}%+30`); }
+      if (fillRatio > 0.9) { score -= fullPenalty; reasons.push(`${prefTag}爆满-${fullPenalty}`); }
       else if (fillRatio < 0.1) { score -= coldPenalty; reasons.push(`${prefTag}冷清-${coldPenalty}`); }
-      score += instanceUsers * crowdMult; reasons.push(`人数${instanceUsers}${CROWD === 'normal' ? '' : `×${crowdMult}`}`);
+      score += Math.round(instanceUsers * crowdMult); reasons.push(`人数${instanceUsers}${CROWD === 'normal' ? '' : `×${crowdMult}`}`);
     }
   }
-  if (loc.type === 'public') { score += 20; reasons.push('public+20'); }
-  else if (loc.type === 'friends' || loc.type === 'hidden') { score += 10; reasons.push(loc.type === 'hidden' ? 'friend++10' : 'friends+10'); }
-  else if (loc.type === 'group') { score += 5; reasons.push('group+5'); }
-  if (status === 'active') { score += 10; reasons.push('active+10'); }
+  // 类型偏好：学习到的 author_tag 命中 → 加分（安静图类型由 quietBias 单独处理）
+  if (learning && learning.worldType) {
+    const tagHit = Array.isArray(worldTags) && worldTags.includes('author_tag_' + learning.worldType);
+    if (tagHit) { score += 15; reasons.push(`类型[${learning.worldType}]+15`); }
+  }
+  if (loc.type === 'public') { score += 10; reasons.push('public+10'); }
+  else if (loc.type === 'friends' || loc.type === 'hidden') { score += 5; reasons.push(loc.type === 'hidden' ? 'friend++5' : 'friends+5'); }
+  else if (loc.type === 'group') { score += 3; reasons.push('group+3'); }
+  if (status === 'active') { score += 5; reasons.push('active+5'); }
   return { score: Math.round(score), reasons, isQuietWorld, isSleepWorld };
 }
 
@@ -1125,25 +1183,27 @@ async function handleGetFavoriteFriendsLocations({ groupName, favoriteGroupId, s
   const ctx = buildScoreContext();
   const { familiarityScore } = await buildFamiliarityScorer();
   const groupMap = await buildGroupMap();
-  //    位置解析 + 世界名缓存；实例详情批量查（限流）
   const worldCache = new Map();
   const instanceInfo = new Map();
-
+  //    位置解析 + 世界名缓存；实例详情批量查（限流）
   async function getWorldNameSafe(worldId) {
     if (worldCache.has(worldId)) return worldCache.get(worldId);
     let name = worldId;
+    let tags = [];
     const cached = storage.getWorldName(worldId);
     if (cached && cached.name) {
       name = cached.name;
+      tags = Array.isArray(cached.tags) ? cached.tags : (typeof cached.tags === 'string' && cached.tags ? JSON.parse(cached.tags) : []);
     } else {
       const r = await rateLimiter.execute(() => api._request('GET', `/worlds/${worldId}`));
       if (r.status === 200 && r.data && r.data.name) {
         name = r.data.name;
-        try { storage.upsertWorld({ worldId, name, authorId: r.data.authorId || '', authorName: r.data.authorName || '' }); } catch (e) {}
+        tags = Array.isArray(r.data.tags) ? r.data.tags.filter(t => t.startsWith('author_tag_')) : [];
+        try { storage.upsertWorld({ worldId, name, authorId: r.data.authorId || '', authorName: r.data.authorName || '', tags: JSON.stringify(tags) }); } catch (e) {}
       }
     }
-    worldCache.set(worldId, name);
-    return name;
+    worldCache.set(worldId, { name, tags });
+    return { name, tags };
   }
 
   const detailed = [];
@@ -1159,13 +1219,16 @@ async function handleGetFavoriteFriendsLocations({ groupName, favoriteGroupId, s
     // traveling 也跳过（不在具体世界）
     if (loc.type === 'traveling') continue;
 
-    const worldName = await getWorldNameSafe(loc.worldId);
+    const wInfo = await getWorldNameSafe(loc.worldId);
+    const worldName = wInfo.name;
+    const worldTags = wInfo.tags;
     const entry = {
       userId: m.userId,
       displayName: m.displayName,
       location: m.location,
       worldId: loc.worldId,
       worldName,
+      worldTags,
       instanceType: loc.type,
       instanceId: loc.instanceId || '',
       region: loc.region || '',
@@ -1214,7 +1277,7 @@ async function handleGetFavoriteFriendsLocations({ groupName, favoriteGroupId, s
     }
     const fam = await familiarityScore(m.userId);
     const scored = computeEntryScore(ctx, {
-      loc, worldName: entry.worldName, instanceUsers: entry.instanceUsers,
+      loc, worldName: entry.worldName, worldTags: entry.worldTags, instanceUsers: entry.instanceUsers,
       fillRatio: entry.fillRatio, status: m.status,
       groupName, groupWeight, isContact, familiarity: fam,
     });
@@ -1308,32 +1371,85 @@ function analyzeJoinLearning() {
   const MIN_SAMPLES = 5;
   const rows = storage._query('SELECT * FROM join_choices ORDER BY id DESC LIMIT 20');
   if (rows.length < MIN_SAMPLES) {
-    return { enabled: false, samples: rows.length, minSamples: MIN_SAMPLES, crowd: null, familiarityMult: 1, quietBias: false };
+    return { enabled: false, samples: rows.length, minSamples: MIN_SAMPLES, crowd: null, familiarityMult: 1, quietBias: false, preferredCrowdRange: null, worldType: null };
   }
   const avg = (arr) => (arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : 0);
   const avgChosenUsers = avg(rows.map(r => r.instance_users));
   const avgListUsers = avg(rows.map(r => r.list_avg_users));
   const avgFam = avg(rows.map(r => r.familiarity_score));
   const quietRatio = rows.filter(r => r.is_quiet_world).length / rows.length;
-  // 人数倾向：选择平均人数 vs 当时列表平均人数（<60% 避人潮，>130% 爱热闹）
+
+  // ── 维度1 重复选同一人：同一 userId 占比 ≥60% → 强熟人信号（不依赖熟悉度绝对值）──
+  const userCounts = {};
+  for (const r of rows) userCounts[r.user_id] = (userCounts[r.user_id] || 0) + 1;
+  const topUser = Object.entries(userCounts).sort((a, b) => b[1] - a[1])[0] || null;
+  const repeatRatio = topUser ? topUser[1] / rows.length : 0;
+  const repeatPrefer = repeatRatio >= 0.6;
+
+  // ── 维度2 熟悉度偏好：60% 以上选择熟悉度>=15 的好友（辅助，重复选择已覆盖）──
+  const famPrefer = !repeatPrefer && avgFam >= 15 && rows.filter(r => r.familiarity_score >= 15).length >= Math.ceil(rows.length * 0.6);
+
+  // ── 维度3 人数舒适区：选择人数分桶 ≥60% 集中 → 个性化黄金区 ──
+  const CROWD_BUCKETS = [
+    { label: '0-3人', min: 0, max: 3 },
+    { label: '4-8人', min: 4, max: 8 },
+    { label: '9-15人', min: 9, max: 15 },
+    { label: '16-30人', min: 16, max: 30 },
+    { label: '31-60人', min: 31, max: 60 },
+    { label: '61+人', min: 61, max: Infinity },
+  ];
+  let preferredCrowdRange = null;
+  const chosenUsersArr = rows.map(r => r.instance_users).filter(n => n > 0);
+  if (chosenUsersArr.length >= Math.ceil(rows.length * 0.6)) {
+    for (const b of CROWD_BUCKETS) {
+      const ratio = chosenUsersArr.filter(n => n >= b.min && n <= b.max).length / chosenUsersArr.length;
+      if (ratio >= 0.6) { preferredCrowdRange = b.label; break; }
+    }
+  }
+
+  // ── 维度4 人数倾向（舒适区细化为 avoid/love，舒适区未命中时用旧逻辑）──
   let crowd = null;
-  if (avgListUsers > 3 && avgChosenUsers < avgListUsers * 0.6) crowd = 'avoid';
-  else if (avgListUsers > 3 && avgChosenUsers > avgListUsers * 1.3) crowd = 'love';
-  // 熟悉度倾向：60% 以上选择熟悉度>=15 的好友 → 熟悉度加权
-  const famPrefer = avgFam >= 15 && rows.filter(r => r.familiarity_score >= 15).length >= Math.ceil(rows.length * 0.6);
-  // 安静图倾向：50% 以上选择安静图 → 安静图偏好
+  if (preferredCrowdRange) {
+    if (preferredCrowdRange === '0-3人' || preferredCrowdRange === '4-8人') crowd = 'avoid';
+    else if (preferredCrowdRange === '31-60人' || preferredCrowdRange === '61+人') crowd = 'love';
+  }
+  if (!crowd && avgListUsers > 3 && avgChosenUsers < avgListUsers * 0.6) crowd = 'avoid';
+  else if (!crowd && avgListUsers > 3 && avgChosenUsers > avgListUsers * 1.3) crowd = 'love';
+
+  // ── 维度5 类型偏好：某 author_tag 出现在 ≥60% 的选择行中 → 类型加分 ──
+  // 按选择行数占比判定（世界通常带多个标签，按标签次数占比过严会被稀释）
+  let worldType = null;
+  const tagCounts = {};
+  for (const r of rows) {
+    let tags = [];
+    try { tags = r.world_tags ? JSON.parse(r.world_tags) : []; } catch (e) {}
+    for (const t of tags) tagCounts[t] = (tagCounts[t] || 0) + 1;
+  }
+  const topTag = Object.entries(tagCounts).sort((a, b) => b[1] - a[1])[0] || null;
+  if (topTag && topTag[1] / rows.length >= 0.6) {
+    worldType = topTag[0].replace('author_tag_', '');
+  }
+
+  // ── 安静图倾向：50% 以上选择安静图（并入类型体系，保留独立信号）──
   const quietBias = quietRatio >= 0.5;
+
   const learning = {
     enabled: true,
     samples: rows.length,
     crowd,
-    familiarityMult: famPrefer ? 1.2 : 1,
+    // 重复选同一人 → 1.3（最强信号）；熟悉度偏好 → 1.2；否则 1
+    familiarityMult: repeatPrefer ? 1.3 : (famPrefer ? 1.2 : 1),
     quietBias,
+    preferredCrowdRange,
+    worldType,
     stats: {
       avgChosenUsers: Math.round(avgChosenUsers * 10) / 10,
       avgListUsers: Math.round(avgListUsers * 10) / 10,
       avgFamiliarity: Math.round(avgFam * 10) / 10,
       quietRatio: Math.round(quietRatio * 100) / 100,
+      repeatRatio: Math.round(repeatRatio * 100) / 100,
+      repeatUser: repeatPrefer ? (topUser ? topUser[0].slice(0, 12) : null) : null,
+      topTag: worldType ? 'author_tag_' + worldType : null,
     },
     updatedAt: new Date().toISOString(),
   };
@@ -1355,8 +1471,8 @@ async function handleRecordJoinChoice({ userId, displayName } = {}) {
   const rank = top.indexOf(hit) + 1;
   const baseline = lastRecommendSnapshot.baseline;
   storage._run(
-    `INSERT INTO join_choices (user_id, display_name, world_id, world_name, instance_type, instance_users, instance_capacity, fill_ratio, familiarity_score, is_quiet_world, recommend_score, rank_in_list, list_count, list_avg_users, list_avg_fill, list_quiet_ratio)
-     VALUES ($userId, $displayName, $worldId, $worldName, $instanceType, $instanceUsers, $instanceCapacity, $fillRatio, $familiarityScore, $isQuietWorld, $recommendScore, $rank, $listCount, $listAvgUsers, $listAvgFill, $listQuietRatio)`,
+    `INSERT INTO join_choices (user_id, display_name, world_id, world_name, instance_type, instance_users, instance_capacity, fill_ratio, familiarity_score, is_quiet_world, recommend_score, rank_in_list, list_count, list_avg_users, list_avg_fill, list_quiet_ratio, world_tags)
+     VALUES ($userId, $displayName, $worldId, $worldName, $instanceType, $instanceUsers, $instanceCapacity, $fillRatio, $familiarityScore, $isQuietWorld, $recommendScore, $rank, $listCount, $listAvgUsers, $listAvgFill, $listQuietRatio, $worldTags)`,
     {
       $userId: hit.userId, $displayName: hit.displayName, $worldId: hit.worldId || '',
       $worldName: hit.worldName || '', $instanceType: hit.instanceType || '',
@@ -1365,6 +1481,7 @@ async function handleRecordJoinChoice({ userId, displayName } = {}) {
       $isQuietWorld: hit.isQuietWorld ? 1 : 0, $recommendScore: hit.recommendScore || 0,
       $rank: rank, $listCount: baseline.list_count, $listAvgUsers: baseline.list_avg_users,
       $listAvgFill: baseline.list_avg_fill, $listQuietRatio: baseline.list_quiet_ratio,
+      $worldTags: Array.isArray(hit.worldTags) ? JSON.stringify(hit.worldTags) : '',
     },
   );
   const learning = analyzeJoinLearning();
@@ -1378,7 +1495,9 @@ async function handleRecordJoinChoice({ userId, displayName } = {}) {
 async function handleGetJoinLearning() {
   try {
     const raw = storage.getConfig('join_learning');
-    const learning = raw ? JSON.parse(raw) : analyzeJoinLearning();
+    // 旧缓存可能缺 preferredCrowdRange/worldType 字段——缺则重新分析
+    const cached = raw ? JSON.parse(raw) : null;
+    const learning = (cached && 'preferredCrowdRange' in cached && 'worldType' in cached) ? cached : analyzeJoinLearning();
     const count = storage._query('SELECT COUNT(*) AS c FROM join_choices')[0].c;
     return { choicesCount: count, learning };
   } catch (e) {
@@ -1412,21 +1531,27 @@ async function handleRecommendJoin({ limit = 10, minScore = 0 } = {}) {
     if (!loc || loc.type === 'private' || loc.type === 'traveling' ||
         f.location === 'private' || f.location === 'offline' || f.location === 'traveling') continue;
 
-    // 世界名
+    // 世界名 + 标签（类型偏好学习用）
     let worldName = f.worldId || loc.worldId || '';
+    let worldTags = [];
     if (loc.worldId) {
-      if (worldCache.has(loc.worldId)) worldName = worldCache.get(loc.worldId);
-      else {
+      if (worldCache.has(loc.worldId)) {
+        const c = worldCache.get(loc.worldId);
+        worldName = c.name; worldTags = c.tags;
+      } else {
         const cached = storage.getWorldName(loc.worldId);
-        if (cached && cached.name) worldName = cached.name;
-        else {
+        if (cached && cached.name) {
+          worldName = cached.name;
+          worldTags = Array.isArray(cached.tags) ? cached.tags : (typeof cached.tags === 'string' && cached.tags ? JSON.parse(cached.tags) : []);
+        } else {
           const r = await rateLimiter.execute(() => api._request('GET', `/worlds/${loc.worldId}`));
           if (r.status === 200 && r.data && r.data.name) {
             worldName = r.data.name;
-            try { storage.upsertWorld({ worldId: loc.worldId, name: r.data.name, authorId: r.data.authorId || '', authorName: r.data.authorName || '' }); } catch (e) {}
+            worldTags = Array.isArray(r.data.tags) ? r.data.tags.filter(t => t.startsWith('author_tag_')) : [];
+            try { storage.upsertWorld({ worldId: loc.worldId, name: r.data.name, authorId: r.data.authorId || '', authorName: r.data.authorName || '', tags: JSON.stringify(worldTags) }); } catch (e) {}
           }
         }
-        worldCache.set(loc.worldId, worldName);
+        worldCache.set(loc.worldId, { name: worldName, tags: worldTags });
       }
     }
 
@@ -1461,7 +1586,7 @@ async function handleRecommendJoin({ limit = 10, minScore = 0 } = {}) {
 
     // 综合评分（共享评分系统：熟悉度 + 收藏夹权重 + 安静图场景 + 实例 + 偏好/学习）
     const scored = computeEntryScore(ctx, {
-      loc, worldName, instanceUsers, fillRatio, status: f.status,
+      loc, worldName, worldTags, instanceUsers, fillRatio, status: f.status,
       groupName, groupWeight, isContact, familiarity: fam,
     });
     const { score, reasons, isQuietWorld } = scored;
@@ -1471,6 +1596,7 @@ async function handleRecommendJoin({ limit = 10, minScore = 0 } = {}) {
       displayName: f.displayName,
       worldId: loc.worldId,
       worldName,
+      worldTags,
       instanceType: loc.type,
       instanceTypeDisplay: loc.type === 'hidden' ? 'friend+' : loc.type,
       instanceUsers, instanceCapacity, fillRatio,
@@ -1497,35 +1623,6 @@ async function handleRecommendJoin({ limit = 10, minScore = 0 } = {}) {
     method: 'familiarity+group+scene+instance',
     preference: isExplicitPref ? { crowd: CROWD, label: joinPrefs.label || '' } : null,
     learning: (!isExplicitPref && learning) ? { crowd: learning.crowd, familiarityMult: learning.familiarityMult, quietBias: learning.quietBias, samples: learning.samples } : null,
-  };
-}
-
-async function handleGetOnlineFriends() {
-  const r = await api._request('GET', '/auth/user/friends?offline=false');
-  if (r.status !== 200) throw new Error(`API error: ${r.status}`);
-  const friends = Array.isArray(r.data) ? r.data : [];
-  const online = friends.filter(f => f.location && f.location !== 'offline');
-
-  const nicknames = storage.getNicknames({});
-  const nicknameMap = new Map();
-  for (const item of nicknames) {
-    if (item.userId) nicknameMap.set(item.userId, item.nickname);
-  }
-
-  return {
-    online: online.length,
-    total: friends.length,
-    friends: online.map(f => ({
-      userId: f.id,
-      displayName: f.displayName,
-      location: f.location || 'private',
-      status: f.status,
-      statusDescription: f.statusDescription,
-      platform: f.platform,
-      avatarImageUrl: f.currentAvatarThumbnailImageUrl,
-      nickname: nicknameMap.get(f.id) || null,
-      locationParsed: parseLocation(f.location || 'private'),
-    })),
   };
 }
 
@@ -1650,6 +1747,7 @@ async function handleSendFriendRequest({ userId, displayName }) {
   return { userId: target.id, displayName, method: 'displayName', ok: true };
 }
 
+
 async function handleCreateInstance({ worldId, type, region, instanceId, groupAccessType }) {
   if (!worldId || !String(worldId).startsWith('wrld_')) {
     throw new Error('worldId 必须是 wrld_ 开头（如 wrld_xxxx）');
@@ -1741,6 +1839,7 @@ async function handleOpenWorld({ worldId, location, type, region, shortName, for
     detail: res.detail || null,
   };
 }
+
 
 async function handleRemoveFriend({ userId, displayName, confirm }) {
   if (!userId && !displayName) throw new Error('userId or displayName is required');
@@ -2062,15 +2161,17 @@ async function handleScanNewWorlds({ days = 7, dryRun = false }) {
 
   if (!dryRun) {
     const upsert = storage.db.prepare(
-      `INSERT INTO new_worlds (world_id, world_name, author_name, created_at, first_seen_at, favorites, occupants, popularity, visited, visited_at)
-       VALUES (@world_id, @world_name, @author_name, @created_at, @first_seen_at, @favorites, @occupants, @popularity, @visited, @visited_at)
+      `INSERT INTO new_worlds (world_id, world_name, author_name, created_at, first_seen_at, favorites, occupants, popularity, visited, visited_at, tags, description)
+       VALUES (@world_id, @world_name, @author_name, @created_at, @first_seen_at, @favorites, @occupants, @popularity, @visited, @visited_at, @tags, @description)
        ON CONFLICT(world_id) DO UPDATE SET
          world_name = excluded.world_name,
          favorites = excluded.favorites,
          occupants = excluded.occupants,
          popularity = excluded.popularity,
          visited = excluded.visited,
-         visited_at = excluded.visited_at`
+         visited_at = excluded.visited_at,
+         tags = excluded.tags,
+         description = excluded.description`
     );
     const markVisited = storage.db.prepare(
       `UPDATE new_worlds SET visited = 1, visited_at = @visited_at
@@ -2090,6 +2191,8 @@ async function handleScanNewWorlds({ days = 7, dryRun = false }) {
           popularity: w.popularity || 0,
           visited: visited.has(w.id) ? 1 : 0,
           visited_at: visited.has(w.id) ? now : null,
+          tags: Array.isArray(w.tags) ? JSON.stringify(w.tags) : '',
+          description: w.description || '',
         });
         written++;
       }
