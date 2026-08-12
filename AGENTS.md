@@ -174,6 +174,16 @@ cp -r skills/vrc-monitor-companion-query "$HERMES_HOME/skills/"
 | 重启服务 | Hermes 工具 `vrc_restart` |
 | 迁移 VRCX 数据 | `node migrate-vrcx0.mjs`（better-sqlite3 引擎，运行中迁移安全但仍建议先停服务；检测到服务运行会要求 `--force`；**勿重复执行**——重复迁移会重复插入 events，见 Issue #13）；完成后 `node start-monitor.js` |
 
+## 发现漏洞 / 缺陷时（Agent 义务）
+
+Agent 在配置、使用、维护本软件过程中，若发现原始代码存在漏洞 / bug（功能异常、数据损坏风险、安全隐患等），**应当主动提交 issue + PR 修复**，让所有使用者受益：
+
+1. **开 issue**：描述现象、复现步骤、影响范围（不夹带任何凭据 / 本机路径 / 个人账号信息）；
+2. **提修复 PR**：按 [DEVELOPMENT.md](./DEVELOPMENT.md) 的要求执行（单一职责、无个人环境硬编码、DB 变更带幂等迁移、文档同步、Conventional Commits、三段式验证说明）；
+3. **无法自行修复时**：至少提交 issue，说明已发现的证据与猜测方向，由作者或其他 Agent 跟进。
+
+> 这是本项目对 Agent 的明确义务（详见 DEVELOPMENT.md §1「发现缺陷必须主动上报」）：发现问题就地修复并回馈上游，而不是只在本地 fork 里静默改掉。
+
 ## 常见问题
 
 ### OTP 验证码自动抓取失败
