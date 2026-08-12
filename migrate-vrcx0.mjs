@@ -13,6 +13,9 @@
  *    不再整文件重写数据库（旧版 sql.js 的 export() 全量写出是 SQLITE_CORRUPT 根因）。
  *    better-sqlite3 与主服务 storage.js 同引擎（WAL 模式），运行中迁移不再损坏库，
  *    服务运行检测保留为警告级。
+ * ⚠️ 幂等说明：v1.2.0 起迁移记录写入 content_json.vrcxId（源表前缀+源 id），
+ *    配合 events 表 JSON 表达式唯一索引 + INSERT OR IGNORE，重复执行自动跳过已迁移记录。
+ *    旧版（无 vrcxId）迁移数据会被检测并提示，需 --force 才会重插。
  *
  * 迁移内容: 事件流（位置/上下线/Avatar/状态/Bio）、好友列表、世界缓存、备注
  */
@@ -140,7 +143,38 @@ function worldIdFromLocation(location) {
   return idx > 0 ? location.slice(0, idx) : '';
 }
 
-// ── 事务化分批写入（better-sqlite3）──
+// ── 幂等防重（Issue #13）──
+// events 表无主键/唯一约束，纯 INSERT 追加；重复执行迁移会全量重插历史。
+// 方案：迁移时把源记录 id 写入 content_json.vrcxId（带表前缀避免跨表 id 冲突），
+//       并为 events 建 JSON 表达式部分唯一索引 + INSERT OR IGNORE 跳过已迁移记录。
+const VRCX_ID_PREFIX = {
+  feed_gps: 'gps',
+  feed_online_offline: 'oao',
+  feed_avatar: 'avatar',
+  feed_status: 'status',
+  feed_bio: 'bio',
+};
+
+// 唯一索引：仅约束带 vrcxId 的迁移记录（实时采集数据无 vrcxId，不受影响）
+const DEDUP_INDEX_SQL = `
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_events_vrcx_id
+  ON events (json_extract(content_json, '$.vrcxId'))
+  WHERE json_extract(content_json, '$.vrcxId') IS NOT NULL`;
+
+function ensureDedupIndex(db) {
+  db.exec(DEDUP_INDEX_SQL);
+}
+
+// 检测旧版（无 vrcxId）迁移数据：新版脚本重跑旧迁移产生的库会全量重插，需提示
+function countLegacyMigrateRows(db) {
+  const { c } = db.prepare(
+    `SELECT COUNT(*) AS c FROM events
+     WHERE source = 'migrate' AND json_extract(content_json, '$.vrcxId') IS NULL`
+  ).get();
+  return c;
+}
+
+// 事务化分批写入（better-sqlite3）——
 // 每个批次一个事务提交；大表分批避免单事务过大。中断时已提交批次保留，不会留下半成品。
 function insertInBatches(db, rows, batchSize, insertFn) {
   let inserted = 0;
@@ -203,6 +237,27 @@ async function main() {
     log('   ✅ 初始化表结构完成（新库）');
   } else {
     log('   ✅ 加载已有数据库');
+  }
+
+  // ═══════════════════════════════════════════
+  // 1.5 幂等防重准备（Issue #13）
+  // ═══════════════════════════════════════════
+  // 1) 建 vrcxId 唯一索引（幂等；已存在则跳过）
+  try {
+    ensureDedupIndex(monitorDb);
+    log('   ✅ 幂等唯一索引就绪 (idx_events_vrcx_id)');
+  } catch (err) {
+    log(`   ⚠️ 建唯一索引失败: ${err.message}`);
+  }
+  // 2) 检测旧版（无 vrcxId）迁移数据：这类数据重跑会全量重插，需用户确认
+  const legacyMigrate = countLegacyMigrateRows(monitorDb);
+  if (legacyMigrate > 0 && !args.force) {
+    console.log(`\n⚠️  检测到 ${legacyMigrate.toLocaleString()} 条旧版迁移记录（source='migrate' 且无 vrcxId 幂等标记）。`);
+    console.log('   这些记录由旧版迁移脚本生成，重复执行会把它们再次全量插入 events 表。');
+    console.log('   如需强制重新迁移（会重复插入旧数据），请加 --force 确认（风险自负）。');
+    process.exit(1);
+  } else if (legacyMigrate > 0) {
+    log(`⚠️  检测到 ${legacyMigrate.toLocaleString()} 条旧版迁移记录（无 vrcxId），--force 已指定，继续执行（旧数据将重复插入）`);
   }
 
   // ═══════════════════════════════════════════
@@ -349,7 +404,7 @@ async function main() {
     ).all();
     if (rows.length > 0) {
       const stmt = monitorDb.prepare(
-        `INSERT INTO events (type, user_id, display_name, content_json, world_id, world_name, created_at, source)
+        `INSERT OR IGNORE INTO events (type, user_id, display_name, content_json, world_id, world_name, created_at, source)
          VALUES ($type, $userId, $displayName, $contentJson, $worldId, $worldName, $createdAt, $source)`
       );
       const insertFn = (row) => {
@@ -367,6 +422,7 @@ async function main() {
             worldName,
             previousLocation: row.previous_location || '',
             time: row.time || 0,
+            vrcxId: `${VRCX_ID_PREFIX.feed_gps}:${row.id}`,
           }),
           worldId,
           worldName,
@@ -394,7 +450,7 @@ async function main() {
     ).all();
     if (rows.length > 0) {
       const stmt = monitorDb.prepare(
-        `INSERT INTO events (type, user_id, display_name, content_json, world_id, world_name, created_at, source)
+        `INSERT OR IGNORE INTO events (type, user_id, display_name, content_json, world_id, world_name, created_at, source)
          VALUES ($type, $userId, $displayName, $contentJson, $worldId, $worldName, $createdAt, $source)`
       );
       const insertFn = (row) => {
@@ -413,6 +469,7 @@ async function main() {
             location,
             worldName,
             time: row.time || 0,
+            vrcxId: `${VRCX_ID_PREFIX.feed_online_offline}:${row.id}`,
           }),
           worldId,
           worldName,
@@ -442,7 +499,7 @@ async function main() {
     ).all();
     if (rows.length > 0) {
       const stmt = monitorDb.prepare(
-        `INSERT INTO events (type, user_id, display_name, content_json, world_id, world_name, created_at, source)
+        `INSERT OR IGNORE INTO events (type, user_id, display_name, content_json, world_id, world_name, created_at, source)
          VALUES ($type, $userId, $displayName, $contentJson, $worldId, $worldName, $createdAt, $source)`
       );
       const insertFn = (row) => {
@@ -459,6 +516,7 @@ async function main() {
             avatarThumbnailUrl: row.current_avatar_thumbnail_image_url || '',
             previousAvatarImageUrl: row.previous_current_avatar_image_url || '',
             previousAvatarThumbnailUrl: row.previous_current_avatar_thumbnail_image_url || '',
+            vrcxId: `${VRCX_ID_PREFIX.feed_avatar}:${row.id}`,
           }),
           worldId: '',
           worldName: '',
@@ -487,7 +545,7 @@ async function main() {
     ).all();
     if (rows.length > 0) {
       const stmt = monitorDb.prepare(
-        `INSERT INTO events (type, user_id, display_name, content_json, world_id, world_name, created_at, source)
+        `INSERT OR IGNORE INTO events (type, user_id, display_name, content_json, world_id, world_name, created_at, source)
          VALUES ($type, $userId, $displayName, $contentJson, $worldId, $worldName, $createdAt, $source)`
       );
       const insertFn = (row) => {
@@ -503,6 +561,7 @@ async function main() {
             statusDescription: row.status_description || '',
             previousStatus: row.previous_status || '',
             previousStatusDescription: row.previous_status_description || '',
+            vrcxId: `${VRCX_ID_PREFIX.feed_status}:${row.id}`,
           }),
           worldId: '',
           worldName: '',
@@ -530,7 +589,7 @@ async function main() {
     ).all();
     if (rows.length > 0) {
       const stmt = monitorDb.prepare(
-        `INSERT INTO events (type, user_id, display_name, content_json, world_id, world_name, created_at, source)
+        `INSERT OR IGNORE INTO events (type, user_id, display_name, content_json, world_id, world_name, created_at, source)
          VALUES ($type, $userId, $displayName, $contentJson, $worldId, $worldName, $createdAt, $source)`
       );
       const insertFn = (row) => {
@@ -544,6 +603,7 @@ async function main() {
             type: 'bio',
             bio: row.bio || '',
             previousBio: row.previous_bio || '',
+            vrcxId: `${VRCX_ID_PREFIX.feed_bio}:${row.id}`,
           }),
           worldId: '',
           worldName: '',
