@@ -379,6 +379,10 @@ A: 正常。约 30 万行事件 ≈ 300+ MB。better-sqlite3（WAL 模式）按�
 
 **请给我报销 token** 🙏
 
+## 💬 交流群
+
+QQ 群：**851865556** — 欢迎加入，交流使用问题、功能建议与反馈。
+
 ## 📄 License
 
 MIT — 见 [LICENSE](LICENSE)。
