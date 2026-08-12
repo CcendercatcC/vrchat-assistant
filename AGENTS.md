@@ -20,7 +20,7 @@
    - 导入是**可选**的——不导入也能正常使用本服务，只是查询历史活动记录时没有迁移前的旧数据。
    - 若用户**需要导入**，在完成「配置步骤」1-3（服务能正常启动）后，运行 `node migrate-vrcx0.mjs` 导入数据（脚本会自动探测 VRCX 数据库路径和 userId）。
    - **迁移引擎（v1.1.0 起）**：改用 **better-sqlite3**（与主服务同引擎，WAL 模式），已移除旧版 sql.js 整文件重写（该方式曾导致 `SQLITE_CORRUPT`，2026-08-12 实测踩坑后由 PR #10 防呆 + PR #12 根因修复）。服务运行中迁移不再损坏数据库，但仍**建议迁移前停止服务**（避免与服务的实时写入交错）。脚本内置 127.0.0.1:8799 端口检测：检测到服务运行时会给出警告，需加 `--force` 确认后继续（风险自负）。
-   - **⚠️ 已知限制**：重复执行迁移会**重复插入 events 数据**（无幂等防重，friends/world_cache 不受影响），仅在确有需要时执行一次。迁移完成后 `node start-monitor.js` 启动服务。
+   - **✅ 幂等说明（v1.2.0 起，PR #14 已修复）**：迁移记录带 `vrcxId` 标记 + events 表 JSON 表达式唯一索引 + `INSERT OR IGNORE`，**重复执行自动跳过已迁移记录**（只补新增，不重复插入）。旧版脚本（无 vrcxId）产生的迁移数据会被检测并提示，需 `--force` 才会重插（防误全量重插）。迁移完成后 `node start-monitor.js` 启动服务。
    - 若用户**不需要导入**，直接进入「配置步骤」。
 
 | 迁移项 | VRCX 数据表 | 说明 |
@@ -172,7 +172,7 @@ cp -r skills/vrc-monitor-companion-query "$HERMES_HOME/skills/"
 | 查看服务状态 | Hermes 工具 `vrc_status` 或桌面插件面板 |
 | 配置账号 | 桌面插件「配置」弹窗，或编辑 `credentials.json` |
 | 重启服务 | Hermes 工具 `vrc_restart` |
-| 迁移 VRCX 数据 | `node migrate-vrcx0.mjs`（better-sqlite3 引擎，运行中迁移安全但仍建议先停服务；检测到服务运行会要求 `--force`；**勿重复执行**——重复迁移会重复插入 events，见 Issue #13）；完成后 `node start-monitor.js` |
+| 迁移 VRCX 数据 | `node migrate-vrcx0.mjs`（better-sqlite3 引擎，运行中迁移安全但仍建议先停服务；检测到服务运行会要求 `--force`；**可重复执行**——v1.2.0 起幂等，自动跳过已迁移记录，旧数据需 `--force` 重插，见 PR #14）；完成后 `node start-monitor.js` |
 
 ## 发现漏洞 / 缺陷时（Agent 义务）
 
