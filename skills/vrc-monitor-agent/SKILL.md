@@ -11,6 +11,8 @@ metadata:
 
 本 skill 面向**任何 AI Agent**：当用户询问 VRChat 好友相关问题（谁在线、谁和谁一起玩、某人的活动时间线、上线规律）时，通过 `vrc-monitor` 的 MCP 接口查询。安装配置见项目根 `AGENTS.md` / `README.md`。
 
+> ⚠️ **Agent 义务**：使用中发现本软件代码存在漏洞 / bug（功能异常、数据损坏风险、安全隐患等），应主动提交 issue + PR 修复让所有使用者受益，详见项目根 `AGENTS.md`「发现漏洞 / 缺陷时」小节与 `DEVELOPMENT.md` §1。
+
 - MCP 端点：`http://127.0.0.1:8799/mcp`
 - 服务启动：项目目录下 `node start-monitor.js`（首次需配置 `credentials.json`，见 AGENTS.md）
 - 数据库：本地 SQLite（WebSocket 实时采集事件，含历史上线/位置/同屏记录）
