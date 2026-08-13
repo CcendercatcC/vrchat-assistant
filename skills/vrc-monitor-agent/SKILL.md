@@ -17,7 +17,7 @@ metadata:
 - 服务启动：项目目录下 `node start-monitor.js`（首次需配置 `credentials.json`，见 AGENTS.md）
 - 数据库：本地 SQLite（WebSocket 实时采集事件，含历史上线/位置/同屏记录）
 
-## MCP 工具（55 个）
+## MCP 工具（60 个）
 
 | 工具 | 说明 |
 |------|------|
@@ -38,7 +38,9 @@ metadata:
 | `get_world_history` | 世界信息变更历史（name/description/author/image_url/release_status/capacity/tags 字段级记录） |
 | `get_weekly_report` | 一周游戏周报（活跃天数/时长/世界 Top/同屏伙伴带昵称/自己的上线规律/群组活动/圈内活动日历；days 默认 7） |
 | `scan_new_worlds` | 扫描最近 N 天新世界（1-30，默认 7），过滤测试/垃圾图后写入 new_worlds 表，按热度推荐 TOP10；dryRun 只看不写 |
-| `get_new_worlds` | 只读查询已跟踪新世界：onlyUnvisited 只看未逛过、sortBy（favorites/occupants/popularity/created_at）、limit（默认 10 最大 50） |
+| `get_new_worlds` | 只读查询已跟踪新世界：onlyUnvisited 只看未逛过、sortBy（favorites/occupants/popularity/created_at）、excludeTheme 排除主题（按 author_tag_* 逗号分隔，SQL 层排除）、limit（默认 10 最大 50） |
+| `rate_world` | **用户反馈**：给世界打好评/烂图标记（rating: 1=好图加权 / -1=烂图降权 / 0=清除），写入 new_worlds.user_rating，影响 worldScore 推荐排序 |
+| `mark_world_visited` | **显式确认逛过**某世界（事件驱动 visited 会漏记，开图闭环手动确认用） |
 | `get_nicknames` / `set_nickname` | 好友昵称映射（查询/写入，本地库） |
 | `get_mutual_friends` | 共同好友列表：你与目标用户（userId 或 displayName 精确匹配）的共同好友，自动带本地昵称 |
 | `get_watchlist` / `add_to_watchlist` / `remove_from_watchlist` | 关注名单 |
