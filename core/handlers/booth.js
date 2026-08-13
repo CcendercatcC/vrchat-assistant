@@ -63,7 +63,15 @@ function parseSearchCards(html) {
     if (seen.has(id)) continue;
     const block = m[2];
     // 跳过空链接块（缩略图 <a></a>），等标题链接
-    const text = block.replace(/<[^>]+>/g, '').trim();
+    // CodeQL #14: 循环移除标签直到稳定（防嵌套构造 <scr<script>ipt> 绕过一次替换），
+    // 再清残留孤立尖括号（未闭合的 <script 在 innerHTML 解析中同样危险）
+    let text = block;
+    let prev;
+    do {
+      prev = text;
+      text = text.replace(/<[^>]*>/g, '');
+    } while (text !== prev);
+    text = text.replace(/[<>]/g, '').trim();
     if (!text) continue;
     seen.add(id);
     const name = text.slice(0, 200);
