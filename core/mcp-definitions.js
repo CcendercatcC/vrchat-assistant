@@ -1,5 +1,5 @@
 /**
- * MCP 工具定义 — 66 个工具的 name + description + inputSchema
+ * MCP 工具定义 — name + description + inputSchema
  *
  * 纯数据模块，无运行时依赖。
  * start-monitor.js 导入后在 tools/list 和启动校验中使用。

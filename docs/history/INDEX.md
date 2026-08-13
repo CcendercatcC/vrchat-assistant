@@ -49,7 +49,7 @@
 2. **记录单元**：一次发布 / 一个 PR / 一个关键 commit = 一条；无 PR 的直接 commit 按能力域合并
 3. **必带"演进意义"**：每条写"为什么做 / 解决什么痛点 / 确立什么模式"——这是本目录与 git log 的区别
 4. **漂移检测 + 自动修复**：
-   - 权威工具数 = `core/mcp-definitions.js` 中 `name: '...'` 正则计数（当前 66）
-   - 检查点：README 数字、AGENTS.md、mcp-definitions.js 头部注释、GitHub repo 描述、plugin.yaml 版本 vs package.json
-   - 发现不一致 → 直接修正并 commit，不需要等用户确认（用户已拍板自动修复）
+   - **不维护工具总数**（2026-08-14 拍板全仓库去数字，避免随工具膨胀反复更新）
+   - 检查点：README/AGENTS 工具清单是否覆盖代码新增工具、全仓库有无工具数残留、plugin.yaml 版本 vs package.json、GitHub repo 描述是否含过时数字
+   - 发现不一致 → 直接修正并 commit，不需要等用户确认（用户已拍板自动修复）；GitHub 描述需 owner 权限，检测到过时则提醒用户手动改
 5. **commit 规范**：Conventional Commits，`docs(history): ...` 前缀

@@ -2,7 +2,7 @@
  * VRChat 好友监控系统 — 主入口
  * 
  * 独立 MCP 服务（不依赖 VRCX-0）
- * 提供 WebSocket 实时监控 + SQLite 存储 + 55 个 MCP 工具
+ * 提供 WebSocket 实时监控 + SQLite 存储 + MCP 工具服务
  * 
  * 启动: node start-monitor.js
  */
