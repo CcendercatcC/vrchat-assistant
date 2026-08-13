@@ -379,7 +379,31 @@ export const CUSTOM_TOOLS = [
         onlyUnvisited: { type: 'boolean', default: false, description: 'Only return worlds the user has not visited' },
         limit: { type: 'number', default: 10, description: 'Max rows (1-50, default 10)' },
         sortBy: { type: 'string', enum: ['favorites', 'occupants', 'popularity', 'created_at'], default: 'favorites', description: 'Sort field (descending)' },
+        excludeTheme: { type: 'string', description: 'Comma-separated theme keywords to exclude (matched against author tags, e.g. "game,horror,dance")' },
       },
+    },
+  },
+  {
+    name: 'rate_world',
+    description: '[action] Rate a world as good/junk for recommendation feedback (Issue #19). rating=1 good (weighted up), -1 junk (weighted down/excluded), 0 clear.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        worldId: { type: 'string', description: 'VRChat world ID (wrld_...)' },
+        rating: { type: 'number', enum: [-1, 0, 1], description: '-1=junk, 0=clear, 1=good' },
+      },
+      required: ['worldId', 'rating'],
+    },
+  },
+  {
+    name: 'mark_world_visited',
+    description: '[action] Explicitly mark a world as visited (Issue #19: event-driven visited can miss). Useful to close the recommend-open-browse loop.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        worldId: { type: 'string', description: 'VRChat world ID (wrld_...)' },
+      },
+      required: ['worldId'],
     },
   },
   {
