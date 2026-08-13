@@ -110,11 +110,15 @@ export async function handleScanNewWorlds({ days = 7, dryRun = false }) {
 
   // 注入 DB 用户反馈（user_rating）到候选对象——否则 worldScore 加权对 API 对象恒为 0（Review 修复 #1）
   // unvisited 来自 API 拉取对象（无 userRating 字段），按 worldId 批量查 new_worlds 的 user_rating
+  const ratingParams = {};
   const ratingRows = unvisited.length > 0
-    ? storage._query(
-        `SELECT world_id, user_rating FROM new_worlds WHERE world_id IN (${unvisited.map(() => '?').join(',')})`,
-        unvisited.map(w => w.id)
-      )
+    ? (() => {
+        unvisited.forEach((w, i) => { ratingParams[`w${i}`] = w.id; });
+        return storage._query(
+          `SELECT world_id, user_rating FROM new_worlds WHERE world_id IN (${unvisited.map((_, i) => `$w${i}`).join(',')})`,
+          ratingParams
+        );
+      })()
     : [];
   const ratingMap = new Map(ratingRows.map(r => [r.world_id, r.user_rating || 0]));
 
