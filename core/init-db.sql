@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS world_cache (
   capacity INTEGER,
   favorites INTEGER,
   tags TEXT,                       -- JSON array
+  favorited INTEGER DEFAULT 0,     -- 云端收藏标记（favorite_world 成功时写 1）
   updated_at TEXT DEFAULT (datetime('now'))
 );
 

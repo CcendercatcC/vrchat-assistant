@@ -711,4 +711,16 @@ export const CUSTOM_TOOLS = [
     description: '[配置·选择学习] 查看推荐选择学习状态：累计选择数、自动分析出的偏好（人数倾向/熟悉度加权/安静图倾向）与生效中的权重调整。',
     inputSchema: { type: 'object', properties: {} },
   },
+  {
+    name: 'favorite_world',
+    description: '[action·写操作] 把世界加入你的 VRChat 云端收藏夹（POST /favorites，云端写入，调用前请与用户确认）。tag 为收藏分组（worlds0/worlds1/worlds2/worlds3/worlds4，默认 worlds0）。成功后本地 world_cache 标记 favorited=1（供推荐加权）。API 拒绝（如重复收藏）时返回 favorited:false + error，不抛错。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        worldId: { type: 'string', description: 'VRChat world id (wrld_...)' },
+        tag: { type: 'string', description: '收藏夹分组 tag（worlds0/worlds1/worlds2/worlds3/worlds4，默认 worlds0）' },
+      },
+      required: ['worldId'],
+    },
+  },
 ];

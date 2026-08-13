@@ -354,6 +354,11 @@ export async function handleRpc(rpc, session, res) {
           case 'get_join_learning':
             result = await handleGetJoinLearning();
             break;
+          case 'favorite_world': {
+            // 写操作（POST /favorites），经限流器
+            result = await rateLimiter.execute(() => handleFavoriteWorld(args));
+            break;
+          }
           default:
             throw new Error(`Unknown tool: ${name}`);
         }

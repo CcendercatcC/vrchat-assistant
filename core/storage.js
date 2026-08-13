@@ -32,6 +32,11 @@ export class Storage {
     if (!worldCols.some(c => c.name === 'note')) {
       this._run(`ALTER TABLE world_cache ADD COLUMN note TEXT`);
     }
+    // 迁移：旧库 world_cache 缺 favorited 列（favorite_world 云端收藏本地标记，幂等）
+    const wcFavCols = this._query(`PRAGMA table_info(world_cache)`);
+    if (!wcFavCols.some(c => c.name === 'favorited')) {
+      this._run(`ALTER TABLE world_cache ADD COLUMN favorited INTEGER DEFAULT 0`);
+    }
     // 迁移：旧库 new_worlds 缺 sleep_ok 列（recommend_join 睡觉图评分用，幂等）
     const nwCols = this._query(`PRAGMA table_info(new_worlds)`);
     if (!nwCols.some(c => c.name === 'sleep_ok')) {
@@ -393,6 +398,19 @@ export class Storage {
     const rows = this._query(`SELECT world_id, note FROM world_cache WHERE world_id = $worldId`, { $worldId: worldId });
     const r = rows[0];
     return { worldId: r.world_id, note: r.note };
+  }
+
+  /** 云端收藏标记：favorite_world 成功后写本地 world_cache（Issue #25），世界不存在时插入兜底行 */
+  setWorldFavorited({ worldId, favorited = 1 }) {
+    this._run(
+      `INSERT INTO world_cache (world_id, name, favorited)
+       VALUES ($worldId, '', $favorited)
+       ON CONFLICT(world_id) DO UPDATE SET favorited = $favorited, updated_at = datetime('now')`,
+      { $worldId: worldId, $favorited: favorited ? 1 : 0 }
+    );
+    const rows = this._query(`SELECT world_id, name, favorited FROM world_cache WHERE world_id = $worldId`, { $worldId: worldId });
+    const row = rows[0];
+    return { worldId: row.world_id, name: row.name || '', favorited: row.favorited === 1 };
   }
 
   /**
