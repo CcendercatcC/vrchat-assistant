@@ -79,6 +79,8 @@ import {
   handleGetServerStatus,
   handleScanNewWorlds,
   handleGetNewWorlds,
+  handleRateWorld,
+  handleMarkWorldVisited,
   handleGetWatchlist,
   handleAddToWatchlist,
   handleRemoveFromWatchlist,
@@ -256,6 +258,12 @@ export async function handleRpc(rpc, session, res) {
             break;
           case 'get_new_worlds':
             result = handleGetNewWorlds(args);
+            break;
+          case 'rate_world':
+            result = handleRateWorld(args);
+            break;
+          case 'mark_world_visited':
+            result = handleMarkWorldVisited(args);
             break;
           case 'get_watchlist':
             result = handleGetWatchlist();

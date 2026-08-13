@@ -134,37 +134,74 @@ export async function handleScanNewWorlds({ days = 7, dryRun = false }) {
   };
 }
 
-export function handleGetNewWorlds({ onlyUnvisited = false, limit = 10, sortBy = 'favorites' }) {
+export function handleGetNewWorlds({ onlyUnvisited = false, limit = 10, sortBy = 'favorites', excludeTheme = '' }) {
   const { storage } = ctx;
   if (!['favorites', 'occupants', 'popularity', 'created_at'].includes(sortBy)) sortBy = 'favorites';
   limit = Math.min(Math.max(parseInt(limit, 10) || 10, 1), 50);
+
+  // Issue #19 痛点 4：排除主题（按 author_tag_* 匹配，逗号分隔）
+  const excludedThemes = typeof excludeTheme === 'string' && excludeTheme.trim()
+    ? excludeTheme.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+    : [];
 
   const total = storage._query(
     `SELECT COUNT(*) AS cnt FROM new_worlds${onlyUnvisited ? ' WHERE visited = 0' : ''}`
   )[0].cnt;
 
   const rows = storage._query(
-    `SELECT world_id, world_name, author_name, created_at, first_seen_at, favorites, occupants, popularity, visited, visited_at
+    `SELECT world_id, world_name, author_name, created_at, first_seen_at, favorites, occupants, popularity, visited, visited_at, tags, user_rating
      FROM new_worlds
      ${onlyUnvisited ? 'WHERE visited = 0' : ''}
      ORDER BY ${sortBy} DESC
      LIMIT ${limit}`
   );
 
-  const worlds = rows.map(r => ({
-    worldId: r.world_id,
-    worldName: r.world_name,
-    authorName: r.author_name,
-    created: r.created_at,
-    firstSeen: r.first_seen_at,
-    favorites: r.favorites,
-    occupants: r.occupants,
-    popularity: r.popularity,
-    visited: r.visited === 1,
-    visitedAt: r.visited_at,
-  }));
+  const worlds = rows
+    .map(r => {
+      let worldTags = [];
+      try { worldTags = JSON.parse(r.tags || '[]'); } catch (_) {}
+      const themeTags = worldTags.filter(t => t.startsWith('author_tag_')).map(t => t.replace('author_tag_', '').toLowerCase());
+      return {
+        worldId: r.world_id,
+        worldName: r.world_name,
+        authorName: r.author_name,
+        created: r.created_at,
+        firstSeen: r.first_seen_at,
+        favorites: r.favorites,
+        occupants: r.occupants,
+        popularity: r.popularity,
+        visited: r.visited === 1,
+        visitedAt: r.visited_at,
+        tags: themeTags,
+        userRating: r.user_rating || 0,
+        excluded: excludedThemes.some(t => themeTags.includes(t)),
+      };
+    })
+    .filter(w => !w.excluded);
 
   return { total, worlds };
+}
+
+/** 用户反馈：好图/烂图标记（Issue #19） */
+export function handleRateWorld({ worldId, rating = 0 }) {
+  const { storage } = ctx;
+  if (!worldId) throw new Error('worldId is required');
+  const r = parseInt(rating, 10);
+  if (r !== -1 && r !== 0 && r !== 1) {
+    throw new Error('rating must be -1 (junk), 0 (clear), or 1 (good)');
+  }
+  const result = storage.rateWorld({ worldId, rating: r });
+  log(`⭐ 用户反馈: ${worldId} → rating=${result.userRating}${result.worldName ? ` (${result.worldName})` : ''}`);
+  return result;
+}
+
+/** 显式确认逛过某世界（Issue #19 痛点 3） */
+export function handleMarkWorldVisited({ worldId }) {
+  const { storage } = ctx;
+  if (!worldId) throw new Error('worldId is required');
+  const result = storage.markWorldVisited({ worldId });
+  log(`✅ 手动标记 visited: ${worldId}${result.worldName ? ` (${result.worldName})` : ''}`);
+  return result;
 }
 
 export function handleGetWatchlist() {

@@ -53,6 +53,11 @@ export class Storage {
     if (!nwCols2.some(c => c.name === 'source')) {
       this._run(`ALTER TABLE new_worlds ADD COLUMN source TEXT DEFAULT 'new'`);
     }
+    // 迁移：旧库 new_worlds 缺 user_rating 列（rate_world 用户反馈，幂等）
+    const nwCols3 = this._query(`PRAGMA table_info(new_worlds)`);
+    if (!nwCols3.some(c => c.name === 'user_rating')) {
+      this._run(`ALTER TABLE new_worlds ADD COLUMN user_rating INTEGER DEFAULT 0`);
+    }
     return this;
   }
 
@@ -357,6 +362,39 @@ export class Storage {
     const rows = this._query(`SELECT world_id, note FROM world_cache WHERE world_id = $worldId`, { $worldId: worldId });
     const r = rows[0];
     return { worldId: r.world_id, note: r.note };
+  }
+
+  /**
+   * 用户反馈：给世界打好评/差评标记（Issue #19）
+   * rating: -1=烂图(junk) / 0=清除标记 / 1=好图
+   * 若世界不在 new_worlds 表（如手动收藏的世界），自动插入一行兜底。
+   */
+  rateWorld({ worldId, rating = 0 }) {
+    const r = parseInt(rating, 10);
+    const finalRating = r === -1 ? -1 : (r === 1 ? 1 : 0);
+    this._run(
+      `INSERT INTO new_worlds (world_id, world_name, user_rating)
+       VALUES ($worldId, '', $rating)
+       ON CONFLICT(world_id) DO UPDATE SET user_rating = $rating`,
+      { $worldId: worldId, $rating: finalRating }
+    );
+    const rows = this._query(`SELECT world_id, world_name, user_rating FROM new_worlds WHERE world_id = $worldId`, { $worldId: worldId });
+    const row = rows[0];
+    return { worldId: row.world_id, worldName: row.world_name || '', userRating: row.user_rating };
+  }
+
+  /** 显式确认逛过某个世界（Issue #19 痛点 3：事件驱动 visited 不可靠） */
+  markWorldVisited({ worldId }) {
+    const now = new Date().toISOString();
+    this._run(
+      `INSERT INTO new_worlds (world_id, world_name, visited, visited_at)
+       VALUES ($worldId, '', 1, $now)
+       ON CONFLICT(world_id) DO UPDATE SET visited = 1, visited_at = $now`,
+      { $worldId: worldId, $now: now }
+    );
+    const rows = this._query(`SELECT world_id, world_name, visited, visited_at FROM new_worlds WHERE world_id = $worldId`, { $worldId: worldId });
+    const row = rows[0];
+    return { worldId: row.world_id, worldName: row.world_name || '', visited: row.visited === 1, visitedAt: row.visited_at };
   }
 
   getWorldHistory(worldId, limit = 50) {
