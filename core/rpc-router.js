@@ -61,6 +61,12 @@ import {
   handleRecommendPlanetWorlds,
 } from './handlers/planet.js';
 
+import { handleRecommendWorlds } from './handlers/recommend-worlds.js';
+
+import {
+  handleFavoriteWorld,
+} from './handlers/favorites.js';
+
 import {
   handleGetBoopEmojis,
   handleUploadEmoji,
@@ -312,6 +318,11 @@ export async function handleRpc(rpc, session, res) {
             break;
           case 'recommend_planet_worlds':
             result = await handleRecommendPlanetWorlds(args);
+            break;
+          case 'recommend_worlds':
+            // 不包 rateLimiter：handleRecommendWorlds 内部对官方/planet API 调用已逐请求限流
+            // （再包一层会嵌套死锁：外层占队列时内层 _processQueue 不执行，参照 scan_new_worlds）
+            result = await handleRecommendWorlds(args);
             break;
           case 'backup_database':
             result = await handleBackupDatabase();

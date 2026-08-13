@@ -99,11 +99,19 @@ CREATE TABLE IF NOT EXISTS group_cache (
   updated_at TEXT DEFAULT (datetime('now'))
 );
 
+-- PlanetVRC 抓取结果 TTL 缓存（推荐融合用；排行/搜索页 6h、详情页 24h，调用方传 TTL）
+CREATE TABLE IF NOT EXISTS planet_cache (
+  key TEXT PRIMARY KEY,
+  payload TEXT,                  -- JSON 字符串
+  fetched_at TEXT                -- 写入时间 ISO 8601
+);
+
 -- 新地图追踪（scan_new_worlds MCP 工具维护：新发布世界的收藏/逛过标记）
 CREATE TABLE IF NOT EXISTS new_worlds (
   world_id TEXT PRIMARY KEY,
   world_name TEXT NOT NULL DEFAULT '',
   author_name TEXT DEFAULT '',
+  author_id TEXT DEFAULT '',     -- 世界作者 ID（作者维度推荐用）
   created_at TEXT,               -- 世界创建时间（API）
   first_seen_at TEXT,            -- 首次被本工具记录的时间
   favorites INTEGER DEFAULT 0,   -- 最近一次抓取时的收藏数（热度）

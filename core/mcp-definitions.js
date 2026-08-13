@@ -562,6 +562,21 @@ export const CUSTOM_TOOLS = [
     },
   },
   {
+    name: 'recommend_worlds',
+    description: '[query·推荐] Multi-source world recommendation: fuses local new_worlds + PlanetVRC popularity ranking + official theme search, scored by heat × user feedback × freshness × theme match × author affinity. Returns scored candidates with explainable reasons and canOpen flag (planet cards are resolved to wrld_ ids via official name lookup).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        theme: { type: 'string', enum: ['sleep', 'chat', 'onsen', 'game', 'default'], default: 'default', description: 'Theme to boost (sleep boosts sleep_ok worlds strongly; other themes boost keyword matches)' },
+        excludeTheme: { type: 'string', description: 'Comma-separated themes to exclude (matched against author_tag_* and name/description keywords, e.g. "game,horror")' },
+        limit: { type: 'number', default: 5, description: 'Max results (1-10, default 5)' },
+        sources: { type: 'string', default: 'local,planet', description: 'Comma-separated sources: local (new_worlds table), planet (PlanetVRC ranking), official (theme keyword search)' },
+        excludeVisited: { type: 'boolean', default: true, description: 'Skip worlds already visited' },
+        detail: { type: 'boolean', default: true, description: 'Enrich description/imageUrl/note from world_cache' },
+      },
+    },
+  },
+  {
     name: 'get_group_heat',
     description: '[query·热度] Group activity heat: rank groups by how much your friends/you were in their group rooms (activityCount, friendCount, worldCount, trendPct vs previous equal window) + day-of-week×hour Beijing-time heatmap for top groups. Data from local event history (supports grp_/gmem_ ids).',
     inputSchema: {

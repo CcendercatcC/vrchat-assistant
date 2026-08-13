@@ -58,6 +58,11 @@ export class Storage {
     if (!nwCols3.some(c => c.name === 'user_rating')) {
       this._run(`ALTER TABLE new_worlds ADD COLUMN user_rating INTEGER DEFAULT 0`);
     }
+    // 迁移：旧库 new_worlds 缺 author_id 列（作者维度推荐用，幂等）
+    const nwCols4 = this._query(`PRAGMA table_info(new_worlds)`);
+    if (!nwCols4.some(c => c.name === 'author_id')) {
+      this._run(`ALTER TABLE new_worlds ADD COLUMN author_id TEXT DEFAULT ''`);
+    }
     // 迁移：历史 tags='' 脏数据统一为 '[]'（json_each 对空串抛 malformed JSON，Review R2）
     this._run(`UPDATE new_worlds SET tags = '[]' WHERE tags IS NULL OR tags = ''`);
     return this;
@@ -351,6 +356,30 @@ export class Storage {
          name = excluded.name, description = excluded.description,
          member_count = excluded.member_count, updated_at = datetime('now')`,
       { $g: groupId, $name: name || '', $desc: description || '', $mc: memberCount || 0 }
+    );
+  }
+
+  // ── PlanetVRC TTL 缓存 ──
+
+  /** 读缓存：不存在或超 ttlMs 返回 null，否则 JSON.parse(payload) */
+  getPlanetCache(key, ttlMs) {
+    const rows = this._query(`SELECT payload, fetched_at FROM planet_cache WHERE key = $key`, { $key: key });
+    if (rows.length === 0) return null;
+    const row = rows[0];
+    if (ttlMs && row.fetched_at) {
+      const fetchedMs = Date.parse(row.fetched_at);
+      if (Number.isFinite(fetchedMs) && Date.now() - fetchedMs > ttlMs) return null;
+    }
+    try { return JSON.parse(row.payload); } catch { return null; }
+  }
+
+  /** 写缓存：payload 传对象，内部 JSON.stringify，fetched_at 存 ISO 时间戳 */
+  setPlanetCache(key, payload) {
+    this._run(
+      `INSERT INTO planet_cache (key, payload, fetched_at)
+       VALUES ($key, $payload, $fetchedAt)
+       ON CONFLICT(key) DO UPDATE SET payload = excluded.payload, fetched_at = excluded.fetched_at`,
+      { $key: key, $payload: JSON.stringify(payload), $fetchedAt: new Date().toISOString() }
     );
   }
 

@@ -62,10 +62,11 @@ export async function handleScanNewWorlds({ days = 7, dryRun = false }) {
 
   if (!dryRun) {
     const upsert = storage.db.prepare(
-      `INSERT INTO new_worlds (world_id, world_name, author_name, created_at, first_seen_at, favorites, occupants, popularity, visited, visited_at, tags, description)
-       VALUES (@world_id, @world_name, @author_name, @created_at, @first_seen_at, @favorites, @occupants, @popularity, @visited, @visited_at, @tags, @description)
+      `INSERT INTO new_worlds (world_id, world_name, author_name, author_id, created_at, first_seen_at, favorites, occupants, popularity, visited, visited_at, tags, description)
+       VALUES (@world_id, @world_name, @author_name, @author_id, @created_at, @first_seen_at, @favorites, @occupants, @popularity, @visited, @visited_at, @tags, @description)
        ON CONFLICT(world_id) DO UPDATE SET
          world_name = excluded.world_name,
+         author_id = excluded.author_id,
          favorites = excluded.favorites,
          occupants = excluded.occupants,
          popularity = excluded.popularity,
@@ -85,6 +86,7 @@ export async function handleScanNewWorlds({ days = 7, dryRun = false }) {
           world_id: w.id,
           world_name: w.name || '',
           author_name: w.authorName || '',
+          author_id: w.authorId || '',
           created_at: w.created_at || null,
           first_seen_at: now,
           favorites: w.favorites || 0,
