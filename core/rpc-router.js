@@ -57,6 +57,11 @@ import {
 } from './handlers/groups.js';
 
 import {
+  handleSearchPlanetWorlds,
+  handleRecommendPlanetWorlds,
+} from './handlers/planet.js';
+
+import {
   handleGetBoopEmojis,
   handleUploadEmoji,
   handleUploadPrint,
@@ -293,6 +298,12 @@ export async function handleRpc(rpc, session, res) {
             break;
           case 'search_worlds':
             result = await rateLimiter.execute(() => handleSearchWorlds(args));
+            break;
+          case 'search_planet_worlds':
+            result = await handleSearchPlanetWorlds(args);
+            break;
+          case 'recommend_planet_worlds':
+            result = await handleRecommendPlanetWorlds(args);
             break;
           case 'backup_database':
             result = await handleBackupDatabase();
