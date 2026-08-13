@@ -58,6 +58,8 @@ export class Storage {
     if (!nwCols3.some(c => c.name === 'user_rating')) {
       this._run(`ALTER TABLE new_worlds ADD COLUMN user_rating INTEGER DEFAULT 0`);
     }
+    // 迁移：历史 tags='' 脏数据统一为 '[]'（json_each 对空串抛 malformed JSON，Review R2）
+    this._run(`UPDATE new_worlds SET tags = '[]' WHERE tags IS NULL OR tags = ''`);
     return this;
   }
 
@@ -373,8 +375,8 @@ export class Storage {
     const r = parseInt(rating, 10);
     const finalRating = r === -1 ? -1 : (r === 1 ? 1 : 0);
     this._run(
-      `INSERT INTO new_worlds (world_id, world_name, user_rating)
-       VALUES ($worldId, '', $rating)
+      `INSERT INTO new_worlds (world_id, world_name, tags, user_rating)
+       VALUES ($worldId, '', '[]', $rating)
        ON CONFLICT(world_id) DO UPDATE SET user_rating = $rating`,
       { $worldId: worldId, $rating: finalRating }
     );
@@ -387,8 +389,8 @@ export class Storage {
   markWorldVisited({ worldId }) {
     const now = new Date().toISOString();
     this._run(
-      `INSERT INTO new_worlds (world_id, world_name, visited, visited_at)
-       VALUES ($worldId, '', 1, $now)
+      `INSERT INTO new_worlds (world_id, world_name, tags, visited, visited_at)
+       VALUES ($worldId, '', '[]', 1, $now)
        ON CONFLICT(world_id) DO UPDATE SET visited = 1, visited_at = $now`,
       { $worldId: worldId, $now: now }
     );

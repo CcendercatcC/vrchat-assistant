@@ -167,9 +167,10 @@ export function handleGetNewWorlds({ onlyUnvisited = false, limit = 10, sortBy =
   if (onlyUnvisited) where += 'WHERE visited = 0';
   if (excludedThemes.length > 0) {
     // 排除 = 不存在任何匹配主题的行（json_each 拆 JSON tags 数组匹配）
+    // 兜底：json_valid(tags) 为假（空串/脏数据）时按 '[]' 处理，避免 malformed JSON 崩溃
     const notExists = excludedThemes.map((_, i) =>
       `NOT EXISTS (
-        SELECT 1 FROM json_each(new_worlds.tags)
+        SELECT 1 FROM json_each(CASE WHEN json_valid(new_worlds.tags) THEN new_worlds.tags ELSE '[]' END)
         WHERE lower(value) = $th${i}
       )`
     ).join(' AND ');
