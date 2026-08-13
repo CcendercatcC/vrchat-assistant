@@ -30,6 +30,7 @@ QQ 群：**851865556** — 欢迎加入，交流使用问题、功能建议与�
 - **fork 自由**：MIT 协议，任何人可以 fork，让 AI Agent 按自己的需求扩展，无需事先征得同意。
 - **提交 PR 有要求**：单一职责、不破坏现有行为、DB 变更带迁移、文档同步、不提交密钥等 11 条硬性要求，详见 [DEVELOPMENT.md](./DEVELOPMENT.md)。
 - 面向 AI Agent 的部署配置引导见 [AGENTS.md](./AGENTS.md)。
+- **项目演进记录**见 [docs/history/](./docs/history/INDEX.md)——里程碑时间线、每月发布/PR/关键 commit 与演进意义（为什么做、确立了什么模式），新 Agent 上手建议先读。
 
 ---
 
@@ -337,6 +338,7 @@ mcp_servers:
 ├── AGENTS.md                  # Agent 部署配置引导
 ├── ARCHITECTURE.md            # 系统架构文档
 ├── DEVELOPMENT.md             # 开发规范
+├── docs/history/               # 演进记录（月度，含里程碑时间线）
 └── README.md
 ```
 
