@@ -157,6 +157,25 @@ curl -s http://127.0.0.1:8799/mcp -X POST -H "Content-Type: application/json" \
 
 建议用昵称代替原始显示名以提高可读性。companion 数据可展示为：`| 排名 | 好友 | 共处时间 | 同屏实例 | 最近一次 |`，并附一行小结总结社交模式。
 
+### 地图/世界展示格式（用户固化要求）
+
+展示地图列表时按此格式（6 列）：
+
+```
+| 序号 | 封面 | 地图名称 | 热度 | 备注 | 地图链接 |
+```
+
+- **序号**：列表最前方，从 1 递增
+- **封面**：`imageUrl`，Markdown 内嵌 `![短名](url)`
+- **热度**：取 `heat` 中**优先级最高的非零字段**（officialFavorites > occupants > planetVisitors，与 recommend_worlds 输出一致），格式 `<icon><数值><单位>`：🔴≥100万 / 🔵≥1万 / ⚪<1万；数值≥1万时缩略为「万」（保留 1 位小数，如 `507万`、`7.4万`），<1万显示原数（如 `5068`）
+- **备注**：`note`（用户备注，无则省略该列）
+- **地图链接**：位于**备注后**，格式 `https://vrchat.com/home/world/{worldId}`（worldId 拼接）
+- **封面列省略规则**：封面无数据 或 QQ Bot 场景（QQ 消息无法渲染外链图片）时省略封面列，其余列不变
+
+完整示例（含封面）：`| 1 | ![超軽量ログインワールド](https://planetvrchat.net/wp-content/uploads/fetch-vrc-world/images/53110-thumb.webp) | 超軽量ログインワールド | 🔴507万 | 登录用轻量图 | https://vrchat.com/home/world/wrld_6a246432-e224-454f-8962-615182276e26 |`
+
+QQ Bot 场景示例（无封面）：`| 1 | 超軽量ログインワールド | 🔴507万 | 登录用轻量图 | https://vrchat.com/home/world/wrld_6a246432-e224-454f-8962-615182276e26 |`
+
 ## 常见陷阱
 
 ### 时间戳
