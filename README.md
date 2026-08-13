@@ -3,7 +3,7 @@
 
 > 技术栈：Node.js + SQLite + WebSocket + MCP + Hermes 插件
 
-通过 WebSocket 实时采集好友上下线、世界切换、Avatar/状态变化并入库。以 60 个 MCP 工具向 AI Agent 暴露全部能力——不只查询，还涵盖社交互动（戳戳/邀请/好友请求）、媒体管理（emoji/相册/图库）、群组操作、推荐系统等。附带 Hermes 插件实现进程托管（自动拉起 + 崩溃自愈）。
+通过 WebSocket 实时采集好友上下线、世界切换、Avatar/状态变化并入库。以 62 个 MCP 工具向 AI Agent 暴露全部能力——不只查询，还涵盖社交互动（戳戳/邀请/好友请求）、媒体管理（emoji/相册/图库）、群组操作、推荐系统等。附带 Hermes 插件实现进程托管（自动拉起 + 崩溃自愈）。
 
 > 🤖 **AI Agent 优先项目**：程序只面向 AI Agent 使用与开发，人类不直接编码。详见下方「[项目定位](#-ai-agent-优先项目定位)」与 [DEVELOPMENT.md](./DEVELOPMENT.md)。
 
@@ -35,7 +35,7 @@ QQ 群：**851865556** — 欢迎加入，交流使用问题、功能建议与�
 
 ## ✨ 功能
 
-按能力域划分的功能概览，全部 60 个 MCP 工具与详细参数见下方「🔌 MCP 工具」。
+按能力域划分的功能概览，全部 62 个 MCP 工具与详细参数见下方「🔌 MCP 工具」。
 
 ### 📡 实时监控与认证自愈
 
@@ -99,7 +99,7 @@ curl http://127.0.0.1:8799/health
 
 | Skill | 内容 | 适用场景 |
 |-------|------|----------|
-| `skills/vrc-monitor-agent/` | 60 个 MCP 工具清单、5 大查询工作流（在线/同屏/时间线/上线规律/昵称）、常见陷阱、健康检查 | 日常好友查询与社交操作 |
+| `skills/vrc-monitor-agent/` | 62 个 MCP 工具清单、5 大查询工作流（在线/同屏/时间线/上线规律/昵称）、常见陷阱、健康检查 | 日常好友查询与社交操作 |
 | `skills/vrc-monitor-companion-query/` | 「谁和我/和 XX 一起玩过」同屏交叉查询的正确姿势（为何不委派子 agent） | 同屏/玩伴查询 |
 
 **安装方式**（以 Hermes 为例，其他 Agent 框架同理）——把 skill 目录复制到你的 skills 目录：
@@ -165,7 +165,7 @@ cp desktop/plugin.js "$HERMES_HOME/desktop-plugins/vrc-monitor/"
 - **双路检测**：状态文件 pid 存活 **或** 端口探测成功，均可识别为运行中（防状态文件丢失误判）
 - **日志**：`$HERMES_HOME/workspace/vrc-monitor/monitor.log`
 
-## 🔌 MCP 工具（60 个）
+## 🔌 MCP 工具（62 个）
 
 服务监听 `http://127.0.0.1:8799/mcp`，通过 HTTP SSE 提供 MCP 协议。Hermes 用户可在 `$HERMES_HOME/config.yaml`（Windows 为 `%LOCALAPPDATA%\hermes\config.yaml`）配置：
 
@@ -221,6 +221,8 @@ mcp_servers:
 | `get_new_worlds` | 只读查询已跟踪的新世界：`onlyUnvisited` 只看未逛过、`sortBy`（favorites/occupants/popularity/created_at）、`excludeTheme` 排除主题（按 author_tag_* 逗号分隔）、`limit`（默认 10，最大 50） |
 | `rate_world` | 用户反馈：给世界打好评/烂图标记（rating: 1=好图加权 / -1=烂图降权 / 0=清除），影响推荐排序（worldScore 加权） |
 | `mark_world_visited` | 显式确认逛过某世界（事件驱动 visited 会漏记，开图闭环手动确认用） |
+| `recommend_worlds` | **多源融合世界推荐**（2026-08-13 新增）：local 新世界池 × PlanetVRC 排行 × 官方主题搜索 × 用户反馈（好评/烂图/收藏），评分含热度+新鲜度+主题+作者画像（30 天窗口熟客），输出可解释 `reasons`；`theme`（sleep/chat/onsen/game）、`excludeTheme` 排除、`sources` 多源选择、`excludeVisited` 去重 |
+| `favorite_world` | **云端收藏**（2026-08-13 新增）：把世界加入 VRChat 收藏夹分组（tag: worlds0-4，默认 worlds0），写操作需确认；成功后本地 world_cache.favorited=1 供推荐加权 |
 
 ### 关注名单
 
@@ -295,12 +297,12 @@ mcp_servers:
 │   ├── vrchat-launch.js        # 打开实例统一入口（管道探测 + API 回退）
 │   ├── new-worlds.js           # 新世界扫描核心逻辑
 │   ├── backup.js               # 数据库在线备份
-│   ├── mcp-definitions.js      # MCP 工具定义（60 个工具）
+│   ├── mcp-definitions.js      # MCP 工具定义（62 个工具）
 │   ├── server-context.js       # 共享上下文（ctx 对象 + log + parseLocation）
 │   ├── http-server.js          # HTTP 服务器 + SSE 端点
 │   ├── rpc-router.js           # RPC 分发（tools/call → handler）
 │   ├── otp-fetcher.js          # OTP 邮箱获取
-│   └── handlers/               # 60 个 MCP 工具的 handler
+│   └── handlers/               # 62 个 MCP 工具的 handler
 │       ├── recommend.js       #   推荐系统（好友收藏位置/推荐加入/偏好/学习）
 │       ├── friends.js         #   好友查询（在线/详情/搜索/共同好友/添加/删除）
 │       ├── instance.js        #   实例操作（创建/自我邀请/打开世界）
