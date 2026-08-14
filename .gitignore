@@ -36,5 +36,6 @@ backups/
 *.sqlite3-wal
 *.sqlite3-shm
 
-# ── 收藏 PDF 生成缓存 ──
+# ── 收藏 PDF 生成缓存与产物 ──
 img_cache/
+收藏世界分类表*.pdf
