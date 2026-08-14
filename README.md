@@ -239,6 +239,19 @@ mcp_servers:
 | `recommend_worlds` | **多源融合世界推荐**（2026-08-13 新增）：local 新世界池 × PlanetVRC 排行 × 官方主题搜索 × 用户反馈（好评/烂图/收藏），评分含热度+新鲜度+主题+作者画像（30 天窗口熟客），输出可解释 `reasons`；`theme`（sleep/chat/onsen/game）、`excludeTheme` 排除、`sources` 多源选择、`excludeVisited` 去重 |
 | `favorite_world` | **云端收藏**（2026-08-13 新增）：把世界加入 VRChat 收藏夹分组（tag: worlds0-4，默认 worlds0），写操作需确认；成功后本地 world_cache.favorited=1 供推荐加权 |
 
+### X 博主世界推荐（2026-08-14 新增）
+
+| 工具 | 说明 |
+|------|------|
+| `x_world_digest` | **X 博主推荐聚合**：聚合指定 X（Twitter）博主近 1/3/7/15/30 天推荐的世界，按收藏数排序，收藏/浏览比 ≥ 1/5 标 ⭐ 重点；`creator` 只看某博主、`refresh=true` 先抓最新推文再查、`limit`/`days`/`highlightRatio` 可调 |
+| `x_scan_creators` | 立即抓取所有已配置博主的最新推文，提取推荐世界并查询收藏/浏览数据入库（Nitter RSS 多实例回退，默认直连，代理走 `VRC_MONITOR_HTTP_PROXY`/`HTTPS_PROXY`） |
+| `x_creators` | 列出已配置的 X 博主清单 |
+| `x_add_creator` | 添加追踪的 X 博主（screen_name 必填，可选显示名 name） |
+| `x_remove_creator` | 移除追踪的 X 博主 |
+| `x_worlds` | 已收录推荐世界列表（调试用，按收藏数排序） |
+
+> 说明：数据源为 Nitter RSS（免费匿名，无需 X API key），大陆网络需配置代理（`HTTPS_PROXY` 或 `VRC_MONITOR_HTTP_PROXY`）才能访问；Nitter 无分页（约 26 小时覆盖），采用定期采集累积模型。X 推荐体系与上方 `recommend_worlds` 多源推荐数据独立、互不参与融合。
+
 ### 关注名单
 
 | 工具 | 说明 |
