@@ -4,16 +4,17 @@
 用法: python favorites-pdf.py [--out 收藏世界分类表.pdf] [--limit 500]
 
 流程: 1) 调 MCP get_my_favorite_worlds 拉取收藏（服务须在 127.0.0.1:8799 运行）
-      2) 中文简介: favorites_zh_cache.json 缓存优先，缺失回退原文
+      2) 中文简介: handler 输出 zhDescription（本地 world_zh_translations 表），缺失回退原文
       3) 生成 Markdown 表格（按分类分组，收藏降序）
       4) 下载缩略图 → 压缩 → base64 内嵌 HTML
-      5) Chrome headless 打印 PDF
+      5) Chrome headless 打印 PDF（输出到 pdf/ 目录，git 忽略）
 依赖: 本机 Chrome（或 Edge）、PIL、markdown 库
 """
 import json, sys, os, io, re, base64, subprocess, urllib.request
 
 MCP_URL = 'http://127.0.0.1:8799/mcp'
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PDF_DIR = os.path.join(BASE_DIR, 'pdf')   # PDF 生成物目录（.gitignore 忽略，不随仓库分发）
 CHROME = r'C:\Program Files\Google\Chrome\Application\chrome.exe'
 EDGE = r'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe'
 UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0.0.0 Safari/537.36'
@@ -214,12 +215,16 @@ def main():
         else:
             i += 1
 
-    zh_cache = None
+    os.makedirs(PDF_DIR, exist_ok=True)
+    # 输出统一落到 pdf/ 目录（相对路径；绝对路径尊重原样）
+    if not os.path.isabs(out_pdf):
+        out_pdf = os.path.join(PDF_DIR, out_pdf)
+
     cats, order = fetch_and_build(limit)
     md_text = build_markdown(cats, order)
     md_text = images_to_base64(md_text)
     html = html_from_md(md_text, '收藏世界分类')
-    html_path = out_pdf.rsplit('.', 1)[0] + '_tmp.html'
+    html_path = os.path.join(PDF_DIR, os.path.basename(out_pdf).rsplit('.', 1)[0] + '_tmp.html')
     with open(html_path, 'w', encoding='utf-8') as f:
         f.write(html)
 
