@@ -91,6 +91,13 @@ CREATE TABLE IF NOT EXISTS world_history (
 );
 CREATE INDEX IF NOT EXISTS idx_world_history_world ON world_history(world_id);
 
+-- 世界中文简介翻译（用户个人数据，本地存储不随仓库分发；get_my_favorite_worlds 输出 zhDescription）
+CREATE TABLE IF NOT EXISTS world_zh_translations (
+  world_id TEXT PRIMARY KEY,
+  zh TEXT NOT NULL,
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
 -- 群组信息缓存（周报/活动日历用，TTL 7 天）
 CREATE TABLE IF NOT EXISTS group_cache (
   group_id TEXT PRIMARY KEY,

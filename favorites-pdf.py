@@ -14,7 +14,6 @@ import json, sys, os, io, re, base64, subprocess, urllib.request
 
 MCP_URL = 'http://127.0.0.1:8799/mcp'
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-ZH_CACHE_FILE = os.path.join(BASE_DIR, 'favorites_zh_cache.json')
 CHROME = r'C:\Program Files\Google\Chrome\Application\chrome.exe'
 EDGE = r'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe'
 UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0.0.0 Safari/537.36'
@@ -56,12 +55,9 @@ def mcp_call(tool, args=None):
 
 
 def load_zh_cache():
-    """加载翻译缓存: {name||author: 中文简介}"""
-    try:
-        with open(ZH_CACHE_FILE, encoding='utf-8') as f:
-            return json.load(f)
-    except Exception:
-        return {}
+    """（已废弃）中文简介改由服务端 world_zh_translations 表提供（handler 输出 zhDescription）
+    保留空实现以兼容旧调用方。"""
+    return {}
 
 
 def fetch_and_build(limit):
@@ -84,8 +80,8 @@ def fetch_and_build(limit):
     return cats, order
 
 
-def build_markdown(cats, order, zh_cache):
-    """生成 Markdown（中文简介优先）"""
+def build_markdown(cats, order):
+    """生成 Markdown（中文简介优先：handler 输出 zhDescription 来自本地 world_zh_translations 表）"""
     lines = [f"# 🗂️ 我的 VRChat 收藏世界分类（共 {sum(len(v) for v in cats.values())} 个 · 中文简介）", ""]
     for cat in order:
         lst = cats[cat]
@@ -97,8 +93,7 @@ def build_markdown(cats, order, zh_cache):
             name = (w.get('worldName', '') or '')[:40]
             author = (w.get('authorName', '') or '')[:15]
             fav = f"{w.get('favorites', 0):,}"
-            key = f'{name}||{author}'
-            desc = zh_cache.get(key) or (w.get('description', '') or '').replace('\n', ' ')[:60] or '(无简介)'
+            desc = w.get('zhDescription') or (w.get('description', '') or '').replace('\n', ' ')[:60] or '(无简介)'
             img = w.get('imageUrl') or ''
             if img:
                 lines.append(f"| {i} | {name} | {author} | {fav} | {desc} | ![图]({img}) |")
@@ -219,9 +214,9 @@ def main():
         else:
             i += 1
 
-    zh_cache = load_zh_cache()
+    zh_cache = None
     cats, order = fetch_and_build(limit)
-    md_text = build_markdown(cats, order, zh_cache)
+    md_text = build_markdown(cats, order)
     md_text = images_to_base64(md_text)
     html = html_from_md(md_text, '收藏世界分类')
     html_path = out_pdf.rsplit('.', 1)[0] + '_tmp.html'

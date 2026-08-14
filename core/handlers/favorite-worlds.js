@@ -188,6 +188,12 @@ export async function handleGetMyFavoriteWorlds({ limit = 500, sortBy = 'favorit
     const ids = favs.map(f => f.worldId).filter(Boolean);
     const detailMap = await fetchWorldDetails(api, rateLimiter, storage, ids);
 
+    // 2.5) 批量查中文简介翻译（个人本地表，无则空串）
+    let zhMap = new Map();
+    try {
+      zhMap = storage.getZhTranslations(ids);
+    } catch { /* 表不存在（旧库未迁移）跳过 */ }
+
     // 3) 组装
     const worlds = favs.map(f => {
       const w = detailMap.get(f.worldId) || {};
@@ -196,6 +202,7 @@ export async function handleGetMyFavoriteWorlds({ limit = 500, sortBy = 'favorit
         worldName: w.name || '(未知)',
         authorName: w.authorName || '',
         description: (w.description || '').slice(0, 300),
+        zhDescription: zhMap.get(f.worldId) || '',
         imageUrl: w.imageUrl || '',
         favorites: w.favorites || 0,
         // 缓存命中时为 null（world_cache 无此列），API 实时查询为数值

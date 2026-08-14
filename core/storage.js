@@ -242,6 +242,26 @@ export class Storage {
     return rows[0] || null;
   }
 
+  // ── 世界中文简介翻译（个人数据，本地表）──
+
+  getZhTranslations(worldIds) {
+    if (!worldIds || worldIds.length === 0) return new Map();
+    const params = {};
+    const ph = worldIds.map((id, i) => { params[`$w${i}`] = id; return `$w${i}`; }).join(',');
+    const rows = this._query(`SELECT world_id, zh FROM world_zh_translations WHERE world_id IN (${ph})`, params);
+    const map = new Map();
+    for (const r of rows) map.set(r.world_id, r.zh);
+    return map;
+  }
+
+  setZhTranslation(worldId, zh) {
+    this._run(
+      `INSERT INTO world_zh_translations (world_id, zh, updated_at) VALUES ($worldId, $zh, datetime('now'))
+       ON CONFLICT(world_id) DO UPDATE SET zh = $zh, updated_at = datetime('now')`,
+      { $worldId: worldId, $zh: zh }
+    );
+  }
+
   searchWorldsByName(keyword) {
     const like = `%${keyword}%`;
     const rows = this._query(
