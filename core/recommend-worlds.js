@@ -210,13 +210,23 @@ function mergeCandidates(candidates) {
   return [...map.values()];
 }
 
-/** excludeTheme：tags 含 author_tag_<t> 或名称/描述命中该主题正则 → 剔除 */
-function isExcludedByTheme(c, excludedThemes) {
+/** excludeTheme：tags 含 author_tag_<t> 或普通标签精确/子串命中，或名称/描述命中该主题正则 → 剔除。
+ * storage 可选：提供时从 world_cache 补全官方 tags（候选阶段 tags 常不完整，输出前需复查）。 */
+function isExcludedByTheme(c, excludedThemes, storage) {
   if (excludedThemes.length === 0) return false;
   const tagSet = new Set((c.tags || []).map(t => String(t).toLowerCase()));
+  if (storage && c.worldId && c.worldId.startsWith('wrld_')) {
+    try {
+      const wc = storage.getWorldName(c.worldId);
+      const wcTags = wc && wc.tags ? JSON.parse(wc.tags) : [];
+      if (Array.isArray(wcTags)) wcTags.forEach(t => tagSet.add(String(t).toLowerCase()));
+    } catch (e) { /* world_cache tags 脏数据忽略 */ }
+  }
   const text = `${c.name || ''} ${c.description || ''}`;
   for (const t of excludedThemes) {
     if (tagSet.has(`author_tag_${t}`)) return true;
+    if (tagSet.has(t)) return true;
+    for (const tag of tagSet) if (tag.includes(t)) return true;
     if (getThemeRegex(t).some(re => re.test(text))) return true;
   }
   return false;
@@ -440,11 +450,30 @@ export async function recommendWorlds(ctxArg, args = {}) {
       return !visited;
     });
   }
+  // 5b. excludeTheme 复查（候选阶段 tags 可能未补全官方标签，world_cache 合并后重筛一次）
+  if (excludedThemes.length > 0) {
+    const before = scored.length;
+    scored = scored.filter(c => !isExcludedByTheme(c, excludedThemes, storage));
+    if (scored.length < before) log(`excludeTheme 复查剔除 ${before - scored.length} 个`);
+  }
+  // 5c. theme 软过滤：theme≠default 时优先只保留主题命中的候选（命中为空则回退全量，避免空结果）
+  let themeFiltered = 0;
+  if (theme !== 'default') {
+    const hit = scored.filter(c => {
+      if (c.sleep_ok === true || c.sleep_ok === 1) return theme === 'sleep';
+      const text = `${c.name || ''} ${c.description || ''}`;
+      return getThemeRegex(theme).some(re => re.test(text));
+    });
+    if (hit.length > 0) {
+      themeFiltered = scored.length - hit.length;
+      scored = hit;
+    }
+  }
   // 6. 排序 → 取 limit → 组装输出
   scored.sort((a, b) => b.score - a.score);
   const recommended = scored.slice(0, limit)
     .map(c => assembleItem(c, { theme, detail, storage }));
-  return { recommended, sourcesUsed: used, skippedVisited, total: recommended.length };
+  return { recommended, sourcesUsed: used, skippedVisited, themeFiltered, total: recommended.length };
 }
 
 // 保留引用：模块 import 时 server-context 的 ctx 可能尚未初始化，
