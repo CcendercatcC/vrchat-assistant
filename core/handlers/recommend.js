@@ -346,7 +346,7 @@ export async function handleGetFavoriteFriendsLocations({ groupName, favoriteGro
       if (r.status === 200 && r.data && r.data.name) {
         name = r.data.name;
         tags = Array.isArray(r.data.tags) ? r.data.tags.filter(t => t.startsWith('author_tag_')) : [];
-        try { storage.upsertWorld({ worldId, name, authorId: r.data.authorId || '', authorName: r.data.authorName || '', tags: JSON.stringify(tags) }); } catch (e) {}
+        try { storage.upsertWorld({ worldId, name, authorId: r.data.authorId || '', authorName: r.data.authorName || '', tags }); } catch (e) {}
       }
     }
     worldCache.set(worldId, { name, tags });
@@ -699,7 +699,7 @@ export async function handleRecommendJoin({ limit = 10, minScore = 0 } = {}) {
           if (r.status === 200 && r.data && r.data.name) {
             worldName = r.data.name;
             worldTags = Array.isArray(r.data.tags) ? r.data.tags.filter(t => t.startsWith('author_tag_')) : [];
-            try { storage.upsertWorld({ worldId: loc.worldId, name: r.data.name, authorId: r.data.authorId || '', authorName: r.data.authorName || '', tags: JSON.stringify(worldTags) }); } catch (e) {}
+            try { storage.upsertWorld({ worldId: loc.worldId, name: r.data.name, authorId: r.data.authorId || '', authorName: r.data.authorName || '', tags: worldTags }); } catch (e) {}
           }
         }
         worldCache.set(loc.worldId, { name: worldName, tags: worldTags });

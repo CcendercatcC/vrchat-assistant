@@ -233,7 +233,8 @@ def main():
     html_abs = os.path.abspath(html_path)
     print(f'⏳ Chrome 打印 PDF...')
     subprocess.run([chrome, '--headless', '--disable-gpu', '--no-sandbox',
-                    f'--print-to-pdf={pdf_path}', '--print-to-pdf-no-header',
+                    f'--print-to-pdf={pdf_path}', '--no-pdf-header-footer',
+                    '--print-to-pdf-no-header',  # 兼容旧版 Chromium；新版用 --no-pdf-header-footer
                     f'file:///{html_abs.replace(chr(92), "/")}'],
                    capture_output=True, timeout=180)
     os.remove(html_path)

@@ -86,7 +86,7 @@ async function fetchWorldDetails(api, rateLimiter, storage, ids) {
           visits: typeof cached.visits === 'number' ? cached.visits : null,
           popularity: typeof cached.popularity === 'number' ? cached.popularity : null,
           capacity: cached.capacity || 0,
-          tags: (() => { try { return JSON.parse(cached.tags || '[]'); } catch { return []; } })(),
+          tags: (() => { try { const p = JSON.parse(cached.tags || '[]'); return Array.isArray(p) ? p : []; } catch { return []; } })(),
           cached: true,
         });
       } else {
@@ -114,7 +114,7 @@ async function fetchWorldDetails(api, rateLimiter, storage, ids) {
             releaseStatus: r.data.releaseStatus || 'public',
             capacity: r.data.capacity || 0,
             favorites: r.data.favorites || 0,
-            tags: JSON.stringify(Array.isArray(r.data.tags) ? r.data.tags : []),
+            tags: Array.isArray(r.data.tags) ? r.data.tags : [],
           });
           // 旧缓存表回填（若存在；来源见上方注释）
           try {
