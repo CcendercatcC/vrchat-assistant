@@ -105,8 +105,13 @@ async function _refreshOnlineState() {
 // ── 启动 ──
 
 async function main() {
+  // 动态读取版本号（package.json，避免硬编码漂移）
+  let APP_VERSION = 'unknown';
+  try {
+    APP_VERSION = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf-8')).version;
+  } catch { /* 读不到则显示 unknown，不阻断启动 */ }
   console.log('══════════════════════════════════════════════');
-  console.log('  VRChat 好友监控系统 v1.14.0');
+  console.log(`  VRChat-Assistant v${APP_VERSION}`);
   console.log('══════════════════════════════════════════════\n');
 
   ctx.serverState.started = new Date().toISOString();
