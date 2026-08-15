@@ -40,7 +40,7 @@
 | 文档 | 内容 | 何时读 |
 |------|------|--------|
 | [AGENTS.md](./AGENTS.md) | 部署配置引导：凭据、环境变量、启动、Hermes 插件、Agent Skill 安装、MCP 接口配置 | 部署 / 配置 / 首次上手 |
-| [skills/](./skills/) | 开箱即用的 Agent Skill 合集：主使用指南（**MCP 工具清单**、查询工作流、陷阱）、同屏查询专项、BOOTH 查询展示、**开发规范** | 查询 / 调用工具 / 开发功能前 |
+| [skills/](./skills/) | 开箱即用的 Agent Skill 合集（含 MCP 工具清单、查询工作流、开发规范等，安装说明见 AGENTS.md） | 查询 / 调用工具 / 开发功能前 |
 | [DEVELOPMENT.md](./DEVELOPMENT.md) | 开发规范：跨平台约束、PR 要求、数据隐私、代码规范 | 修改代码 / 提交 PR |
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | 系统架构：数据流、模块职责、依赖关系 | 理解代码结构 |
 | [docs/history/](./docs/history/INDEX.md) | 项目演进记录：里程碑时间线、每月发布/PR 与演进意义 | 新 Agent 上手先读 |
