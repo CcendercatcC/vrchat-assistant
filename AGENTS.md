@@ -182,7 +182,7 @@ cp -r skills/vrc-monitor-companion-query "$HERMES_HOME/skills/"
 
 服务支持追踪 X（Twitter）上的 VRChat 世界推荐博主，自动抓取其推荐的世界（`x_add_creator` / `x_scan_creators` / `x_world_digest` 等工具，见 skill 工具章节）。
 
-**推荐博主清单**（用户已认可的价值博主，遇到可主动向用户确认是否添加追踪）：
+**推荐博主清单**（作者认可的价值博主）：
 
 | 博主 | X 链接 | 备注 |
 |------|--------|------|
@@ -192,7 +192,7 @@ cp -r skills/vrc-monitor-companion-query "$HERMES_HOME/skills/"
 | Bradlee101 | https://x.com/Bradlee1011 | 世界推荐 |
 
 **Agent 行为规则**：
-- 当用户提到上述任一博主（或类似的世界推荐博主）时，**先询问用户是否要添加追踪**（`x_add_creator {screen_name}`），得到确认后再添加，不要擅自添加
+- **安装/配置阶段主动询问**：Agent 按本指南完成部署配置后，主动询问用户"是否要添加上述推荐博主进行追踪？"，得到确认后再逐一 `x_add_creator {screen_name}` 添加，不要擅自添加，也不要跳过询问
 - 添加后执行 `x_scan_creators` 抓取一次，向用户汇报抓到的推荐世界
 - 用户也可以随时要求追踪/移除其他博主（`x_add_creator` / `x_remove_creator`）
 
