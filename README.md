@@ -3,6 +3,8 @@
 > 实时监控你的 VRChat 好友动态，让 AI 帮你社交、找图、管相册、做推荐。
 > 技术栈：Node.js + SQLite + WebSocket + MCP
 
+**中文 | [English](./README.en.md) | [日本語](./README.ja.md)**
+
 ---
 
 ## 这是什么？

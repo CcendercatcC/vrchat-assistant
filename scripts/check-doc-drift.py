@@ -33,7 +33,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # 仓库根�
 
 # 需要扫数字残留的路径（相对仓库根；目录递归，文件单查）
 NUMERIC_RESIDUE_TARGETS = [
-    "README.md", "AGENTS.md", "ARCHITECTURE.md",
+    "README.md", "README.en.md", "README.ja.md", "AGENTS.md", "ARCHITECTURE.md",
     "core/", "skills/", "start-monitor.js", "hermes-plugin/",
 ]
 # 数字残留正则：覆盖 skill 中的几种写法
