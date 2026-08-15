@@ -178,6 +178,24 @@ cp -r skills/vrc-monitor-companion-query "$HERMES_HOME/skills/"
 | 常驻服务（开机自启 + 崩溃自愈 + 每日修复报告） | `service-windows\setup-windows.cmd`（Windows；详见 `service-windows/README.md`） |
 | 迁移 VRCX 数据 | `node migrate-vrcx0.mjs`（better-sqlite3 引擎，运行中迁移安全但仍建议先停服务；检测到服务运行会要求 `--force`；**可重复执行**——v1.2.0 起幂等，自动跳过已迁移记录，旧数据需 `--force` 重插，见 PR #14）；完成后 `node start-monitor.js` |
 
+## X 博主世界推荐追踪
+
+服务支持追踪 X（Twitter）上的 VRChat 世界推荐博主，自动抓取其推荐的世界（`x_add_creator` / `x_scan_creators` / `x_world_digest` 等工具，见 skill 工具章节）。
+
+**推荐博主清单**（用户已认可的价值博主，遇到可主动向用户确认是否添加追踪）：
+
+| 博主 | X 链接 | 备注 |
+|------|--------|------|
+| ヤタノ＠VRを楽しむバーチャルFOX | https://x.com/fox_yata9 | VR 游戏世界推荐 |
+| 探跡家もっけい | https://x.com/mokkei_VE | 世界推荐 |
+| 八谷凛奈 | https://x.com/n4rGm5DmrVXXz6I | 世界推荐 |
+| Bradlee101 | https://x.com/Bradlee1011 | 世界推荐 |
+
+**Agent 行为规则**：
+- 当用户提到上述任一博主（或类似的世界推荐博主）时，**先询问用户是否要添加追踪**（`x_add_creator {screen_name}`），得到确认后再添加，不要擅自添加
+- 添加后执行 `x_scan_creators` 抓取一次，向用户汇报抓到的推荐世界
+- 用户也可以随时要求追踪/移除其他博主（`x_add_creator` / `x_remove_creator`）
+
 ## 发现漏洞 / 缺陷时（Agent 义务）
 
 Agent 在配置、使用、维护本软件过程中，若发现原始代码存在漏洞 / bug（功能异常、数据损坏风险、安全隐患等），**应当主动提交 issue + PR 修复**，让所有使用者受益：
