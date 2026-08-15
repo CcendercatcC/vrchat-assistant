@@ -11,6 +11,7 @@ check-doc-drift.py — vrchat-assistant 文档漂移检测 + 自动修复（固�
   [FAIL] 工具总数数字残留        全仓库禁止"N 个 MCP 工具"表述（2026-08-14 拍板去数字）
   [FAIL] plugin.yaml 版本同步    hermes-plugin/plugin.yaml version 应 = package.json version
   [WARN] GitHub 仓库描述        描述不应含过时工具数（gh repo view；修复需 owner 权限，失败仅提示）
+  [FAIL] 历史记录 PR 状态漂移    docs/history/ 中标注的 PR 状态（OPEN/待评审/已合并等）应与 gh 实际状态一致
 
 用法：
   python scripts/check-doc-drift.py             # 只检测，输出报告
@@ -151,6 +152,95 @@ def gh_repo_description():
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
         return None, str(e)
 
+def gh_all_pr_states():
+    """一次拉取仓库全部 PR 的实际状态。返回 ({num: (state, mergedAt)}, error)。"""
+    try:
+        r = subprocess.run(
+            ["gh", "pr", "list", "--state", "all", "--limit", "100",
+             "--json", "number,state,mergedAt",
+             "--jq", '.[] | "\(.number)|\(.state)|\(.mergedAt // "")"'],
+            capture_output=True, text=True, timeout=30,
+        )
+        if r.returncode != 0:
+            return None, r.stderr.strip() or "gh pr list failed"
+        states = {}
+        for line in r.stdout.strip().splitlines():
+            parts = line.split("|")
+            if len(parts) == 3:
+                try:
+                    states[int(parts[0])] = (parts[1], parts[2])
+                except ValueError:
+                    pass
+        return states, None
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
+        return None, str(e)
+
+# 历史记录中的 PR 状态标注模式
+# 1) 显式括号标注：`#30` (OPEN, 2026-08-14) 或 #30 (OPEN, 2026-08-14)（兼容反引号包裹）
+# 2) 行内状态词：PR #30 ... 待评审 / 待审核 / 已合并 / 已合入 / 已关闭
+PR_STATUS_RE = re.compile(
+    r"#(\d+)[`\s]*\((OPEN|CLOSED|MERGED)[^)]*\)|"      # (OPEN/CLOSED/MERGED, date)
+    r"PR\s*#(\d+)[^\n。]*?(待评审|待审核|待合并|已合并|已合入|已关闭)",  # 行内状态词
+)
+
+def extract_history_pr_refs():
+    """解析 docs/history/*.md 中的 PR 引用与显式状态标注。
+
+    返回 {pr_num: {"status": "OPEN"/"MERGED"/"CLOSED"/None, "mentions": [(相对路径, 行号, 摘录)]}}
+    仅记录有显式状态标注的 PR；无标注的 PR（如发布记录里顺带提及）不入此表。
+    """
+    refs = {}
+    hist_dir = os.path.join(REPO, "docs", "history")
+    if not os.path.isdir(hist_dir):
+        return refs
+    for fn in sorted(os.listdir(hist_dir)):
+        if not fn.endswith(".md") or fn == "INDEX.md":
+            continue
+        rel = os.path.join("docs", "history", fn)
+        path = os.path.join(hist_dir, fn)
+        try:
+            with open(path, "r", encoding="utf-8", errors="replace") as f:
+                for lineno, line in enumerate(f, 1):
+                    for m in PR_STATUS_RE.finditer(line):
+                        if m.group(1):  # 括号标注形式 #N (STATE, ...)
+                            n = int(m.group(1))
+                            st = m.group(2)
+                        else:           # 行内状态词形式 PR #N ... 状态
+                            n = int(m.group(3))
+                            word = m.group(4)
+                            st = "MERGED" if word in ("已合并", "已合入") else (
+                                "CLOSED" if word == "已关闭" else "OPEN")
+                        rec = refs.setdefault(n, {"status": None, "mentions": []})
+                        # 多条标注时，OPEN 优先级最高（OPEN 最容易过时漏改）
+                        if rec["status"] is None or st == "OPEN":
+                            rec["status"] = st
+                        rec["mentions"].append((rel, lineno, line.strip()[:120]))
+        except OSError:
+            continue
+    return refs
+
+def check_pr_status_drift(history_refs, actual_states):
+    """对比历史记录标注状态 vs 实际状态。
+
+    返回 [{pr, doc_status, actual_status, merged_at, mentions}]（仅不一致项）。
+    标注 OPEN 但实际已 MERGED/CLOSED = 过时未改（最常见）；
+    标注 MERGED/CLOSED 但实际 OPEN = 提前宣称（罕见，同样报）。
+    """
+    drifts = []
+    for n, rec in history_refs.items():
+        actual = actual_states.get(n)
+        if actual is None:
+            continue
+        astate, merged_at = actual
+        dstatus = rec["status"]
+        if dstatus == "OPEN" and astate != "OPEN":
+            drifts.append({"pr": n, "doc_status": dstatus, "actual_status": astate,
+                           "merged_at": merged_at, "mentions": rec["mentions"]})
+        elif dstatus in ("MERGED", "CLOSED") and astate != dstatus:
+            drifts.append({"pr": n, "doc_status": dstatus, "actual_status": astate,
+                           "merged_at": merged_at, "mentions": rec["mentions"]})
+    return drifts
+
 def main():
     ap = argparse.ArgumentParser(description="vrchat-assistant 文档漂移检测 + 自动修复")
     ap.add_argument("--fix", action="store_true", help="自动修复可确定性修复的漂移")
@@ -180,6 +270,11 @@ def main():
     if gh_desc is not None:
         gh_ok = not NUMERIC_RE.search(gh_desc)
 
+    # PR 状态漂移（历史记录标注状态 vs GitHub 实际状态）
+    pr_states, pr_err = gh_all_pr_states()
+    history_refs = extract_history_pr_refs()
+    pr_drifts = check_pr_status_drift(history_refs, pr_states) if pr_states else []
+
     # ── 修复 ──
     fixed_numeric = 0
     fixed_plugin = False
@@ -193,7 +288,7 @@ def main():
         version_ok = (pkg_v is not None and pkg_v == plugin_v)
 
     # ── 汇总 ──
-    has_drift = bool(missing_readme or numeric_hits or not version_ok)
+    has_drift = bool(missing_readme or numeric_hits or not version_ok or pr_drifts)
     # AGENTS 缺失仅 INFO（README 是完整权威清单；AGENTS 采样列举，只提示）
     report = {
         "code_tools_count": len(code_tools),
@@ -207,6 +302,8 @@ def main():
         "gh_description": gh_desc,
         "gh_check_ok": gh_ok,
         "gh_error": gh_err,
+        "pr_status_drift": pr_drifts,
+        "pr_status_check_error": pr_err,
         "has_drift": has_drift,
     }
 
@@ -252,6 +349,20 @@ def main():
             print("       （gh repo edit 需 owner 权限，nixi-agent 会 404 —— 请在 Phase 5 报告提醒用户手动改）")
     elif gh_err:
         print(f"\n[WARN] GitHub 描述检查跳过（{gh_err}）")
+
+    if pr_drifts:
+        print(f"\n[FAIL] 历史记录 PR 状态与实际 GitHub 状态不一致，共 {len(pr_drifts)} 处:")
+        for d in pr_drifts:
+            merged = d.get("merged_at") or ""
+            merged_txt = f"（mergedAt {merged}）" if merged else ""
+            print(f"  - PR #{d['pr']}: 历史记录标注「{d['doc_status']}」但实际「{d['actual_status']}」{merged_txt}")
+            for rel, lineno, snippet in d["mentions"]:
+                print(f"      {rel}:{lineno}  {snippet}")
+        print("       （修复：把历史记录中该 PR 的状态标注改为实际状态；skill Phase 3 有说明）")
+    elif pr_err:
+        print(f"\n[WARN] 历史记录 PR 状态检查跳过（{pr_err}）")
+    else:
+        print("\n[OK] 历史记录 PR 状态与 GitHub 一致")
 
     if args.fix:
         print(f"\n[FIX] 清除数字残留 {fixed_numeric} 处；plugin.yaml 版本{'已对齐' if fixed_plugin else '无需修改'}")
