@@ -18,7 +18,21 @@ metadata:
 - 使用者要求修复 bug 并提交 issue + PR
 - 任何对 `core/`、`start-monitor.js`、`hermes-plugin/`、`desktop/` 下代码的修改
 
-## ⚠️ 第一步（强制）：读取权威开发规范
+## ⚠️ Phase 0（强制）：检查仓库归属
+
+**动手之前先确认当前仓库是用户自己的 Fork，不是中央仓库。** 开发/修改功能必须发生在用户自己的仓库里：
+
+```bash
+git remote get-url origin
+```
+
+- 若 origin 指向 `ggg123124/vrchat-assistant`（**中央仓库**）→ **停止开发**，提示用户先创建自己的仓库（Fork 中央仓库），再克隆 Fork 继续。不要直接在中央仓库 clone 上开发——Agent 的代码变更无法推送、且可能污染上游
+- 若 origin 指向用户自己的账号（如 `https://github.com/<用户名>/vrchat-assistant.git`）→ 正常继续
+- 检查是否有 upstream：`git remote -v` 应显示 `upstream → https://github.com/ggg123124/vrchat-assistant.git`（fork 来源，用于同步官方更新 `git pull upstream main`）。缺 upstream 时提示可补，但不阻塞开发
+
+Fork & Clone 完整流程见 `AGENTS.md`「获取代码（Fork & Clone）」章节。
+
+## ⚠️ 第二步（强制）：读取权威开发规范
 
 **动手写任何代码之前，先完整读取仓库根 `DEVELOPMENT.md`**——它是开发规范的唯一权威来源，作者会持续维护，可能与本 skill 的编写时间不同步。禁止凭记忆或凭本 skill 的概述代替它。
 
