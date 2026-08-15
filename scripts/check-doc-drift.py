@@ -6,7 +6,7 @@ check-doc-drift.py — vrchat-assistant 文档漂移检测 + 自动修复（固�
 权威口径：core/mcp-definitions.js 中 name: '...' 的集合 = 实际 MCP 工具清单。
 
 检查项（对应 vrchat-assistant-history skill Phase 2）：
-  [FAIL] README 工具清单完整    代码新增工具必须登记进 README「🔌 MCP 工具」章节
+  [FAIL] 工具清单完整    代码新增工具必须登记进 skills/vrc-monitor-agent/SKILL.md「MCP 工具」章节（2026-08-15 起权威登记位置；README 仅人类简介）
   [INFO] AGENTS.md 工具列举     提示哪些工具未在 AGENTS 出现（AGENTS 为采样列举，仅新增工具需核对）
   [FAIL] 工具总数数字残留        全仓库禁止"N 个 MCP 工具"表述（2026-08-14 拍板去数字）
   [FAIL] plugin.yaml 版本同步    hermes-plugin/plugin.yaml version 应 = package.json version
@@ -58,17 +58,20 @@ def extract_code_tools():
         return None
     return set(re.findall(r"name:\s*'([a-z_]+)'", src))
 
-def extract_readme_tools():
-    """从 README「🔌 MCP 工具」章节提取已登记工具（反引号包裹的 snake_case 标识符）。
+def extract_doc_tools():
+    """从权威工具登记文档提取已登记工具（反引号包裹的 snake_case 标识符）。
 
-    注意：MCP 章节内部的小节标题是 `### `（三级），结束于下一个 `## `（二级）标题。
+    2026-08-15 变更：锚点从 README「🔌 MCP 工具」迁到 skills/vrc-monitor-agent/SKILL.md
+    「MCP 工具」章节——README 改为人类优先精简版，不再平铺工具清单；
+    工具权威登记位置 = Agent Skill 的工具表格（Agent 实际照此调用）。
+    注意：skill 章节内部的小节标题是 `### `（三级），结束于下一个 `## `（二级）标题。
     必须用 ^## 行首锚定 + MULTILINE，避免把 `### ` 的子串误判为章节边界。
     """
-    readme = read_text("README.md")
-    if readme is None:
+    skill = read_text("skills/vrc-monitor-agent/SKILL.md")
+    if skill is None:
         return None
-    m = re.search(r"^## 🔌 MCP 工具.*?\n(.*?)^## ", readme, re.DOTALL | re.MULTILINE)
-    section = m.group(1) if m else readme
+    m = re.search(r"^## MCP 工具.*?\n(.*?)^## ", skill, re.DOTALL | re.MULTILINE)
+    section = m.group(1) if m else skill
     return set(re.findall(r"`([a-z_]+)`", section))
 
 def scan_numeric_residue():
@@ -252,13 +255,13 @@ def main():
         print("ERROR: core/mcp-definitions.js 不存在，无法检测", file=sys.stderr)
         return 2
 
-    readme_tools = extract_readme_tools()
-    if readme_tools is None:
+    doc_tools = extract_doc_tools()
+    if doc_tools is None:
         print("ERROR: README.md 不存在", file=sys.stderr)
         return 2
 
     # ── 检测 ──
-    missing_readme = sorted(code_tools - readme_tools)
+    missing_readme = sorted(code_tools - doc_tools)
     agents = read_text("AGENTS.md") or ""
     agents_present = set(re.findall(r"[a-z_]+", agents))
     missing_agents = sorted(t for t in code_tools if t not in agents_present)
@@ -282,7 +285,7 @@ def main():
         fixed_numeric = fix_numeric_residue()
         fixed_plugin = fix_plugin_version()
         # 修复后重测
-        missing_readme = sorted(code_tools - extract_readme_tools())
+        missing_readme = sorted(code_tools - extract_doc_tools())
         numeric_hits = scan_numeric_residue()
         pkg_v, plugin_v = version_sync() if version_sync() else (None, None)
         version_ok = (pkg_v is not None and pkg_v == plugin_v)
@@ -292,7 +295,7 @@ def main():
     # AGENTS 缺失仅 INFO（README 是完整权威清单；AGENTS 采样列举，只提示）
     report = {
         "code_tools_count": len(code_tools),
-        "readme_tools_count": len(readme_tools & code_tools),
+        "doc_tools_count": len(doc_tools & code_tools),
         "missing_in_readme": missing_readme,
         "missing_in_agents": missing_agents,
         "numeric_residue": [{"file": r, "line": l, "text": t} for r, l, t in numeric_hits],
@@ -315,13 +318,13 @@ def main():
     print("vrchat-assistant 文档漂移检测（固定脚本 check-doc-drift.py）")
     print("=" * 60)
     print(f"权威工具数（core/mcp-definitions.js）: {len(code_tools)}")
-    print(f"README 已登记: {len(readme_tools & code_tools)}")
+    print(f"skill 工具清单已登记: {len(doc_tools & code_tools)}")
     if missing_readme:
         print(f"\n[FAIL] README 缺失 {len(missing_readme)} 个工具（需补进「🔌 MCP 工具」对应分组）:")
         for t in missing_readme:
             print(f"  - {t}")
     else:
-        print("\n[OK] README 工具清单完整")
+        print("\n[OK] skill 工具清单完整")
 
     if missing_agents:
         print(f"\n[INFO] {len(missing_agents)} 个工具未在 AGENTS.md 出现（AGENTS 为采样列举，仅新增工具需核对补录）:")

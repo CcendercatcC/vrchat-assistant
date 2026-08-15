@@ -86,6 +86,12 @@ metadata:
 | `get_join_preference` | 查询当前推荐偏好 |
 | `record_join_choice` | 记录一次推荐选择（自动补全上下文，≥5 次后自动学习权重） |
 | `get_join_learning` | 查看选择学习状态与生效的权重调整 |
+| `x_world_digest` | **X 博主世界推荐聚合**：聚合指定 X 博主近 1/3/7/15/30 天推荐的世界，按收藏数排序；收藏/浏览比 ≥ 1/5 标 ⭐重点。`refresh=true` 先抓最新推文再查询 |
+| `x_scan_creators` | **X 推荐抓取**：立即抓取所有已配置博主的最新推文，提取推荐世界并查询收藏/浏览数据入库 |
+| `x_creators` | 列出当前配置的 X 博主清单 |
+| `x_add_creator` | 添加要追踪的 X 博主（VRChat 世界推荐博主；`screen_name` 不带 @） |
+| `x_remove_creator` | 移除追踪的 X 博主 |
+| `x_worlds` | 查看已收录的推荐世界列表（调试用） |
 
 调用方式（HTTP SSE JSON-RPC）：
 
