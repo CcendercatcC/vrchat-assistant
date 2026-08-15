@@ -1,5 +1,5 @@
 /**
- * MCP: recommend_worlds — 多源融合世界推荐（local new_worlds × PlanetVRC 排行 × 官方主题搜索）
+ * MCP: recommend_worlds — 多源融合世界推荐（local world_kb × PlanetVRC 排行 × 官方主题搜索）
  *
  * 注意：本 handler 内部已对官方/planet API 调用逐请求限流，
  * rpc-router 分发时不能再包 rateLimiter.execute（嵌套死锁，参照 scan_new_worlds）。

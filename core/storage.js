@@ -27,6 +27,16 @@ export class Storage {
     this.db.pragma('busy_timeout = 5000');
 
     const ddl = readFileSync(DDL_PATH, 'utf-8');
+    // 迁移：旧库表名 new_worlds → world_kb（2026-08-16 更名，幂等）
+    // ⚠️ 必须在 DDL exec 之前执行！否则 CREATE TABLE IF NOT EXISTS world_kb 会先建出
+    // 空表，RENAME 因名字冲突失败，老数据残留在 new_worlds 中（代码全查 world_kb → 空）。
+    // 顺序：老库（仅 new_worlds）→ RENAME 带走数据 + 索引跟随 → DDL 建 idx_world_kb_visited。
+    const oldKbCols = this._query(`PRAGMA table_info(new_worlds)`);
+    const newKbCols = this._query(`PRAGMA table_info(world_kb)`);
+    if (oldKbCols.length > 0 && newKbCols.length === 0) {
+      this._run(`ALTER TABLE new_worlds RENAME TO world_kb`);
+      this._run(`DROP INDEX IF EXISTS idx_new_worlds_visited`);
+    }
     this.db.exec(ddl);
     // X 博主世界推荐表（x_world_digest 工具，幂等 CREATE IF NOT EXISTS）
     try {
@@ -45,53 +55,53 @@ export class Storage {
     if (!wcFavCols.some(c => c.name === 'favorited')) {
       this._run(`ALTER TABLE world_cache ADD COLUMN favorited INTEGER DEFAULT 0`);
     }
-    // 迁移：旧库 new_worlds 缺 sleep_ok 列（recommend_join 睡觉图评分用，幂等）
-    const nwCols = this._query(`PRAGMA table_info(new_worlds)`);
+    // 迁移：旧库 world_kb 缺 sleep_ok 列（recommend_join 睡觉图评分用，幂等）
+    const nwCols = this._query(`PRAGMA table_info(world_kb)`);
     if (!nwCols.some(c => c.name === 'sleep_ok')) {
-      this._run(`ALTER TABLE new_worlds ADD COLUMN sleep_ok INTEGER DEFAULT 0`);
+      this._run(`ALTER TABLE world_kb ADD COLUMN sleep_ok INTEGER DEFAULT 0`);
     }
     // 迁移：旧库 join_choices 缺 world_tags 列（类型偏好学习用，幂等）
     const jcCols = this._query(`PRAGMA table_info(join_choices)`);
     if (!jcCols.some(c => c.name === 'world_tags')) {
       this._run(`ALTER TABLE join_choices ADD COLUMN world_tags TEXT DEFAULT ''`);
     }
-    // 迁移：旧库 new_worlds 缺 tags/description/source 列（scan_new_worlds upsert 依赖，幂等）
-    const nwCols2 = this._query(`PRAGMA table_info(new_worlds)`);
+    // 迁移：旧库 world_kb 缺 tags/description/source 列（scan_new_worlds upsert 依赖，幂等）
+    const nwCols2 = this._query(`PRAGMA table_info(world_kb)`);
     if (!nwCols2.some(c => c.name === 'tags')) {
-      this._run(`ALTER TABLE new_worlds ADD COLUMN tags TEXT DEFAULT ''`);
+      this._run(`ALTER TABLE world_kb ADD COLUMN tags TEXT DEFAULT ''`);
     }
     if (!nwCols2.some(c => c.name === 'description')) {
-      this._run(`ALTER TABLE new_worlds ADD COLUMN description TEXT DEFAULT ''`);
+      this._run(`ALTER TABLE world_kb ADD COLUMN description TEXT DEFAULT ''`);
     }
     if (!nwCols2.some(c => c.name === 'source')) {
-      this._run(`ALTER TABLE new_worlds ADD COLUMN source TEXT DEFAULT 'new'`);
+      this._run(`ALTER TABLE world_kb ADD COLUMN source TEXT DEFAULT 'new'`);
     }
-    // 迁移：旧库 new_worlds 缺 user_rating 列（rate_world 用户反馈，幂等）
-    const nwCols3 = this._query(`PRAGMA table_info(new_worlds)`);
+    // 迁移：旧库 world_kb 缺 user_rating 列（rate_world 用户反馈，幂等）
+    const nwCols3 = this._query(`PRAGMA table_info(world_kb)`);
     if (!nwCols3.some(c => c.name === 'user_rating')) {
-      this._run(`ALTER TABLE new_worlds ADD COLUMN user_rating INTEGER DEFAULT 0`);
+      this._run(`ALTER TABLE world_kb ADD COLUMN user_rating INTEGER DEFAULT 0`);
     }
-    // 迁移：旧库 new_worlds 缺 author_id 列（作者维度推荐用，幂等）
-    const nwCols4 = this._query(`PRAGMA table_info(new_worlds)`);
+    // 迁移：旧库 world_kb 缺 author_id 列（作者维度推荐用，幂等）
+    const nwCols4 = this._query(`PRAGMA table_info(world_kb)`);
     if (!nwCols4.some(c => c.name === 'author_id')) {
-      this._run(`ALTER TABLE new_worlds ADD COLUMN author_id TEXT DEFAULT ''`);
+      this._run(`ALTER TABLE world_kb ADD COLUMN author_id TEXT DEFAULT ''`);
     }
-    // 迁移：旧库 new_worlds 缺 backlog 系列列（待逛地图列表，幂等）
-    const nwCols5 = this._query(`PRAGMA table_info(new_worlds)`);
+    // 迁移：旧库 world_kb 缺 backlog 系列列（待逛地图列表，幂等）
+    const nwCols5 = this._query(`PRAGMA table_info(world_kb)`);
     if (!nwCols5.some(c => c.name === 'backlog')) {
-      this._run(`ALTER TABLE new_worlds ADD COLUMN backlog INTEGER DEFAULT 0`);
+      this._run(`ALTER TABLE world_kb ADD COLUMN backlog INTEGER DEFAULT 0`);
     }
     if (!nwCols5.some(c => c.name === 'backlog_added_at')) {
-      this._run(`ALTER TABLE new_worlds ADD COLUMN backlog_added_at TEXT`);
+      this._run(`ALTER TABLE world_kb ADD COLUMN backlog_added_at TEXT`);
     }
     if (!nwCols5.some(c => c.name === 'backlog_reason')) {
-      this._run(`ALTER TABLE new_worlds ADD COLUMN backlog_reason TEXT DEFAULT ''`);
+      this._run(`ALTER TABLE world_kb ADD COLUMN backlog_reason TEXT DEFAULT ''`);
     }
     if (!nwCols5.some(c => c.name === 'backlog_priority')) {
-      this._run(`ALTER TABLE new_worlds ADD COLUMN backlog_priority INTEGER DEFAULT 0`);
+      this._run(`ALTER TABLE world_kb ADD COLUMN backlog_priority INTEGER DEFAULT 0`);
     }
     // 迁移：历史 tags='' 脏数据统一为 '[]'（json_each 对空串抛 malformed JSON，Review R2）
-    this._run(`UPDATE new_worlds SET tags = '[]' WHERE tags IS NULL OR tags = ''`);
+    this._run(`UPDATE world_kb SET tags = '[]' WHERE tags IS NULL OR tags = ''`);
     return this;
   }
 
@@ -534,18 +544,18 @@ export class Storage {
   /**
    * 用户反馈：给世界打好评/差评标记（Issue #19）
    * rating: -1=烂图(junk) / 0=清除标记 / 1=好图
-   * 若世界不在 new_worlds 表（如手动收藏的世界），自动插入一行兜底。
+   * 若世界不在 world_kb 表（如手动收藏的世界），自动插入一行兜底。
    */
   rateWorld({ worldId, rating = 0 }) {
     const r = parseInt(rating, 10);
     const finalRating = r === -1 ? -1 : (r === 1 ? 1 : 0);
     this._run(
-      `INSERT INTO new_worlds (world_id, world_name, tags, user_rating)
+      `INSERT INTO world_kb (world_id, world_name, tags, user_rating)
        VALUES ($worldId, '', '[]', $rating)
        ON CONFLICT(world_id) DO UPDATE SET user_rating = $rating`,
       { $worldId: worldId, $rating: finalRating }
     );
-    const rows = this._query(`SELECT world_id, world_name, user_rating FROM new_worlds WHERE world_id = $worldId`, { $worldId: worldId });
+    const rows = this._query(`SELECT world_id, world_name, user_rating FROM world_kb WHERE world_id = $worldId`, { $worldId: worldId });
     const row = rows[0];
     return { worldId: row.world_id, worldName: row.world_name || '', userRating: row.user_rating };
   }
@@ -554,12 +564,12 @@ export class Storage {
   markWorldVisited({ worldId }) {
     const now = new Date().toISOString();
     this._run(
-      `INSERT INTO new_worlds (world_id, world_name, tags, visited, visited_at)
+      `INSERT INTO world_kb (world_id, world_name, tags, visited, visited_at)
        VALUES ($worldId, '', '[]', 1, $now)
        ON CONFLICT(world_id) DO UPDATE SET visited = 1, visited_at = $now`,
       { $worldId: worldId, $now: now }
     );
-    const rows = this._query(`SELECT world_id, world_name, visited, visited_at FROM new_worlds WHERE world_id = $worldId`, { $worldId: worldId });
+    const rows = this._query(`SELECT world_id, world_name, visited, visited_at FROM world_kb WHERE world_id = $worldId`, { $worldId: worldId });
     const row = rows[0];
     return { worldId: row.world_id, worldName: row.world_name || '', visited: row.visited === 1, visitedAt: row.visited_at };
   }
@@ -569,7 +579,7 @@ export class Storage {
     const now = new Date().toISOString();
     const p = Math.min(Math.max(parseInt(priority, 10) || 0, 0), 2);
     this._run(
-      `INSERT INTO new_worlds (world_id, world_name, tags, backlog, backlog_added_at, backlog_reason, backlog_priority)
+      `INSERT INTO world_kb (world_id, world_name, tags, backlog, backlog_added_at, backlog_reason, backlog_priority)
        VALUES ($worldId, '', '[]', 1, $now, $reason, $priority)
        ON CONFLICT(world_id) DO UPDATE SET
          backlog = 1,
@@ -580,7 +590,7 @@ export class Storage {
     );
     const rows = this._query(
       `SELECT world_id, world_name, backlog, backlog_added_at, backlog_reason, backlog_priority, visited, visited_at
-       FROM new_worlds WHERE world_id = $worldId`,
+       FROM world_kb WHERE world_id = $worldId`,
       { $worldId: worldId }
     );
     const row = rows[0];
@@ -594,8 +604,8 @@ export class Storage {
 
   /** 待逛列表：移除（backlog=0；保留行，世界知识不删） */
   removeFromBacklog({ worldId }) {
-    this._run(`UPDATE new_worlds SET backlog = 0 WHERE world_id = $worldId`, { $worldId: worldId });
-    const rows = this._query(`SELECT world_id, backlog FROM new_worlds WHERE world_id = $worldId`, { $worldId: worldId });
+    this._run(`UPDATE world_kb SET backlog = 0 WHERE world_id = $worldId`, { $worldId: worldId });
+    const rows = this._query(`SELECT world_id, backlog FROM world_kb WHERE world_id = $worldId`, { $worldId: worldId });
     return { worldId, removed: rows.length === 0 || rows[0].backlog === 0 };
   }
 
@@ -610,11 +620,11 @@ export class Storage {
     const order = sortCol === 'priority'
       ? 'backlog_priority DESC, backlog_added_at DESC'
       : `${sortCol === 'added_at' ? 'backlog_added_at' : sortCol} DESC`;
-    const total = this._query(`SELECT COUNT(*) AS cnt FROM new_worlds ${where}`)[0].cnt;
+    const total = this._query(`SELECT COUNT(*) AS cnt FROM world_kb ${where}`)[0].cnt;
     const rows = this._query(
       `SELECT world_id, world_name, author_name, favorites, occupants, popularity, description, tags,
               created_at, visited, visited_at, backlog_added_at, backlog_reason, backlog_priority
-       FROM new_worlds ${where} ORDER BY ${order} LIMIT ${limit}`
+       FROM world_kb ${where} ORDER BY ${order} LIMIT ${limit}`
     );
     const worlds = rows.map(r => {
       let worldTags = [];

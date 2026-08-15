@@ -114,8 +114,12 @@ CREATE TABLE IF NOT EXISTS planet_cache (
   fetched_at TEXT                -- 写入时间 ISO 8601
 );
 
--- 新地图追踪（scan_new_worlds MCP 工具维护：新发布世界的收藏/逛过标记）
-CREATE TABLE IF NOT EXISTS new_worlds (
+-- 本地世界知识库（world_kb）：世界追踪 + 用户状态表
+-- 原表名 new_worlds（2026-08-16 更名）：实际承担「世界知识 + 用户状态」——
+-- 扫描追踪（scan_new_worlds 维护热度快照）、user_rating 反馈、visited 逛过标记、
+-- sleep_ok 睡觉图、backlog 待逛列表均在此表。MCP 工具名 scan_new_worlds/get_new_worlds
+-- 为 API 契约保留原名，仅表名更名。
+CREATE TABLE IF NOT EXISTS world_kb (
   world_id TEXT PRIMARY KEY,
   world_name TEXT NOT NULL DEFAULT '',
   author_name TEXT DEFAULT '',
@@ -136,7 +140,7 @@ CREATE TABLE IF NOT EXISTS new_worlds (
   backlog_reason TEXT DEFAULT '',     -- 想逛的理由/备注（可空）
   backlog_priority INTEGER DEFAULT 0  -- 待逛优先级: 0=普通 / 1=优先 / 2=强烈想逛
 );
-CREATE INDEX IF NOT EXISTS idx_new_worlds_visited ON new_worlds(visited);
+CREATE INDEX IF NOT EXISTS idx_world_kb_visited ON world_kb(visited);
 
 
 -- 推荐选择学习（recommend_join 用户选择记录，个性化权重学习的数据源）
