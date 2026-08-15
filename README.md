@@ -15,8 +15,9 @@
 
 - 📡 **好友监控**：实时采集好友动态，断线自动重连，cookie 过期自动 OTP 邮箱取码登录，全链路无人值守
 - 🤖 **智能推荐**：AI 好友推荐（熟悉度 + 收藏夹权重 + 房间场景），推荐当前最值得加入的房间；偏好可自然语言设置并自动学习
-- 🗺 **地图推荐与查找**：世界检索（VRChat 官方 / PlanetVRC 日文目录 / 多源融合推荐）、新世界追踪、X 博主世界推荐聚合、BOOTH 素材检索
+- 🗺 **地图推荐与查找**：世界检索（VRChat 官方 / PlanetVRC 日文目录 / 多源融合推荐）、新世界追踪、X 博主世界推荐聚合
 - 💬 **社交互动**：戳戳（Boop）、邀请进房、请求加入、好友请求/删除、一键开房（命名管道直发 + API 回退），内置限流防封
+- 🛍 **素材检索**：BOOTH（pixiv 数字商品平台）检索 VRChat 素材——avatar/衣装/3D 模型，含热度排行、详情、本地缓存与汉化展示
 - 🖼 **媒体管理**：VRC+ 相册（Prints）/ 图库（Gallery）/ 自定义表情的上传、下载、删除
 - 👥 **群组管理**：群组信息、群组房列表、加入/退出、公告窥探、群组热度
 - 🗄 **数据与洞察**：事件历史、同屏交叉查询、上线规律分析、一周游戏周报、昵称映射、世界备注与变更历史
@@ -39,13 +40,15 @@
 | 文档 | 内容 | 何时读 |
 |------|------|--------|
 | [AGENTS.md](./AGENTS.md) | 部署配置引导：凭据、环境变量、启动、Hermes 插件、Agent Skill 安装、MCP 接口配置 | 部署 / 配置 / 首次上手 |
-| [skills/vrc-monitor-agent/SKILL.md](./skills/vrc-monitor-agent/SKILL.md) | Agent Skill：**MCP 工具清单与调用方式**、5 大查询工作流、常见陷阱 | 查询 / 调用工具前 |
+| [skills/](./skills/) | 开箱即用的 Agent Skill 合集：主使用指南（**MCP 工具清单**、查询工作流、陷阱）、同屏查询专项、BOOTH 查询展示 | 查询 / 调用工具前 |
 | [DEVELOPMENT.md](./DEVELOPMENT.md) | 开发规范：跨平台约束、PR 要求、数据隐私、代码规范 | 修改代码 / 提交 PR |
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | 系统架构：数据流、模块职责、依赖关系 | 理解代码结构 |
 | [docs/history/](./docs/history/INDEX.md) | 项目演进记录：里程碑时间线、每月发布/PR 与演进意义 | 新 Agent 上手先读 |
 | [service-windows/](./service-windows/README.md) | Windows 开机自启 + 崩溃自愈 + 每日修复报告（一键脚本） | Windows 常驻运行 |
 
-**MCP 工具**：服务通过 MCP 暴露工具，覆盖好友查询、社交互动、媒体管理、群组操作、世界推荐等能力域。完整工具清单、参数与调用方式见 **[skills/vrc-monitor-agent/SKILL.md](./skills/vrc-monitor-agent/SKILL.md)「MCP 工具」章节**（Agent 直接照此调用）。
+**MCP 工具**：服务通过 MCP 暴露工具，覆盖好友查询、社交互动、媒体管理、群组操作、世界推荐、素材检索等能力域。工具清单按能力域分散在各 Agent Skill 中（Agent 照对应 skill 调用）：
+- 好友/社交/群组/推荐等**主体工具** → [skills/vrc-monitor-agent/SKILL.md](./skills/vrc-monitor-agent/SKILL.md)「MCP 工具」章节
+- **BOOTH 素材检索工具**（search_booth_items / get_booth_item / get_booth_history / get_booth_searches）→ [skills/booth-query-display/SKILL.md](./skills/booth-query-display/SKILL.md)（含封面/汉化/格式化展示工作流）
 
 ## 🧰 辅助工具（本机可选）
 
