@@ -155,15 +155,26 @@ mcp_servers:
 
 ### 7. 安装 Agent Skill（可选但推荐）
 
-仓库 `skills/` 目录自带 2 份开箱即用的 Agent skill（已去敏感化），复制到你的 Hermes skills 目录后，Agent 直接掌握全部查询工作流和陷阱：
+仓库 `skills/` 目录自带开箱即用的 Agent skill（已去敏感化），复制到你的 Hermes skills 目录后，Agent 直接掌握全部查询工作流、开发规范和陷阱：
 
 ```bash
 mkdir -p "$HERMES_HOME/skills"
 cp -r skills/vrc-monitor-agent "$HERMES_HOME/skills/"
 cp -r skills/vrc-monitor-companion-query "$HERMES_HOME/skills/"
+cp -r skills/booth-query-display "$HERMES_HOME/skills/"
+cp -r skills/vrchat-assistant-development "$HERMES_HOME/skills/"
 ```
 
+| Skill | 用途 | 何时需要 |
+|-------|------|----------|
+| `vrc-monitor-agent` | 好友/社交/群组/推荐等主体 MCP 工具清单、查询工作流、陷阱 | 日常查询与社交操作 |
+| `vrc-monitor-companion-query` | 「谁和我/和 XX 一起玩过」同屏交叉查询正确姿势 | 同屏/玩伴查询 |
+| `booth-query-display` | BOOTH 素材检索工具（搜索/详情/热度/汉化/格式化展示） | BOOTH 素材查询 |
+| `vrchat-assistant-development` | **开发规范**：新增 MCP 工具三件套流程、跨平台约束、提交 PR 要求（DEVELOPMENT.md 的 skill 化） | **给本仓库添加/修改功能、提交 PR 时必装** |
+
 重启 Hermes 会话生效。skill 说明见 `skills/vrc-monitor-agent/SKILL.md`（README「文档导航」有入口）。
+
+> **开发功能前必须加载** `vrchat-assistant-development` skill：它固化了仓库的全部开发约束（三件套模式、DB 迁移、文档同步、跨平台、提交规范），不加载直接开发容易违反 DEVELOPMENT.md 的硬性要求。
 
 ## 常用操作
 
