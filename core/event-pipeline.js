@@ -145,7 +145,7 @@ export class EventPipeline {
     if (worldId) {
       try {
         this.storage.db.prepare(
-          `UPDATE new_worlds SET visited = 1, visited_at = @visited_at
+          `UPDATE new_worlds SET visited = 1, visited_at = @visited_at, backlog = 0
            WHERE world_id = @world_id AND visited = 0`
         ).run({ world_id: worldId, visited_at: event.receivedAt || new Date().toISOString() });
       } catch {

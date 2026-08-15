@@ -76,6 +76,20 @@ export class Storage {
     if (!nwCols4.some(c => c.name === 'author_id')) {
       this._run(`ALTER TABLE new_worlds ADD COLUMN author_id TEXT DEFAULT ''`);
     }
+    // 迁移：旧库 new_worlds 缺 backlog 系列列（待逛地图列表，幂等）
+    const nwCols5 = this._query(`PRAGMA table_info(new_worlds)`);
+    if (!nwCols5.some(c => c.name === 'backlog')) {
+      this._run(`ALTER TABLE new_worlds ADD COLUMN backlog INTEGER DEFAULT 0`);
+    }
+    if (!nwCols5.some(c => c.name === 'backlog_added_at')) {
+      this._run(`ALTER TABLE new_worlds ADD COLUMN backlog_added_at TEXT`);
+    }
+    if (!nwCols5.some(c => c.name === 'backlog_reason')) {
+      this._run(`ALTER TABLE new_worlds ADD COLUMN backlog_reason TEXT DEFAULT ''`);
+    }
+    if (!nwCols5.some(c => c.name === 'backlog_priority')) {
+      this._run(`ALTER TABLE new_worlds ADD COLUMN backlog_priority INTEGER DEFAULT 0`);
+    }
     // 迁移：历史 tags='' 脏数据统一为 '[]'（json_each 对空串抛 malformed JSON，Review R2）
     this._run(`UPDATE new_worlds SET tags = '[]' WHERE tags IS NULL OR tags = ''`);
     return this;
@@ -548,6 +562,81 @@ export class Storage {
     const rows = this._query(`SELECT world_id, world_name, visited, visited_at FROM new_worlds WHERE world_id = $worldId`, { $worldId: worldId });
     const row = rows[0];
     return { worldId: row.world_id, worldName: row.world_name || '', visited: row.visited === 1, visitedAt: row.visited_at };
+  }
+
+  /** 待逛列表：加入/更新（幂等，重复加入 = 更新备注/优先级；世界不在表里插兜底行） */
+  addToBacklog({ worldId, reason = '', priority = 0 }) {
+    const now = new Date().toISOString();
+    const p = Math.min(Math.max(parseInt(priority, 10) || 0, 0), 2);
+    this._run(
+      `INSERT INTO new_worlds (world_id, world_name, tags, backlog, backlog_added_at, backlog_reason, backlog_priority)
+       VALUES ($worldId, '', '[]', 1, $now, $reason, $priority)
+       ON CONFLICT(world_id) DO UPDATE SET
+         backlog = 1,
+         backlog_reason = CASE WHEN $reason != '' THEN $reason ELSE backlog_reason END,
+         backlog_priority = $priority,
+         backlog_added_at = COALESCE(backlog_added_at, $now)`,
+      { $worldId: worldId, $now: now, $reason: reason, $priority: p }
+    );
+    const rows = this._query(
+      `SELECT world_id, world_name, backlog, backlog_added_at, backlog_reason, backlog_priority, visited, visited_at
+       FROM new_worlds WHERE world_id = $worldId`,
+      { $worldId: worldId }
+    );
+    const row = rows[0];
+    return {
+      worldId: row.world_id, worldName: row.world_name || '',
+      inBacklog: row.backlog === 1, addedAt: row.backlog_added_at,
+      reason: row.backlog_reason || '', priority: row.backlog_priority,
+      visited: row.visited === 1, visitedAt: row.visited_at,
+    };
+  }
+
+  /** 待逛列表：移除（backlog=0；保留行，世界知识不删） */
+  removeFromBacklog({ worldId }) {
+    this._run(`UPDATE new_worlds SET backlog = 0 WHERE world_id = $worldId`, { $worldId: worldId });
+    const rows = this._query(`SELECT world_id, backlog FROM new_worlds WHERE world_id = $worldId`, { $worldId: worldId });
+    return { worldId, removed: rows.length === 0 || rows[0].backlog === 0 };
+  }
+
+  /** 待逛列表：查询（pending = backlog=1 AND visited=0；visited=1 的逛完历史也可见） */
+  getBacklog({ status = 'pending', sortBy = 'added_at', limit = 20 } = {}) {
+    const st = ['pending', 'visited', 'all'].includes(status) ? status : 'pending';
+    const sortCol = ['added_at', 'priority', 'favorites'].includes(sortBy) ? sortBy : 'added_at';
+    limit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50);
+    let where = 'WHERE backlog = 1';
+    if (st === 'pending') where += ' AND visited = 0';
+    else if (st === 'visited') where += ' AND visited = 1';
+    const order = sortCol === 'priority'
+      ? 'backlog_priority DESC, backlog_added_at DESC'
+      : `${sortCol === 'added_at' ? 'backlog_added_at' : sortCol} DESC`;
+    const total = this._query(`SELECT COUNT(*) AS cnt FROM new_worlds ${where}`)[0].cnt;
+    const rows = this._query(
+      `SELECT world_id, world_name, author_name, favorites, occupants, popularity, description, tags,
+              created_at, visited, visited_at, backlog_added_at, backlog_reason, backlog_priority
+       FROM new_worlds ${where} ORDER BY ${order} LIMIT ${limit}`
+    );
+    const worlds = rows.map(r => {
+      let worldTags = [];
+      try { worldTags = JSON.parse(r.tags || '[]'); } catch { /* 脏数据按空数组 */ }
+      return {
+        worldId: r.world_id,
+        worldName: r.world_name || '',
+        authorName: r.author_name || '',
+        favorites: r.favorites || 0,
+        occupants: r.occupants || 0,
+        popularity: r.popularity || 0,
+        description: r.description || '',
+        tags: Array.isArray(worldTags) ? worldTags : [],
+        created: r.created_at || '',
+        visited: r.visited === 1,
+        visitedAt: r.visited_at || '',
+        addedAt: r.backlog_added_at || '',
+        reason: r.backlog_reason || '',
+        priority: r.backlog_priority || 0,
+      };
+    });
+    return { total, status: st, worlds };
   }
 
   getWorldHistory(worldId, limit = 50) {

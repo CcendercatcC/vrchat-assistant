@@ -130,7 +130,11 @@ CREATE TABLE IF NOT EXISTS new_worlds (
   tags TEXT DEFAULT '',          -- 作者标签 JSON 数组（author_tag_*，主题分类用）
   description TEXT DEFAULT '',   -- 世界描述（主题关键词匹配用）
   source TEXT DEFAULT 'new',     -- 来源: new=新发布-推荐 / hot=热门图追加
-  user_rating INTEGER DEFAULT 0  -- 用户反馈: -1=烂图(junk) / 0=无标记 / 1=好图（recommend 评分加权用）
+  user_rating INTEGER DEFAULT 0,  -- 用户反馈: -1=烂图(junk) / 0=无标记 / 1=好图（recommend 评分加权用）
+  backlog INTEGER DEFAULT 0,          -- 待逛列表标记（1=在待逛列表，本地待办）
+  backlog_added_at TEXT,              -- 加入待逛列表时间
+  backlog_reason TEXT DEFAULT '',     -- 想逛的理由/备注（可空）
+  backlog_priority INTEGER DEFAULT 0  -- 待逛优先级: 0=普通 / 1=优先 / 2=强烈想逛
 );
 CREATE INDEX IF NOT EXISTS idx_new_worlds_visited ON new_worlds(visited);
 

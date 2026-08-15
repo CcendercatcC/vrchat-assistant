@@ -166,7 +166,7 @@ export function handleGetNewWorlds({ onlyUnvisited = false, limit = 10, sortBy =
   // 构造排除条件：tags 列是 JSON 数组字符串（["author_tag_game",...]），用 json_each 拆行匹配主题
   let where = '';
   const whereParams = {};
-  if (onlyUnvisited) where += 'WHERE visited = 0';
+  if (onlyUnvisited) where += 'WHERE visited = 0 AND backlog = 0';
   if (excludedThemes.length > 0) {
     // 排除 = 不存在任何匹配主题的行（json_each 拆 JSON tags 数组匹配）
     // 兜底：json_valid(tags) 为假（空串/脏数据）时按 '[]' 处理，避免 malformed JSON 崩溃
@@ -240,6 +240,29 @@ export function handleMarkWorldVisited({ worldId }) {
   if (!worldId) throw new Error('worldId is required');
   const result = storage.markWorldVisited({ worldId });
   log(`✅ 手动标记 visited: ${worldId}${result.worldName ? ` (${result.worldName})` : ''}`);
+  return result;
+}
+
+/** 待逛列表：加入/更新（幂等） */
+export function handleAddToBacklog({ worldId, reason = '', priority = 0 }) {
+  const { storage } = ctx;
+  if (!worldId) throw new Error('worldId is required');
+  const result = storage.addToBacklog({ worldId, reason, priority });
+  log(`📌 加入待逛: ${worldId}${result.worldName ? ` (${result.worldName})` : ''} priority=${result.priority}`);
+  return result;
+}
+
+/** 待逛列表：查询 */
+export function handleGetBacklog({ status = 'pending', sortBy = 'added_at', limit = 20 } = {}) {
+  return ctx.storage.getBacklog({ status, sortBy, limit });
+}
+
+/** 待逛列表：移除 */
+export function handleRemoveFromBacklog({ worldId }) {
+  const { storage } = ctx;
+  if (!worldId) throw new Error('worldId is required');
+  const result = storage.removeFromBacklog({ worldId });
+  log(`🗑 移出待逛: ${worldId}`);
   return result;
 }
 

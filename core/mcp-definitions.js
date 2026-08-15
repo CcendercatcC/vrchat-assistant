@@ -403,6 +403,42 @@ export const CUSTOM_TOOLS = [
     },
   },
 {
+    name: 'add_to_backlog',
+    description: '[action] Add a world to your local to-visit backlog (待逛列表). Worlds stay pending until visited (auto-cleared by location events) or manually removed. Idempotent: re-adding updates reason/priority. Local-only, does not touch VRChat cloud favorites.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        worldId: { type: 'string', description: 'VRChat world ID (wrld_...)' },
+        reason: { type: 'string', description: 'Why you want to visit (e.g. 氛围图/解谜/温泉/带人逛)' },
+        priority: { type: 'number', enum: [0, 1, 2], default: 0, description: '0=normal, 1=high, 2=must visit' },
+      },
+      required: ['worldId'],
+    },
+  },
+{
+    name: 'get_backlog',
+    description: '[query] List worlds in your local to-visit backlog (待逛列表). status=pending (default) shows unvisited to-visit worlds; visited shows auto-cleared history; all shows both. Each item carries snapshot details (favorites/tags/description) from the local world knowledge table.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', enum: ['pending', 'visited', 'all'], default: 'pending', description: 'pending=未逛, visited=逛完历史, all=全部' },
+        sortBy: { type: 'string', enum: ['added_at', 'priority', 'favorites'], default: 'added_at', description: 'Sort field (descending)' },
+        limit: { type: 'number', default: 20, description: 'Max rows (1-50, default 20)' },
+      },
+    },
+  },
+{
+    name: 'remove_from_backlog',
+    description: '[action] Remove a world from the to-visit backlog (待逛列表). Local-only, does not affect cloud favorites. Idempotent.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        worldId: { type: 'string', description: 'VRChat world ID (wrld_...)' },
+      },
+      required: ['worldId'],
+    },
+  },
+{
     name: 'get_watchlist',
     description: '[manage] List all watched friends.',
     inputSchema: {

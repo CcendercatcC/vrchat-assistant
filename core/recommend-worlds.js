@@ -449,6 +449,13 @@ export async function recommendWorlds(ctxArg, args = {}) {
       if (visited) skippedVisited++;
       return !visited;
     });
+    // 5a. 待逛列表排除：正在待逛的世界不重复推荐（等用户逛完/移出后再推）
+    const backlogSet = new Set(
+      storage._query(`SELECT world_id FROM new_worlds WHERE backlog = 1 AND visited = 0`).map(r => r.world_id)
+    );
+    if (backlogSet.size > 0) {
+      scored = scored.filter(c => !(c.worldId && backlogSet.has(c.worldId)));
+    }
   }
   // 5b. excludeTheme 复查（候选阶段 tags 可能未补全官方标签，world_cache 合并后重筛一次）
   if (excludedThemes.length > 0) {
