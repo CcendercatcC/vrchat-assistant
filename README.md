@@ -46,9 +46,7 @@
 | [docs/history/](./docs/history/INDEX.md) | 项目演进记录：里程碑时间线、每月发布/PR 与演进意义 | 新 Agent 上手先读 |
 | [service-windows/](./service-windows/README.md) | Windows 开机自启 + 崩溃自愈 + 每日修复报告（一键脚本） | Windows 常驻运行 |
 
-**MCP 工具**：服务通过 MCP 暴露工具，覆盖好友查询、社交互动、媒体管理、群组操作、世界推荐、素材检索等能力域。工具清单按能力域分散在各 Agent Skill 中（Agent 照对应 skill 调用）：
-- 好友/社交/群组/推荐等**主体工具** → [skills/vrc-monitor-agent/SKILL.md](./skills/vrc-monitor-agent/SKILL.md)「MCP 工具」章节
-- **BOOTH 素材检索工具**（search_booth_items / get_booth_item / get_booth_history / get_booth_searches）→ [skills/booth-query-display/SKILL.md](./skills/booth-query-display/SKILL.md)（含封面/汉化/格式化展示工作流）
+**MCP 工具**：服务通过 MCP 暴露工具，覆盖好友查询、社交互动、媒体管理、群组操作、世界推荐、素材检索等能力域。**完整工具清单（全部工具）统一登记在 [skills/vrc-monitor-agent/SKILL.md](./skills/vrc-monitor-agent/SKILL.md)「MCP 工具」章节**，Agent 照此调用。其余 skill 为各能力域的工作流补充（不重复登记工具）：`booth-query-display`（BOOTH 检索/展示格式）、`vrc-monitor-companion-query`（同屏查询）、`vrchat-assistant-development`（开发规范）。
 
 ## 🧰 辅助工具（本机可选）
 

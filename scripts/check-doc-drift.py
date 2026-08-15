@@ -12,6 +12,8 @@ check-doc-drift.py — vrchat-assistant 文档漂移检测 + 自动修复（固�
   [FAIL] plugin.yaml 版本同步    hermes-plugin/plugin.yaml version 应 = package.json version
   [WARN] GitHub 仓库描述        描述不应含过时工具数（gh repo view；修复需 owner 权限，失败仅提示）
   [FAIL] 历史记录 PR 状态漂移    docs/history/ 中标注的 PR 状态（OPEN/待评审/已合并等）应与 gh 实际状态一致
+  [FAIL] skill 工具引用死链       各 skill 文件中反引号包裹的工具名必须存在于 core/mcp-definitions.js
+  [WARN] skills/ 目录一致性       README 提及的 skill 名应与 skills/ 实际子目录一致（新增漏登记/删除残留）
 
 用法：
   python scripts/check-doc-drift.py             # 只检测，输出报告
@@ -244,6 +246,71 @@ def check_pr_status_drift(history_refs, actual_states):
                            "merged_at": merged_at, "mentions": rec["mentions"]})
     return drifts
 
+def check_skills_consistency(code_tools):
+    """检查 skills/ 目录一致性（2026-08-15 新增）。
+
+    三个子检查：
+    1. skill 目录清单：列出 skills/ 下所有含 SKILL.md 的子目录（实际存在）
+    2. README 提及的 skill 名 vs 实际目录：README 里提到的 skill 名称应与目录一致
+       （README 漏登记新增 skill / README 提到已删除的 skill = 漂移）
+    3. 各 skill 文件中的工具引用死链：skill 里反引号包裹的工具名必须存在于
+       core/mcp-definitions.js（引用了不存在的工具 = 死引用，说明工具被删/改名后 skill 没同步）
+
+    返回 {skills_dir, readme_mention_issues, dead_refs}，全部信息级，不置 has_drift。
+    """
+    result = {"skills_dir": [], "readme_mention_issues": [], "dead_refs": []}
+
+    # 1. 实际 skill 目录
+    skills_root = os.path.join(REPO, "skills")
+    if os.path.isdir(skills_root):
+        result["skills_dir"] = sorted(
+            d for d in os.listdir(skills_root)
+            if os.path.isdir(os.path.join(skills_root, d))
+            and os.path.isfile(os.path.join(skills_root, d, "SKILL.md"))
+        )
+
+    # 2. README 提及的 skill 名（skills/<name> 或 `<name>` 紧邻 skills/ 的写法）
+    readme = read_text("README.md") or ""
+    readme_mentions = set(re.findall(r"skills/([a-z0-9-]+)", readme))
+    readme_mentions |= set(re.findall(r"`([a-z0-9-]+)`[^`]*?skill", readme, re.IGNORECASE))
+    # 反向：目录里有但 README 完全没提（新增 skill 漏登记）
+    if result["skills_dir"]:
+        mentioned = set(result["skills_dir"])
+        for name in result["skills_dir"]:
+            if name not in readme:
+                result["readme_mention_issues"].append(
+                    f"skills/{name} 目录存在但 README 未提及（新增 skill 漏登记？）")
+        # README 提了但目录不存在
+        for name in sorted(readme_mentions):
+            if name not in result["skills_dir"]:
+                result["readme_mention_issues"].append(
+                    f"README 提及 skills/{name} 但目录不存在（已删除或拼写错误？）")
+
+    # 3. 各 skill 文件中的工具引用死链
+    # 只检测「工具表格行首」的标识符（`| \`tool_name\` |` 或 `| \`a\` / \`b\` |`）——那才是
+    # 声称"这是工具"的位置；表格同行的字段名/参数名（cached/note/price 等）与正文说明不算。
+    for name in result["skills_dir"]:
+        skill_text = read_text(os.path.join("skills", name, "SKILL.md"))
+        if not skill_text:
+            continue
+        refs = set()
+        for line in skill_text.splitlines():
+            line = line.strip()
+            if not line.startswith("| "):
+                continue
+            # 行首单元格：| `tool_a` | 或 | `tool_a` / `tool_b` | 或 | `tool_a`,`tool_b` |
+            m = re.match(r"\| `([a-z_]+)`(?:\s*(?:/|,)\s*`([a-z_]+)`)*", line)
+            if m:
+                refs.add(m.group(1))
+                for g in m.groups()[1:]:
+                    if g:
+                        refs.add(g)
+        dead = sorted(t for t in refs if t not in code_tools)
+        for t in dead:
+            result["dead_refs"].append(f"skills/{name}/SKILL.md 引用了不存在的工具: {t}")
+
+    return result
+
 def main():
     ap = argparse.ArgumentParser(description="vrchat-assistant 文档漂移检测 + 自动修复")
     ap.add_argument("--fix", action="store_true", help="自动修复可确定性修复的漂移")
@@ -278,6 +345,9 @@ def main():
     history_refs = extract_history_pr_refs()
     pr_drifts = check_pr_status_drift(history_refs, pr_states) if pr_states else []
 
+    # skills/ 目录一致性（目录清单 / README 提及 / 工具引用死链）
+    skills_check = check_skills_consistency(code_tools)
+
     # ── 修复 ──
     fixed_numeric = 0
     fixed_plugin = False
@@ -291,7 +361,9 @@ def main():
         version_ok = (pkg_v is not None and pkg_v == plugin_v)
 
     # ── 汇总 ──
-    has_drift = bool(missing_readme or numeric_hits or not version_ok or pr_drifts)
+    # 死引用 = skill 里引用了不存在的工具（FAIL 级）；README 提及不一致 = WARN 级（不算 has_drift）
+    has_drift = bool(missing_readme or numeric_hits or not version_ok or pr_drifts
+                     or skills_check["dead_refs"])
     # AGENTS 缺失仅 INFO（README 是完整权威清单；AGENTS 采样列举，只提示）
     report = {
         "code_tools_count": len(code_tools),
@@ -307,6 +379,9 @@ def main():
         "gh_error": gh_err,
         "pr_status_drift": pr_drifts,
         "pr_status_check_error": pr_err,
+        "skills_dir": skills_check["skills_dir"],
+        "readme_skill_issues": skills_check["readme_mention_issues"],
+        "skill_dead_refs": skills_check["dead_refs"],
         "has_drift": has_drift,
     }
 
@@ -366,6 +441,20 @@ def main():
         print(f"\n[WARN] 历史记录 PR 状态检查跳过（{pr_err}）")
     else:
         print("\n[OK] 历史记录 PR 状态与 GitHub 一致")
+
+    # skills/ 目录一致性报告
+    if skills_check["skills_dir"]:
+        print(f"\n[INFO] skills/ 目录 {len(skills_check['skills_dir'])} 个 skill: " + ", ".join(skills_check["skills_dir"]))
+    if skills_check["readme_mention_issues"]:
+        print(f"\n[WARN] skills/ 目录与 README 提及不一致，共 {len(skills_check['readme_mention_issues'])} 处:")
+        for msg in skills_check["readme_mention_issues"]:
+            print(f"  - {msg}")
+        print("       （新增 skill 需在 README「文档导航」登记；已删除 skill 需从 README 移除）")
+    if skills_check["dead_refs"]:
+        print(f"\n[FAIL] skill 文件引用了不存在的工具（死引用），共 {len(skills_check['dead_refs'])} 处:")
+        for msg in skills_check["dead_refs"]:
+            print(f"  - {msg}")
+        print("       （工具被删除/改名后 skill 未同步；修复：更新 skill 中过时的工具名）")
 
     if args.fix:
         print(f"\n[FIX] 清除数字残留 {fixed_numeric} 处；plugin.yaml 版本{'已对齐' if fixed_plugin else '无需修改'}")
