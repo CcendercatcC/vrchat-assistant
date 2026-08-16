@@ -21,7 +21,7 @@ VRChat WebSocket (wss://pipeline.vrchat.cloud)
         ├── world_cache 表（世界名+元数据缓存）
         ├── nicknames 表（本地昵称映射）
         ├── watchlist 表（关注名单）
-        ├── new_worlds 表（新世界追踪）
+        ├── world_kb 表（本地世界知识库：新世界追踪 + 用户状态）
         ├── join_choices 表（推荐选择学习）
         ├── group_cache 表（群组信息缓存）
         └── world_history 表（世界信息变更记录）
@@ -107,7 +107,7 @@ start-monitor.js
 | `world_cache` | 世界名+元数据缓存（懒刷新） | world_id(PK), name, note, author_name, tags |
 | `nicknames` | 本地昵称映射 | user_id(PK), nickname, display_name |
 | `watchlist` | 关注名单 | user_id(PK), priority |
-| `new_worlds` | 新世界追踪 | world_id(PK), favorites, visited, tags |
+| `world_kb` | 本地世界知识库（新世界追踪 + 用户状态：rating/visited/backlog） | world_id(PK), favorites, visited, tags, user_rating, backlog |
 | `join_choices` | 推荐选择学习数据 | user_id, world_id, recommend_score, rank_in_list |
 | `group_cache` | 群组信息缓存（周报用，TTL 7 天） | group_id(PK), name, member_count |
 | `world_history` | 世界信息变更记录 | world_id, field, old_value, new_value |
