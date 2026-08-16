@@ -17,20 +17,91 @@ export async function handleGetOnlineFriends() {
     if (item.userId) nicknameMap.set(item.userId, item.nickname);
   }
 
+  // 停留时长：每个好友最新一条 friend-location 事件，若其 location 与当前一致，
+  // 事件时间即进入时间 → durationMinutes = now - created_at（2026-08-16 用户需求固化）
+  const latestLocations = storage.getLatestFriendLocations(online.map(f => f.id));
+  // 在线时长：会话起点 = 最近 friend-offline 之后最早 friend-online（重复推送被 MIN 跳过）
+  const sessionStarts = storage.getOnlineSessionStarts(online.map(f => f.id));
+  const nowMs = Date.now();
+
+  // 世界名：缓存优先，缺失批量 API 查询并写 world_cache
+  // （懒刷新节奏由 get_world_name 控制；rateLimiter 已在 RPC case 层包裹本 handler，
+  //   内部直接串行 api._request，与 get_weekly_report 同款模式——勿再套 rateLimiter.execute）
+  // ⚠️ 节流：高频工具，内部串行 API 查询加小 sleep 防突发 N 连发（PR #36 审核 W4）；
+  //   查询失败置 null（不泄漏 worldId 内部 ID，W2）；失败不写缓存 → 下次调用会重试（W3，已知行为）
+  const worldNameMap = {};
+  const missingWorlds = [];
+  for (const f of online) {
+    const lp = parseLocation(f.location || 'private');
+    if (!lp.worldId) continue;
+    const cached = storage.getWorldName(lp.worldId);
+    if (cached && cached.name) worldNameMap[lp.worldId] = cached.name;
+    else missingWorlds.push(lp.worldId);
+  }
+  for (const wid of missingWorlds) {
+    await new Promise(r => setTimeout(r, 300));  // 小 sleep 节流
+    try {
+      const wr = await api._request('GET', `/worlds/${wid}`);
+      if (wr.status === 200 && wr.data) {
+        const w = wr.data;
+        worldNameMap[wid] = w.name;
+        storage.upsertWorld({
+          worldId: w.id, name: w.name, authorName: w.authorName,
+          capacity: w.capacity, favorites: w.favorites,
+          releaseStatus: w.releaseStatus, tags: w.tags || [],
+          description: w.description || '', imageUrl: w.imageUrl || '',
+        });
+      } else worldNameMap[wid] = null;
+    } catch { worldNameMap[wid] = null; }
+  }
+
   return {
     online: online.length,
     total: friends.length,
-    friends: online.map(f => ({
-      userId: f.id,
-      displayName: f.displayName,
-      location: f.location || 'private',
-      status: f.status,
-      statusDescription: f.statusDescription,
-      platform: f.platform,
-      avatarImageUrl: f.currentAvatarThumbnailImageUrl,
-      nickname: nicknameMap.get(f.id) || null,
-      locationParsed: parseLocation(f.location || 'private'),
-    })),
+    friends: online.map(f => {
+      const lp = parseLocation(f.location || 'private');
+      const sessionStart = sessionStarts.get(f.id);
+      const sessionStartMs = sessionStart ? new Date(sessionStart).getTime() : 0;
+      // 停留时长：进入时间 = max(会话起点, 最新位置事件时间)——防跨会话污染
+      // （本次会话无位置变化事件时，进入时间以上线时间为准；否则以上次换房时间为准）
+      let durationMinutes = null;
+      let enteredAt = null;
+      const last = latestLocations.get(f.id);
+      if (last && f.location && f.location !== 'traveling') {
+        try {
+          const evLoc = JSON.parse(last.content).location || '';
+          if (evLoc === f.location) {
+            const enterMs = Math.max(new Date(last.createdAt).getTime(), sessionStartMs);
+            enteredAt = new Date(enterMs).toISOString();
+            durationMinutes = Math.max(0, Math.floor((nowMs - enterMs) / 60000));
+          }
+        } catch (e) { /* 解析失败视为未知 */ }
+      }
+      const worldName = lp.worldId ? (worldNameMap[lp.worldId] || null) : null;
+      // 在线时长（本次会话）：sessionStart 有值 → onlineMinutes = now - sessionStart
+      let onlineMinutes = null;
+      let onlineSince = null;
+      if (sessionStart) {
+        onlineSince = sessionStart;
+        onlineMinutes = Math.max(0, Math.floor((nowMs - sessionStartMs) / 60000));
+      }
+      return {
+        userId: f.id,
+        displayName: f.displayName,
+        location: f.location || 'private',
+        status: f.status,
+        statusDescription: f.statusDescription,
+        platform: f.platform,
+        avatarImageUrl: f.currentAvatarThumbnailImageUrl,
+        nickname: nicknameMap.get(f.id) || null,
+        locationParsed: lp,
+        worldName,
+        durationMinutes,
+        enteredAt,
+        onlineMinutes,
+        onlineSince,
+      };
+    }),
   };
 }
 

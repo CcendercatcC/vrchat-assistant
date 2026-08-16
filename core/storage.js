@@ -168,6 +168,65 @@ export class Storage {
     return this._query(sql, params);
   }
 
+  /**
+   * 批量取多个用户各自最新一条 friend-location 事件（get_online_friends 停留时长用）。
+   * 返回 Map<userId, {createdAt, content}>；某用户无事件则不在 Map 中。
+   * 窗口函数 PARTITION BY user_id 一次查询拿全，避免 N 次点查。
+   */
+  getLatestFriendLocations(userIds) {
+    if (!userIds || userIds.length === 0) return new Map();
+    const ph = userIds.map((_, i) => `$u${i}`).join(',');
+    const params = {};
+    userIds.forEach((id, i) => { params[`$u${i}`] = id; });
+    const rows = this._query(
+      `SELECT user_id, created_at, content_json FROM (
+         SELECT user_id, created_at, content_json,
+                ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY created_at DESC) AS rn
+         FROM events
+         WHERE type = 'friend-location' AND user_id IN (${ph})
+       ) WHERE rn = 1`,
+      params
+    );
+    const map = new Map();
+    for (const r of rows) map.set(r.user_id, { createdAt: r.created_at, content: r.content_json });
+    return map;
+  }
+
+  /**
+   * 批量取每个用户本次在线会话的起点（get_online_friends 在线时长用，2026-08-16 新增）。
+   * 口径：会话起点 = 最近一次 friend-offline 之后最早的一条 friend-online。
+   * 为何不能直接取最新 friend-online：VRChat WS 重连/状态同步会重复推送 friend-online
+   * （实测 24h 527 条 vs ~30 人在线），最新一条会严重低估时长；MIN(>last_off) 天然跳过重复推送。
+   * 仅当用户从未有过 offline 记录时才取最早一条 friend-online（数据库记录以来首次上线）；
+   * 有 offline 但 offline 后无 online（事件丢失/数据不一致）→ 返回 NULL，调用方安全降级
+   * （避免把离线前时间当会话起点导致 onlineMinutes 高估，PR #36 审核 W1）。
+   * 返回 Map<userId, sessionStartIso|null>；无 friend-online 事件则不在 Map 中。
+   */
+  getOnlineSessionStarts(userIds) {
+    if (!userIds || userIds.length === 0) return new Map();
+    const ph = userIds.map((_, i) => `$u${i}`).join(',');
+    const params = {};
+    userIds.forEach((id, i) => { params[`$u${i}`] = id; });
+    const rows = this._query(
+      `WITH offs AS (
+         SELECT user_id, MAX(created_at) AS last_off FROM events
+         WHERE type='friend-offline' AND user_id IN (${ph}) GROUP BY user_id
+       )
+       SELECT e.user_id,
+              CASE WHEN o.last_off IS NULL THEN MIN(e.created_at)
+                   ELSE MIN(CASE WHEN e.created_at > o.last_off THEN e.created_at END) END
+              AS session_start
+       FROM events e
+       LEFT JOIN offs o ON e.user_id = o.user_id
+       WHERE e.type = 'friend-online' AND e.user_id IN (${ph})
+       GROUP BY e.user_id`,
+      params
+    );
+    const map = new Map();
+    for (const r of rows) map.set(r.user_id, r.session_start || null);
+    return map;
+  }
+
   getRecentEvents({ limit = 50, type } = {}) {
     let sql = `SELECT * FROM events`;
     const params = {};
