@@ -2,7 +2,7 @@
  * 世界推荐核心 — 多源候选池 + wrld_id 反查闭环 + 评分融合
  *
  * 数据流（recommendWorlds 编排）:
- *   collectCandidates（local new_worlds / PlanetVRC 排行 / 官方主题搜索）
+ *   collectCandidates（local world_kb / PlanetVRC 排行 / 官方主题搜索）
  *   → 合并去重 + excludeTheme 过滤 → resolveWorldId（planet 卡片名称反查官方）
  *   → scoreCandidate（热度 × Planet 信号 × 新鲜度 × 主题 × 作者画像）
  *   → excludeVisited 过滤 → 排序 → 取 limit → 组装输出
@@ -73,15 +73,15 @@ export function buildAuthorProfile(ctx) {
 
 // ── 候选池 ──
 
-/** local 源：new_worlds 全量（sleep_ok 列旧库可能缺失，PRAGMA 检查回退） */
+/** local 源：world_kb 全量（sleep_ok 列旧库可能缺失，PRAGMA 检查回退） */
 function collectLocalCandidates(storage) {
-  const cols = storage._query(`PRAGMA table_info(new_worlds)`);
+  const cols = storage._query(`PRAGMA table_info(world_kb)`);
   const hasSleepOk = cols.some(c => c.name === 'sleep_ok');
   const rows = storage._query(
     `SELECT world_id, world_name, author_name, author_id, created_at, favorites,
             occupants, popularity, visited, visited_at, tags, description, user_rating
             ${hasSleepOk ? ', sleep_ok' : ''}
-     FROM new_worlds`
+     FROM world_kb`
   );
   return rows.map(r => {
     let tags = [];
@@ -438,17 +438,24 @@ export async function recommendWorlds(ctxArg, args = {}) {
   // 4. 作者画像 + 评分
   const profile = buildAuthorProfile(ctxArg);
   let scored = pool.map(c => ({ ...c, ...scoreCandidate(c, { theme, profile }) }));
-  // 5. excludeVisited 过滤（local visited 标记 + new_worlds 反查）
+  // 5. excludeVisited 过滤（local visited 标记 + world_kb 反查）
   let skippedVisited = 0;
   if (excludeVisited) {
     const visitedSet = new Set(
-      storage._query(`SELECT world_id FROM new_worlds WHERE visited = 1`).map(r => r.world_id)
+      storage._query(`SELECT world_id FROM world_kb WHERE visited = 1`).map(r => r.world_id)
     );
     scored = scored.filter(c => {
       const visited = !!c.visited || (!!c.worldId && visitedSet.has(c.worldId));
       if (visited) skippedVisited++;
       return !visited;
     });
+    // 5a. 待逛列表排除：正在待逛的世界不重复推荐（等用户逛完/移出后再推）
+    const backlogSet = new Set(
+      storage._query(`SELECT world_id FROM world_kb WHERE backlog = 1 AND visited = 0`).map(r => r.world_id)
+    );
+    if (backlogSet.size > 0) {
+      scored = scored.filter(c => !(c.worldId && backlogSet.has(c.worldId)));
+    }
   }
   // 5b. excludeTheme 复查（候选阶段 tags 可能未补全官方标签，world_cache 合并后重筛一次）
   if (excludedThemes.length > 0) {

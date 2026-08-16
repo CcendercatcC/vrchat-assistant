@@ -357,7 +357,7 @@ export const CUSTOM_TOOLS = [
   },
 {
     name: 'scan_new_worlds',
-    description: '[action] Scan VRChat for worlds created in the last N days, filter junk, write to the new_worlds table, and return a recommended list. dryRun=true only reports without writing.',
+    description: '[action] Scan VRChat for worlds created in the last N days, filter junk, write to the world_kb table, and return a recommended list. dryRun=true only reports without writing.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -368,7 +368,7 @@ export const CUSTOM_TOOLS = [
   },
 {
     name: 'get_new_worlds',
-    description: '[query] Query tracked new worlds from the new_worlds table (read-only). Filter by visited, sort by heat, limit count.',
+    description: '[query] Query tracked new worlds from the world_kb table (read-only). Filter by visited, sort by heat, limit count.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -394,6 +394,42 @@ export const CUSTOM_TOOLS = [
 {
     name: 'mark_world_visited',
     description: '[action] Explicitly mark a world as visited (Issue #19: event-driven visited can miss). Useful to close the recommend-open-browse loop.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        worldId: { type: 'string', description: 'VRChat world ID (wrld_...)' },
+      },
+      required: ['worldId'],
+    },
+  },
+{
+    name: 'add_to_backlog',
+    description: '[action] Add a world to your local to-visit backlog (待逛列表). Worlds stay pending until visited (auto-cleared by location events) or manually removed. Idempotent: re-adding updates reason/priority. Local-only, does not touch VRChat cloud favorites.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        worldId: { type: 'string', description: 'VRChat world ID (wrld_...)' },
+        reason: { type: 'string', description: 'Why you want to visit (e.g. 氛围图/解谜/温泉/带人逛)' },
+        priority: { type: 'number', enum: [0, 1, 2], default: 0, description: '0=normal, 1=high, 2=must visit' },
+      },
+      required: ['worldId'],
+    },
+  },
+{
+    name: 'get_backlog',
+    description: '[query] List worlds in your local to-visit backlog (待逛列表). status=pending (default) shows unvisited to-visit worlds; visited shows the ones already visited (they leave the pending view automatically once visited); all shows both. Each item carries snapshot details (favorites/tags/description) from the local world knowledge table.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', enum: ['pending', 'visited', 'all'], default: 'pending', description: 'pending=未逛, visited=逛完历史, all=全部' },
+        sortBy: { type: 'string', enum: ['added_at', 'priority', 'favorites'], default: 'added_at', description: 'Sort field (descending)' },
+        limit: { type: 'number', default: 20, description: 'Max rows (1-50, default 20)' },
+      },
+    },
+  },
+{
+    name: 'remove_from_backlog',
+    description: '[action] Remove a world from the to-visit backlog (待逛列表). Local-only, does not affect cloud favorites. Idempotent.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -555,14 +591,14 @@ export const CUSTOM_TOOLS = [
   },
 {
     name: 'recommend_worlds',
-    description: '[query·推荐] Multi-source world recommendation: fuses local new_worlds + PlanetVRC popularity ranking + official theme search, scored by heat × user feedback × freshness × theme match × author affinity. Returns scored candidates with explainable reasons and canOpen flag (planet cards are resolved to wrld_ ids via official name lookup).',
+    description: '[query·推荐] Multi-source world recommendation: fuses local world_kb + PlanetVRC popularity ranking + official theme search, scored by heat × user feedback × freshness × theme match × author affinity. Returns scored candidates with explainable reasons and canOpen flag (planet cards are resolved to wrld_ ids via official name lookup).',
     inputSchema: {
       type: 'object',
       properties: {
         theme: { type: 'string', enum: ['sleep', 'chat', 'onsen', 'game', 'default'], default: 'default', description: 'Theme to boost (sleep boosts sleep_ok worlds strongly; other themes boost keyword matches)' },
         excludeTheme: { type: 'string', description: 'Comma-separated themes to exclude (matched against author_tag_* and name/description keywords, e.g. "game,horror")' },
         limit: { type: 'number', default: 5, description: 'Max results (1-10, default 5)' },
-        sources: { type: 'string', default: 'local,planet', description: 'Comma-separated sources: local (new_worlds table), planet (PlanetVRC ranking), official (theme keyword search)' },
+        sources: { type: 'string', default: 'local,planet', description: 'Comma-separated sources: local (world_kb table), planet (PlanetVRC ranking), official (theme keyword search)' },
         excludeVisited: { type: 'boolean', default: true, description: 'Skip worlds already visited' },
         detail: { type: 'boolean', default: true, description: 'Enrich description/imageUrl/note from world_cache' },
       },

@@ -139,17 +139,17 @@ export class EventPipeline {
     const worldName = worldId ? await this._resolveWorldName(worldId) : '';
     // 仅存事件（不 upsertFriend——user-location 是自己的位置，不更新好友状态表）
     this._storeEvent({ ...event, worldId }, worldName);
-    // 逛过的世界同步标记 new_worlds.visited（2026-08-12 修复）：
+    // 逛过的世界同步标记 world_kb.visited（2026-08-12 修复）：
     // 之前 visited 只在 scan_new_worlds 时更新，用户逛过但没再扫描的世界会一直标"未逛"，
     // 导致 get_new_worlds(onlyUnvisited) 把已逛的世界当新世界推荐。此处事件驱动回写，逛完即标记。
     if (worldId) {
       try {
         this.storage.db.prepare(
-          `UPDATE new_worlds SET visited = 1, visited_at = @visited_at
+          `UPDATE world_kb SET visited = 1, visited_at = @visited_at
            WHERE world_id = @world_id AND visited = 0`
         ).run({ world_id: worldId, visited_at: event.receivedAt || new Date().toISOString() });
       } catch {
-        // new_worlds 表缺失（旧库）时静默跳过，不影响事件管道
+        // world_kb 表缺失（旧库）时静默跳过，不影响事件管道
       }
     }
   }

@@ -30,10 +30,10 @@ function buildScoreContext() {
   const fullPenalty = CROWD === 'avoid' ? 60 : (CROWD === 'love' ? 30 : 50);
   const coldPenalty = CROWD === 'avoid' ? 0 : (CROWD === 'love' ? 15 : 10);
   const prefTag = CROWD === 'normal' ? '' : (isExplicitPref ? `偏好[${CROWD === 'avoid' ? '避人潮' : '爱热闹'}]` : `学习[${CROWD === 'avoid' ? '避人潮' : '爱热闹'}]`);
-  // 睡觉图集合（new_worlds.sleep_ok=1）+ 安静图名字判定
+  // 睡觉图集合（world_kb.sleep_ok=1）+ 安静图名字判定
   const sleepWorlds = new Set();
   try {
-    const sw = ctx.storage._query('SELECT world_id FROM new_worlds WHERE sleep_ok=1');
+    const sw = ctx.storage._query('SELECT world_id FROM world_kb WHERE sleep_ok=1');
     for (const r of sw) sleepWorlds.add(r.world_id);
   } catch (e) { /* 表不存在/无数据按空处理 */ }
   const QUIET_RE = /(寝|眠|睡眠|睡觉|睡|sleep|quiet|静か|静寂|calm|relax|リラックス|ゆったり|安らぎ|癒し|冥想|meditation)/i;

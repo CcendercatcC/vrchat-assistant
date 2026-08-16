@@ -51,7 +51,7 @@ export async function handleScanNewWorlds({ days = 7, dryRun = false }) {
   );
   const visited = new Set(visitedRows.map(r => r.world_id));
 
-  const trackedRows = storage._query('SELECT world_id FROM new_worlds');
+  const trackedRows = storage._query('SELECT world_id FROM world_kb');
   const tracked = new Set(trackedRows.map(r => r.world_id));
 
   const { unvisited, visitedFresh, toAdd, alreadyTracked } = classifyWorlds(fresh, visited, tracked);
@@ -62,7 +62,7 @@ export async function handleScanNewWorlds({ days = 7, dryRun = false }) {
 
   if (!dryRun) {
     const upsert = storage.db.prepare(
-      `INSERT INTO new_worlds (world_id, world_name, author_name, author_id, created_at, first_seen_at, favorites, occupants, popularity, visited, visited_at, tags, description)
+      `INSERT INTO world_kb (world_id, world_name, author_name, author_id, created_at, first_seen_at, favorites, occupants, popularity, visited, visited_at, tags, description)
        VALUES (@world_id, @world_name, @author_name, @author_id, @created_at, @first_seen_at, @favorites, @occupants, @popularity, @visited, @visited_at, @tags, @description)
        ON CONFLICT(world_id) DO UPDATE SET
          world_name = excluded.world_name,
@@ -76,7 +76,7 @@ export async function handleScanNewWorlds({ days = 7, dryRun = false }) {
          description = excluded.description`
     );
     const markVisited = storage.db.prepare(
-      `UPDATE new_worlds SET visited = 1, visited_at = @visited_at
+      `UPDATE world_kb SET visited = 1, visited_at = @visited_at
        WHERE world_id = @world_id AND visited = 0`
     );
 
@@ -111,13 +111,13 @@ export async function handleScanNewWorlds({ days = 7, dryRun = false }) {
   }
 
   // 注入 DB 用户反馈（user_rating）到候选对象——否则 worldScore 加权对 API 对象恒为 0（Review 修复 #1）
-  // unvisited 来自 API 拉取对象（无 userRating 字段），按 worldId 批量查 new_worlds 的 user_rating
+  // unvisited 来自 API 拉取对象（无 userRating 字段），按 worldId 批量查 world_kb 的 user_rating
   const ratingParams = {};
   const ratingRows = unvisited.length > 0
     ? (() => {
         unvisited.forEach((w, i) => { ratingParams[`w${i}`] = w.id; });
         return storage._query(
-          `SELECT world_id, user_rating FROM new_worlds WHERE world_id IN (${unvisited.map((_, i) => `$w${i}`).join(',')})`,
+          `SELECT world_id, user_rating FROM world_kb WHERE world_id IN (${unvisited.map((_, i) => `$w${i}`).join(',')})`,
           ratingParams
         );
       })()
@@ -166,13 +166,13 @@ export function handleGetNewWorlds({ onlyUnvisited = false, limit = 10, sortBy =
   // 构造排除条件：tags 列是 JSON 数组字符串（["author_tag_game",...]），用 json_each 拆行匹配主题
   let where = '';
   const whereParams = {};
-  if (onlyUnvisited) where += 'WHERE visited = 0';
+  if (onlyUnvisited) where += 'WHERE visited = 0 AND backlog = 0';
   if (excludedThemes.length > 0) {
     // 排除 = 不存在任何匹配主题的行（json_each 拆 JSON tags 数组匹配）
     // 兜底：json_valid(tags) 为假（空串/脏数据）时按 '[]' 处理，避免 malformed JSON 崩溃
     const notExists = excludedThemes.map((_, i) =>
       `NOT EXISTS (
-        SELECT 1 FROM json_each(CASE WHEN json_valid(new_worlds.tags) THEN new_worlds.tags ELSE '[]' END)
+        SELECT 1 FROM json_each(CASE WHEN json_valid(world_kb.tags) THEN world_kb.tags ELSE '[]' END)
         WHERE lower(value) = $th${i}
       )`
     ).join(' AND ');
@@ -181,7 +181,7 @@ export function handleGetNewWorlds({ onlyUnvisited = false, limit = 10, sortBy =
   }
 
   const total = storage._query(
-    `SELECT COUNT(*) AS cnt FROM new_worlds ${where}`,
+    `SELECT COUNT(*) AS cnt FROM world_kb ${where}`,
     whereParams
   )[0].cnt;
 
@@ -189,7 +189,7 @@ export function handleGetNewWorlds({ onlyUnvisited = false, limit = 10, sortBy =
   const fetchLimit = Math.min(limit * 3, 100);
   const rows = storage._query(
     `SELECT world_id, world_name, author_name, created_at, first_seen_at, favorites, occupants, popularity, visited, visited_at, tags, user_rating
-     FROM new_worlds
+     FROM world_kb
      ${where}
      ORDER BY ${sortBy} DESC
      LIMIT ${fetchLimit}`,
@@ -240,6 +240,29 @@ export function handleMarkWorldVisited({ worldId }) {
   if (!worldId) throw new Error('worldId is required');
   const result = storage.markWorldVisited({ worldId });
   log(`✅ 手动标记 visited: ${worldId}${result.worldName ? ` (${result.worldName})` : ''}`);
+  return result;
+}
+
+/** 待逛列表：加入/更新（幂等） */
+export function handleAddToBacklog({ worldId, reason = '', priority = 0 }) {
+  const { storage } = ctx;
+  if (!worldId) throw new Error('worldId is required');
+  const result = storage.addToBacklog({ worldId, reason, priority });
+  log(`📌 加入待逛: ${worldId}${result.worldName ? ` (${result.worldName})` : ''} priority=${result.priority}`);
+  return result;
+}
+
+/** 待逛列表：查询 */
+export function handleGetBacklog({ status = 'pending', sortBy = 'added_at', limit = 20 } = {}) {
+  return ctx.storage.getBacklog({ status, sortBy, limit });
+}
+
+/** 待逛列表：移除 */
+export function handleRemoveFromBacklog({ worldId }) {
+  const { storage } = ctx;
+  if (!worldId) throw new Error('worldId is required');
+  const result = storage.removeFromBacklog({ worldId });
+  log(`🗑 移出待逛: ${worldId}`);
   return result;
 }
 

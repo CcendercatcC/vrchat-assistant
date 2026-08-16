@@ -94,6 +94,9 @@ import {
   handleGetNewWorlds,
   handleRateWorld,
   handleMarkWorldVisited,
+  handleAddToBacklog,
+  handleGetBacklog,
+  handleRemoveFromBacklog,
   handleGetWatchlist,
   handleAddToWatchlist,
   handleRemoveFromWatchlist,
@@ -291,6 +294,15 @@ export async function handleRpc(rpc, session, res) {
             break;
           case 'mark_world_visited':
             result = handleMarkWorldVisited(args);
+            break;
+          case 'add_to_backlog':
+            result = handleAddToBacklog(args);
+            break;
+          case 'get_backlog':
+            result = handleGetBacklog(args);
+            break;
+          case 'remove_from_backlog':
+            result = handleRemoveFromBacklog(args);
             break;
           case 'get_watchlist':
             result = handleGetWatchlist();
