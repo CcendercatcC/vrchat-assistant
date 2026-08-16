@@ -85,6 +85,13 @@ async function handleRequest(req, res) {
     return;
   }
 
+  // MCP session termination（SDK 关闭连接时调用，2026-08-17 加：之前 404 导致客户端 warning）
+  if (req.method === 'DELETE' && req.url === '/mcp') {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+
   if (req.method !== 'POST' || req.url !== '/mcp') {
     res.writeHead(404);
     res.end('Not Found');

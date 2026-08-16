@@ -143,6 +143,12 @@ export async function handleRpc(rpc, session, res) {
       sendSSE(res, [], session.id);
       break;
 
+    case 'ping':
+      // MCP 协议要求：ping 必须返回 JSON-RPC 结果，否则客户端 keepalive 判定连接不健康
+      // （Hermes mcp_tool keepalive 30s 超时 → 反复 reconnect → parked → 工具调用挂起超时，2026-08-17 实测根因）
+      sendSSE(res, [{ jsonrpc: '2.0', id, result: {} }], session.id);
+      break;
+
     case 'tools/list': {
       sendSSE(res, [{
         jsonrpc: '2.0', id,
@@ -446,6 +452,12 @@ export async function handleRpc(rpc, session, res) {
     }
 
     default:
-      sendSSE(res, [], session.id);
+      // 未实现的方法：带 id 的请求必须返回 -32601 Method not found，
+      // 空响应会让客户端等不到匹配响应而挂起（与 ping 缺失同因，2026-08-17）
+      if (id === undefined) {
+        sendSSE(res, [], session.id);
+      } else {
+        sendSSE(res, [{ jsonrpc: '2.0', id, error: { code: -32601, message: `Method not found: ${method}` } }], session.id);
+      }
   }
 }
