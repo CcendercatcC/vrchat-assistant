@@ -22,6 +22,34 @@ export async function handleGetOnlineFriends() {
   const latestLocations = storage.getLatestFriendLocations(online.map(f => f.id));
   const nowMs = Date.now();
 
+  // 世界名：缓存优先，缺失批量 API 查询并写 world_cache
+  // （懒刷新节奏由 get_world_name 控制；rateLimiter 已在 RPC case 层包裹本 handler，
+  //   内部直接串行 api._request，与 get_weekly_report 同款模式——勿再套 rateLimiter.execute）
+  const worldNameMap = {};
+  const missingWorlds = [];
+  for (const f of online) {
+    const lp = parseLocation(f.location || 'private');
+    if (!lp.worldId) continue;
+    const cached = storage.getWorldName(lp.worldId);
+    if (cached && cached.name) worldNameMap[lp.worldId] = cached.name;
+    else missingWorlds.push(lp.worldId);
+  }
+  for (const wid of missingWorlds) {
+    try {
+      const wr = await api._request('GET', `/worlds/${wid}`);
+      if (wr.status === 200 && wr.data) {
+        const w = wr.data;
+        worldNameMap[wid] = w.name || wid;
+        storage.upsertWorld({
+          worldId: w.id, name: w.name, authorName: w.authorName,
+          capacity: w.capacity, favorites: w.favorites,
+          releaseStatus: w.releaseStatus, tags: w.tags || [],
+          description: w.description || '', imageUrl: w.imageUrl || '',
+        });
+      } else worldNameMap[wid] = wid;
+    } catch { worldNameMap[wid] = wid; }
+  }
+
   return {
     online: online.length,
     total: friends.length,
@@ -39,12 +67,7 @@ export async function handleGetOnlineFriends() {
           }
         } catch (e) { /* 解析失败视为未知 */ }
       }
-      // 世界名：只读本地缓存，不强制 API（懒刷新节奏由 get_world_name 控制）
-      let worldName = null;
-      if (lp.worldId) {
-        const w = storage.getWorldName(lp.worldId);
-        if (w && w.name) worldName = w.name;
-      }
+      const worldName = lp.worldId ? (worldNameMap[lp.worldId] || null) : null;
       return {
         userId: f.id,
         displayName: f.displayName,
