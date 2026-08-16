@@ -144,6 +144,30 @@ export class Storage {
     return this._query(sql, params);
   }
 
+  /**
+   * 批量取多个用户各自最新一条 friend-location 事件（get_online_friends 停留时长用）。
+   * 返回 Map<userId, {createdAt, content}>；某用户无事件则不在 Map 中。
+   * 窗口函数 PARTITION BY user_id 一次查询拿全，避免 N 次点查。
+   */
+  getLatestFriendLocations(userIds) {
+    if (!userIds || userIds.length === 0) return new Map();
+    const ph = userIds.map((_, i) => `$u${i}`).join(',');
+    const params = {};
+    userIds.forEach((id, i) => { params[`$u${i}`] = id; });
+    const rows = this._query(
+      `SELECT user_id, created_at, content_json FROM (
+         SELECT user_id, created_at, content_json,
+                ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY created_at DESC) AS rn
+         FROM events
+         WHERE type = 'friend-location' AND user_id IN (${ph})
+       ) WHERE rn = 1`,
+      params
+    );
+    const map = new Map();
+    for (const r of rows) map.set(r.user_id, { createdAt: r.created_at, content: r.content_json });
+    return map;
+  }
+
   getRecentEvents({ limit = 50, type } = {}) {
     let sql = `SELECT * FROM events`;
     const params = {};

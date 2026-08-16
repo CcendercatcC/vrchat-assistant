@@ -21,7 +21,7 @@ metadata:
 
 | 工具 | 说明 |
 |------|------|
-| `get_online_friends` | 当前在线好友列表（含昵称 nickname + 房型解析 locationParsed：worldId/instanceId/type/ownerId/region） |
+| `get_online_friends` | 当前在线好友列表（含昵称 nickname + 房型解析 locationParsed：worldId/instanceId/type/ownerId/region + 世界名 worldName + 停留时长 durationMinutes/enteredAt；durationMinutes = 最新 friend-location 事件位置与当前一致时的停留分钟数，null=未知） |
 | `get_friend_info` | 好友详细信息 |
 | `search_users` | 按名字搜索用户（API 优先；API 无匹配时自动回退本地好友库模糊搜索 display_name/备注，结果带 `source: local_friends` 标记） |
 | `search_groups` | 按名字搜索群组（API 用 query 参数，不是 search） |

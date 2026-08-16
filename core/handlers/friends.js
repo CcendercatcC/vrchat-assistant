@@ -17,20 +17,49 @@ export async function handleGetOnlineFriends() {
     if (item.userId) nicknameMap.set(item.userId, item.nickname);
   }
 
+  // 停留时长：每个好友最新一条 friend-location 事件，若其 location 与当前一致，
+  // 事件时间即进入时间 → durationMinutes = now - created_at（2026-08-16 用户需求固化）
+  const latestLocations = storage.getLatestFriendLocations(online.map(f => f.id));
+  const nowMs = Date.now();
+
   return {
     online: online.length,
     total: friends.length,
-    friends: online.map(f => ({
-      userId: f.id,
-      displayName: f.displayName,
-      location: f.location || 'private',
-      status: f.status,
-      statusDescription: f.statusDescription,
-      platform: f.platform,
-      avatarImageUrl: f.currentAvatarThumbnailImageUrl,
-      nickname: nicknameMap.get(f.id) || null,
-      locationParsed: parseLocation(f.location || 'private'),
-    })),
+    friends: online.map(f => {
+      const lp = parseLocation(f.location || 'private');
+      let durationMinutes = null;
+      let enteredAt = null;
+      const last = latestLocations.get(f.id);
+      if (last && f.location && f.location !== 'traveling') {
+        try {
+          const evLoc = JSON.parse(last.content).location || '';
+          if (evLoc === f.location) {
+            enteredAt = last.createdAt;
+            durationMinutes = Math.max(0, Math.floor((nowMs - new Date(last.createdAt).getTime()) / 60000));
+          }
+        } catch (e) { /* 解析失败视为未知 */ }
+      }
+      // 世界名：只读本地缓存，不强制 API（懒刷新节奏由 get_world_name 控制）
+      let worldName = null;
+      if (lp.worldId) {
+        const w = storage.getWorldName(lp.worldId);
+        if (w && w.name) worldName = w.name;
+      }
+      return {
+        userId: f.id,
+        displayName: f.displayName,
+        location: f.location || 'private',
+        status: f.status,
+        statusDescription: f.statusDescription,
+        platform: f.platform,
+        avatarImageUrl: f.currentAvatarThumbnailImageUrl,
+        nickname: nicknameMap.get(f.id) || null,
+        locationParsed: lp,
+        worldName,
+        durationMinutes,
+        enteredAt,
+      };
+    }),
   };
 }
 
