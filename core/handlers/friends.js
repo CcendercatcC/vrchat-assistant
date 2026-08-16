@@ -20,6 +20,8 @@ export async function handleGetOnlineFriends() {
   // 停留时长：每个好友最新一条 friend-location 事件，若其 location 与当前一致，
   // 事件时间即进入时间 → durationMinutes = now - created_at（2026-08-16 用户需求固化）
   const latestLocations = storage.getLatestFriendLocations(online.map(f => f.id));
+  // 在线时长：会话起点 = 最近 friend-offline 之后最早 friend-online（重复推送被 MIN 跳过）
+  const sessionStarts = storage.getOnlineSessionStarts(online.map(f => f.id));
   const nowMs = Date.now();
 
   // 世界名：缓存优先，缺失批量 API 查询并写 world_cache
@@ -55,6 +57,10 @@ export async function handleGetOnlineFriends() {
     total: friends.length,
     friends: online.map(f => {
       const lp = parseLocation(f.location || 'private');
+      const sessionStart = sessionStarts.get(f.id);
+      const sessionStartMs = sessionStart ? new Date(sessionStart).getTime() : 0;
+      // 停留时长：进入时间 = max(会话起点, 最新位置事件时间)——防跨会话污染
+      // （本次会话无位置变化事件时，进入时间以上线时间为准；否则以上次换房时间为准）
       let durationMinutes = null;
       let enteredAt = null;
       const last = latestLocations.get(f.id);
@@ -62,12 +68,20 @@ export async function handleGetOnlineFriends() {
         try {
           const evLoc = JSON.parse(last.content).location || '';
           if (evLoc === f.location) {
-            enteredAt = last.createdAt;
-            durationMinutes = Math.max(0, Math.floor((nowMs - new Date(last.createdAt).getTime()) / 60000));
+            const enterMs = Math.max(new Date(last.createdAt).getTime(), sessionStartMs);
+            enteredAt = new Date(enterMs).toISOString();
+            durationMinutes = Math.max(0, Math.floor((nowMs - enterMs) / 60000));
           }
         } catch (e) { /* 解析失败视为未知 */ }
       }
       const worldName = lp.worldId ? (worldNameMap[lp.worldId] || null) : null;
+      // 在线时长（本次会话）：sessionStart 有值 → onlineMinutes = now - sessionStart
+      let onlineMinutes = null;
+      let onlineSince = null;
+      if (sessionStart) {
+        onlineSince = sessionStart;
+        onlineMinutes = Math.max(0, Math.floor((nowMs - sessionStartMs) / 60000));
+      }
       return {
         userId: f.id,
         displayName: f.displayName,
@@ -81,6 +95,8 @@ export async function handleGetOnlineFriends() {
         worldName,
         durationMinutes,
         enteredAt,
+        onlineMinutes,
+        onlineSince,
       };
     }),
   };

@@ -168,6 +168,40 @@ export class Storage {
     return map;
   }
 
+  /**
+   * 批量取每个用户本次在线会话的起点（get_online_friends 在线时长用，2026-08-16 新增）。
+   * 口径：会话起点 = 最近一次 friend-offline 之后最早的一条 friend-online。
+   * 为何不能直接取最新 friend-online：VRChat WS 重连/状态同步会重复推送 friend-online
+   * （实测 24h 527 条 vs ~30 人在线），最新一条会严重低估时长；MIN(>last_off) 天然跳过重复推送。
+   * 无 offline 记录的用户取最早一条 friend-online（数据库记录以来首次上线）。
+   * 返回 Map<userId, sessionStartIso>；无 friend-online 事件则不在 Map 中。
+   */
+  getOnlineSessionStarts(userIds) {
+    if (!userIds || userIds.length === 0) return new Map();
+    const ph = userIds.map((_, i) => `$u${i}`).join(',');
+    const params = {};
+    userIds.forEach((id, i) => { params[`$u${i}`] = id; });
+    const rows = this._query(
+      `WITH offs AS (
+         SELECT user_id, MAX(created_at) AS last_off FROM events
+         WHERE type='friend-offline' AND user_id IN (${ph}) GROUP BY user_id
+       )
+       SELECT e.user_id,
+              COALESCE(
+                MIN(CASE WHEN o.last_off IS NULL OR e.created_at > o.last_off THEN e.created_at END),
+                MIN(e.created_at)
+              ) AS session_start
+       FROM events e
+       LEFT JOIN offs o ON e.user_id = o.user_id
+       WHERE e.type = 'friend-online' AND e.user_id IN (${ph})
+       GROUP BY e.user_id`,
+      params
+    );
+    const map = new Map();
+    for (const r of rows) map.set(r.user_id, r.session_start);
+    return map;
+  }
+
   getRecentEvents({ limit = 50, type } = {}) {
     let sql = `SELECT * FROM events`;
     const params = {};
