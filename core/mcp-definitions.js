@@ -417,7 +417,7 @@ export const CUSTOM_TOOLS = [
   },
 {
     name: 'get_backlog',
-    description: '[query] List worlds in your local to-visit backlog (待逛列表). status=pending (default) shows unvisited to-visit worlds; visited shows auto-cleared history; all shows both. Each item carries snapshot details (favorites/tags/description) from the local world knowledge table.',
+    description: '[query] List worlds in your local to-visit backlog (待逛列表). status=pending (default) shows unvisited to-visit worlds; visited shows the ones already visited (they leave the pending view automatically once visited); all shows both. Each item carries snapshot details (favorites/tags/description) from the local world knowledge table.',
     inputSchema: {
       type: 'object',
       properties: {

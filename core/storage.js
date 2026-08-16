@@ -569,9 +569,9 @@ export class Storage {
        ON CONFLICT(world_id) DO UPDATE SET visited = 1, visited_at = $now`,
       { $worldId: worldId, $now: now }
     );
-    const rows = this._query(`SELECT world_id, world_name, visited, visited_at FROM world_kb WHERE world_id = $worldId`, { $worldId: worldId });
+    const rows = this._query(`SELECT world_id, world_name, visited, visited_at, backlog FROM world_kb WHERE world_id = $worldId`, { $worldId: worldId });
     const row = rows[0];
-    return { worldId: row.world_id, worldName: row.world_name || '', visited: row.visited === 1, visitedAt: row.visited_at };
+    return { worldId: row.world_id, worldName: row.world_name || '', visited: row.visited === 1, visitedAt: row.visited_at, backlog: row.backlog === 1 };
   }
 
   /** 待逛列表：加入/更新（幂等，重复加入 = 更新备注/优先级；世界不在表里插兜底行） */
