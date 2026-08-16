@@ -37,7 +37,7 @@ Fork & Clone 完整流程见 `AGENTS.md`「获取代码（Fork & Clone）」章�
 **动手写任何代码之前，先完整读取仓库根 `DEVELOPMENT.md`**——它是开发规范的唯一权威来源，作者会持续维护，可能与本 skill 的编写时间不同步。禁止凭记忆或凭本 skill 的概述代替它。
 
 ```bash
-cd /d/workspace/vrcx-mcp-actions   # 仓库根（按实际路径）
+cd <仓库根目录>   # 即本仓库 clone 下来的位置
 cat DEVELOPMENT.md                  # 或 read_file
 ```
 

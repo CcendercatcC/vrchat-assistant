@@ -160,7 +160,9 @@ mcp_servers:
 ```bash
 mkdir -p "$HERMES_HOME/skills"
 cp -r skills/vrc-monitor-agent "$HERMES_HOME/skills/"
-cp -r skills/vrc-monitor-companion-query "$HERMES_HOME/skills/"
+cp -r skills/vrchat-social-queries "$HERMES_HOME/skills/"
+cp -r skills/vrchat-world-queries "$HERMES_HOME/skills/"
+cp -r skills/vrchat-group-queries "$HERMES_HOME/skills/"
 cp -r skills/booth-query-display "$HERMES_HOME/skills/"
 cp -r skills/vrchat-assistant-development "$HERMES_HOME/skills/"
 ```
