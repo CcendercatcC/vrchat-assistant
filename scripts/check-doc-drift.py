@@ -294,9 +294,23 @@ def check_skills_consistency(code_tools):
         if not skill_text:
             continue
         refs = set()
+        in_field_table = False
         for line in skill_text.splitlines():
             line = line.strip()
-            if not line.startswith("| "):
+            if not line.startswith("|"):
+                in_field_table = False
+                continue
+            # 分隔行（|---|---|）：表格内，保持当前表格状态
+            if re.match(r"^\|[-:|\s]+\|$", line):
+                continue
+            # 表头感知（2026-08-17）：字段/参数说明表（表头「字段|说明」「参数|说明」等）不是工具表，
+            # 行首反引号是字段名/参数名而非工具引用，整表跳过（案例：get_online_friends 返回
+            # 字段表行首 `nickname` 被误判为死引用）；工具表表头「工具|说明」不受影响
+            cells = [c.strip() for c in line.strip("|").split("|")]
+            if len(cells) >= 2 and cells[0] in ("字段", "参数", "返回字段") and cells[1] in ("说明", "描述", "含义"):
+                in_field_table = True
+                continue
+            if in_field_table:
                 continue
             # 行首单元格：| `tool_a` | 或 | `tool_a` / `tool_b` | 或 | `tool_a`,`tool_b` |
             m = re.match(r"\| `([a-z_]+)`(?:\s*(?:/|,)\s*`([a-z_]+)`)*", line)

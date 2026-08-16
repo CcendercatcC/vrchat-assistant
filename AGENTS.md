@@ -170,7 +170,9 @@ cp -r skills/vrchat-assistant-development "$HERMES_HOME/skills/"
 | Skill | 用途 | 何时需要 |
 |-------|------|----------|
 | `vrc-monitor-agent` | 好友/社交/群组/推荐等主体 MCP 工具清单、查询工作流、陷阱 | 日常查询与社交操作 |
-| `vrc-monitor-companion-query` | 「谁和我/和 XX 一起玩过」同屏交叉查询正确姿势 | 同屏/玩伴查询 |
+| `vrchat-social-queries` | 社交域工作流：在线五要素/同屏交叉查询/上线规律/昵称映射 | 同屏/玩伴查询、好友分析 |
+| `vrchat-world-queries` | 世界域工作流：挑新世界/待逛 backlog/推荐/PlanetVRC/X 博主 | 世界推荐与情报挖掘 |
+| `vrchat-group-queries` | 群组域工作流：群组查询/公告 403 分诊/join/leave/peek | 群组查询与操作 |
 | `booth-query-display` | BOOTH 素材检索工具（搜索/详情/热度/汉化/格式化展示） | BOOTH 素材查询 |
 | `vrchat-assistant-development` | **开发规范**：新增 MCP 工具三件套流程、跨平台约束、提交 PR 要求（DEVELOPMENT.md 的 skill 化） | **给本仓库添加/修改功能、提交 PR 时必装** |
 
