@@ -16,7 +16,7 @@ export async function fetchOtpFromEmail() {
   const { execSync } = await import('node:child_process');
   const authCode = creds.imap_auth_code || creds.qqmail_auth_code || '';
   const pythonBin = process.env.VRC_MONITOR_PYTHON || 'python';
-  let cmd = `${pythonBin} "${otpScript}" "${creds.email}" "${authCode}"`;
+  let cmd = `"${pythonBin}" "${otpScript}" "${creds.email}" "${authCode}"`;
   if (creds.imap_host) cmd += ` "${creds.imap_host}"`;
   const otp = execSync(cmd, { timeout: 15000, encoding: 'utf-8' }).trim();
   return otp;
