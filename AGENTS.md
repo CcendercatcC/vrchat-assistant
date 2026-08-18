@@ -174,6 +174,7 @@ cp -r skills/vrchat-world-queries "$HERMES_HOME/skills/"
 cp -r skills/vrchat-group-queries "$HERMES_HOME/skills/"
 cp -r skills/booth-query-display "$HERMES_HOME/skills/"
 cp -r skills/vrchat-assistant-development "$HERMES_HOME/skills/"
+cp -r skills/pr-review "$HERMES_HOME/skills/"
 ```
 
 | Skill | 用途 | 何时需要 |
@@ -184,6 +185,7 @@ cp -r skills/vrchat-assistant-development "$HERMES_HOME/skills/"
 | `vrchat-group-queries` | 群组域工作流：群组查询/公告 403 分诊/join/leave/peek | 群组查询与操作 |
 | `booth-query-display` | BOOTH 素材检索工具（搜索/详情/热度/汉化/格式化展示） | BOOTH 素材查询 |
 | `vrchat-assistant-development` | **开发规范**：新增 MCP 工具三件套流程、跨平台约束、提交 PR 要求（DEVELOPMENT.md 的 skill 化） | **给本仓库添加/修改功能、提交 PR 时必装** |
+| `pr-review` | **PR 审核流程**：REST-only 审查、端到端实测、分级反馈、多轮复核、协作审核参与（AGENT-REVIEW） | **审核 PR / 判断可合并性 / 参与协作审核时加载** |
 
 重启 Hermes 会话生效。skill 说明见 `skills/vrc-monitor-agent/SKILL.md`（README「文档导航」有入口）。
 
