@@ -121,6 +121,8 @@ import {
   handleGetMyFavoriteGroups,
 } from './handlers/favorite-worlds.js';
 
+import { handleSubmitTotp } from './handlers/auth.js';
+
 export async function handleRpc(rpc, session, res) {
   const { id, method, params } = rpc;
   const { api, rateLimiter } = ctx;
@@ -168,6 +170,10 @@ export async function handleRpc(rpc, session, res) {
             const r = await rateLimiter.execute(() => api.sendBoop(args.userId, args.emojiId || ''));
             if (r.status >= 400) throw new Error(`API error ${r.status}`);
             result = { success: true, userId: args.userId, booped: true };
+            break;
+          }
+          case 'submit_totp': {
+            result = await handleSubmitTotp(args);
             break;
           }
           case 'get_boop_emojis': {

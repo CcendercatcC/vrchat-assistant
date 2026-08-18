@@ -64,7 +64,7 @@ async function handleRequest(req, res) {
       ok: true,
       auth: serverState.authUser
         ? { authenticated: true, user: serverState.authUser }
-        : { authenticated: false, needsOtp: serverState.needsOtp },
+        : { authenticated: false, needsOtp: serverState.needsOtp, needsTotp: serverState.needsTotp },
       db: storage.getStats(),
       rateLimiter: rateLimiter.getStats(),
       ws: wsManager?.getState(),

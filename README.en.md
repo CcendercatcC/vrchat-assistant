@@ -64,6 +64,9 @@ A: Network conditions in China may require a proxy. The service auto-falls back 
 **Q: OTP login keeps failing?**
 A: Check that `imap_auth_code` in `credentials.json` is a correct IMAP authorization code (not your login password). The service cools down 120s after auth failures (5min on 401 rate limit) and retries automatically.
 
+**Q: My account uses Authenticator (TOTP) 2FA and can't auto-login?**
+A: The service supports TOTP: when `/health` returns `auth.needsTotp: true`, an agent can call the `submit_totp` MCP tool with the current 6-digit code to complete login. If both email OTP and TOTP are enabled, email OTP is preferred; TOTP-only accounts wait for manual submission.
+
 **Q: Do I need to handle expired cookies manually?**
 A: No. Service startup and WS reconnects automatically go through OTP login, and the valid cookie is persisted to `auth_cookie.txt`.
 

@@ -11,6 +11,7 @@
  */
 import WebSocket from 'ws';
 import { HttpsProxyAgent } from 'https-proxy-agent';
+import { ctx } from './server-context.js';
 
 // WS 代理地址：优先 VRC_MONITOR_WS_PROXY，其次标准 HTTPS_PROXY/HTTP_PROXY，最后内置默认（兼容旧部署）
 // 注意：代理可能含凭据，日志中不要打印完整 URL
@@ -112,6 +113,10 @@ export class WsManager {
           try {
             await this.api.ensureAuthWithAutoOtp(this.otpFetcher);
           } catch (otpErr) {
+            if (otpErr.needsTotp) {
+              ctx.serverState.needsTotp = true;
+              console.log('[WS] 🔑 账号需要 TOTP 验证码：请调用 MCP 工具 submit_totp 提交');
+            }
             this._setAuthCooldown(otpErr);
             throw otpErr;
           }
@@ -123,6 +128,9 @@ export class WsManager {
 
       // 认证成功，重置冷却
       this.authCooldownUntil = 0;
+      if (ctx.serverState.needsTotp) {
+        ctx.serverState.needsTotp = false;
+      }
 
       // 2. 获取 WebSocket token
       const authResp = await this.api._request('GET', '/auth');

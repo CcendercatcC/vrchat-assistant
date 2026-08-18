@@ -23,7 +23,8 @@ export class VrchatApiClient {
     this.authCookie = '';
     this.currentUser = null;
     this.requiresOtp = false;       // true after Basic auth when 2FA needed
-    this.tempAuthCookie = '';       // partial cookie before OTP verify
+    this.tempAuthCookie = '';       // partial cookie before 2FA verify
+    this.pending2faTypes = [];      // 2FA types required by the pending login (e.g. ['emailOtp','totp'])
     this._cookiePath = '';
     this.#authLock = null;       // single-flight lock for ensureAuth / ensureAuthWithAutoOtp
   }
@@ -91,18 +92,24 @@ export class VrchatApiClient {
    * the `authCookie` variable still gets set to a valid temp cookie
    * that we need to send alongside the OTP verification request.
    * 
-   * Full login flow: Basic auth → OTP verify → get user info
+   * Full login flow: Basic auth → 2FA verify → get user info
+   *
+   * @param {string} code 6-digit verification code (email OTP or TOTP)
+   * @param {string} type 'emailOtp' | 'totp'
    */
-  async loginWithOtp(otpCode) {
-    if (!this.tempAuthCookie) throw new Error('No pending OTP session. Call tryLoginWithCredentials() first.');
+  async _verify2fa(code, type) {
+    if (!this.tempAuthCookie) throw new Error('No pending 2FA session. Call tryLoginWithCredentials() first.');
 
     const otpCookieStr = `auth=${this.tempAuthCookie}`;
+    const endpoint = type === 'totp'
+      ? '/auth/twofactorauth/totp/verify'
+      : '/auth/twofactorauth/emailotp/verify';
 
-    // Step 2: Verify OTP
-    const r2 = await this._rawRequest('POST', '/auth/twofactorauth/emailotp/verify',
-      { code: otpCode }, otpCookieStr);
+    // Step 2: Verify code
+    const r2 = await this._rawRequest('POST', endpoint,
+      { code }, otpCookieStr);
     if (r2.status !== 200) {
-      throw new Error(`OTP 验证失败 (HTTP ${r2.status})`);
+      throw new Error(`2FA 验证失败 (HTTP ${r2.status})`);
     }
 
     // Extract the REAL auth cookie from verify response Set-Cookie header.
@@ -116,14 +123,25 @@ export class VrchatApiClient {
     // Step 3: Get user with the auth cookie
     const r3 = await this._request('GET', '/auth/user');
     if (r3.status !== 200 || !r3.data?.id) {
-      throw new Error(`OTP 登录后获取用户信息失败 (HTTP ${r3.status})`);
+      throw new Error(`2FA 登录后获取用户信息失败 (HTTP ${r3.status})`);
     }
 
     this.currentUser = r3.data;
     this.requiresOtp = false;
     this.tempAuthCookie = '';
+    this.pending2faTypes = [];
     this.saveCookieToFile();
     return this.currentUser;
+  }
+
+  /** 邮箱 OTP 登录（兼容旧调用） */
+  async loginWithOtp(otpCode) {
+    return this._verify2fa(otpCode, 'emailOtp');
+  }
+
+  /** TOTP（Authenticator 应用验证码）登录 */
+  async loginWithTotp(totpCode) {
+    return this._verify2fa(totpCode, 'totp');
   }
 
   /**
@@ -152,16 +170,25 @@ export class VrchatApiClient {
     this.authCookie = cookies.auth;
 
     if (r1.data?.requiresTwoFactorAuth) {
-      // 2FA required — save the temp cookie for OTP step
+      // 2FA required — save the temp cookie for 2FA step
       this.requiresOtp = true;
       this.tempAuthCookie = cookies.auth;
-      return { requiresOtp: true, message: 'Email OTP required. Please provide the code sent to your email.' };
+      // VRChat 返回数组如 ['emailOtp','totp']；旧格式布尔 true 兜底为 emailOtp
+      this.pending2faTypes = Array.isArray(r1.data.requiresTwoFactorAuth)
+        ? r1.data.requiresTwoFactorAuth
+        : ['emailOtp'];
+      return {
+        requiresOtp: true,
+        twoFactorAuthTypes: this.pending2faTypes,
+        message: '2FA required. Please provide the verification code.',
+      };
     }
 
     // Success — no 2FA needed
     this.currentUser = r1.data;
     this.requiresOtp = false;
     this.tempAuthCookie = '';
+    this.pending2faTypes = [];
     this.saveCookieToFile();
     return { success: true, user: r1.data };
   }
@@ -251,9 +278,9 @@ export class VrchatApiClient {
   }
 
   async _doEnsureAuth() {
-    // If we already know we need OTP, throw needsOtp signal
+    // If we already know we need 2FA, throw needsOtp signal
     if (this.requiresOtp) {
-      const err = new Error('Auth requires email OTP. Use submit_otp tool.');
+      const err = new Error('Auth requires 2FA verification.');
       err.needsOtp = true;
       throw err;
     }
@@ -314,7 +341,43 @@ export class VrchatApiClient {
       return await this._doEnsureAuth();
     } catch (err) {
       if (!err.needsOtp) throw err;
-      console.log('[VRChat API] ⚠️ 需要邮箱验证码，自动获取中...');
+
+      // 根据账号启用的 2FA 类型分流：含 emailOtp 优先邮箱自动抓取；仅 totp 需 submit_totp 手动提交
+      const types = this.pending2faTypes || [];
+      const needEmailOtp = types.includes('emailOtp');
+      const needTotp = types.includes('totp');
+
+      if (needEmailOtp) {
+        console.log('[VRChat API] ⚠️ 需要邮箱验证码，自动获取中...');
+        try {
+          const otpCode = await otpFetcher();
+          if (!otpCode || !/^\d{6}$/.test(String(otpCode))) {
+            throw new Error(`无效的验证码: "${otpCode}"，应为6位数字`);
+          }
+          return await this.loginWithOtp(String(otpCode));
+        } catch (otpErr) {
+          // 邮箱抓取失败：若账号也支持 TOTP，兜底转手动提交（保留 tempAuthCookie）
+          if (needTotp) {
+            const totpErr = new Error(`邮箱验证码获取失败(${otpErr.message})，请调用 submit_totp 工具提交 TOTP 验证码`);
+            totpErr.needsTotp = true;
+            totpErr.needsOtp = true;
+            throw totpErr;
+          }
+          this.requiresOtp = false;
+          this.tempAuthCookie = '';
+          throw new Error(`OTP 自动登录失败: ${otpErr.message}`);
+        }
+      }
+
+      if (needTotp) {
+        // 仅 TOTP：保留 tempAuthCookie，等待 submit_totp 工具提交验证码
+        const totpErr = new Error('账号启用 TOTP 两步验证，请调用 submit_totp 工具提交当前验证码');
+        totpErr.needsTotp = true;
+        totpErr.needsOtp = true;
+        throw totpErr;
+      }
+
+      // 未知 2FA 类型：按邮箱处理兜底
       try {
         const otpCode = await otpFetcher();
         if (!otpCode || !/^\d{6}$/.test(String(otpCode))) {
