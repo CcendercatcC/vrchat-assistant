@@ -68,7 +68,7 @@ A: 检查 `credentials.json` 的 `imap_auth_code` 是否为正确的 IMAP 授权
 A: 服务支持 TOTP：健康检查 `/health` 返回 `auth.needsTotp: true` 时，Agent 可调用 MCP 工具 `submit_totp` 提交当前 6 位验证码完成登录。账号同时启用邮箱 OTP 时会优先自动走邮箱；仅启用 TOTP 时等待手动提交。
 
 **Q: cookie 过期了要手动处理吗？**
-A: 不需要。服务启动和 WS 重连都会自动走 OTP 取码登录，有效 cookie 自动落盘 `auth_cookie.txt`。
+A: 不需要。服务启动和 WS 重连都会自动走 OTP 取码登录，有效 cookie 自动落盘 `auth_cookie.txt`。**运行中** API 返回 401（cookie 过期）时服务也会自动触发重新登录——若需要 TOTP 会进入 `needsTotp` 状态，调用 `submit_totp` 即可完成，无需重启服务。
 
 **Q: 数据库文件太大？**
 A: 正常。约 30 万行事件 ≈ 300+ MB。better-sqlite3（WAL 模式）按需读取，不整库载入内存。

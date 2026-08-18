@@ -68,7 +68,7 @@ A: Check that `imap_auth_code` in `credentials.json` is a correct IMAP authoriza
 A: The service supports TOTP: when `/health` returns `auth.needsTotp: true`, an agent can call the `submit_totp` MCP tool with the current 6-digit code to complete login. If both email OTP and TOTP are enabled, email OTP is preferred; TOTP-only accounts wait for manual submission.
 
 **Q: Do I need to handle expired cookies manually?**
-A: No. Service startup and WS reconnects automatically go through OTP login, and the valid cookie is persisted to `auth_cookie.txt`.
+A: No. Service startup and WS reconnects automatically go through OTP login, and the valid cookie is persisted to `auth_cookie.txt`. During runtime, when the API returns 401 (cookie expired), the service also auto-triggers re-login — if TOTP is required it enters `needsTotp` state, call `submit_totp` to complete, no restart needed.
 
 **Q: The database file is too big?**
 A: Normal. ~300K events ≈ 300+ MB. better-sqlite3 (WAL mode) reads on demand and never loads the whole DB into memory.

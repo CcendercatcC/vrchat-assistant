@@ -451,6 +451,12 @@ export async function handleRpc(rpc, session, res) {
           result: { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] },
         }]);
       } catch (err) {
+        // 401 自动重认证后若需要 TOTP，_request 抛 needsTotp 错误：
+        // 在此同步 serverState，让 /health 与 submit_totp 流程感知待验证状态
+        if (err.needsTotp) {
+          ctx.serverState.needsTotp = true;
+          log('🔑 检测到需要 TOTP 验证码，请调用 submit_totp 完成登录');
+        }
         log(`❌ ${name} failed: ${err.message}`);
         sendError(res, id, err.message);
       }

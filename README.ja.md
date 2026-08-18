@@ -68,7 +68,7 @@ A: `credentials.json` の `imap_auth_code` が正しい IMAP 認証コードか�
 A: サービスは TOTP に対応しています：`/health` が `auth.needsTotp: true` を返す場合、Agent は MCP ツール `submit_totp` で現在の 6 桁コードを送信してログインを完了できます。メール OTP と TOTP の両方を有効にしている場合はメール OTP が優先され、TOTP のみのアカウントは手動送信を待ちます。
 
 **Q: Cookie の期限切れは手動で対応が必要？**
-A: 不要です。サービス起動時と WS 再接続時に自動で OTP ログインを行い、有効な Cookie は `auth_cookie.txt` に自動保存されます。
+A: 不要です。サービス起動時と WS 再接続時に自動で OTP ログインを行い、有効な Cookie は `auth_cookie.txt` に自動保存されます。**実行中に** API が 401（Cookie 期限切れ）を返した場合も自動で再ログインを試みます。TOTP が必要な場合は `needsTotp` 状態になり、`submit_totp` を呼べば完了します（再起動不要）。
 
 **Q: データベースファイルが大きすぎる？**
 A: 正常です。約 30 万イベント ≈ 300+ MB。better-sqlite3（WAL モード）はオンデマンド読み込みで、DB 全体をメモリに載せません。

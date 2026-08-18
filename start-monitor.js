@@ -178,6 +178,7 @@ async function main() {
     process.exit(1);
   }
   ctx.api = new VrchatApiClient(creds.email, creds.password);
+  ctx.api.setOtpFetcher(fetchOtpFromEmail);  // 401 自动重认证时复用邮箱 OTP 抓取
   ctx.api.loadCookieFromFile(COOKIE_FILE);
   try {
     const user = await ctx.api.ensureAuthWithAutoOtp(fetchOtpFromEmail);

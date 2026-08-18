@@ -16,7 +16,7 @@ export async function handleSubmitTotp({ code }) {
     throw new Error('TOTP 验证码应为 6 位数字');
   }
   if (!api.tempAuthCookie) {
-    throw new Error('当前没有待验证的 2FA 会话，请先触发重新登录（如重启服务）');
+    throw new Error('当前没有待验证的 2FA 会话：请先触发一次 API 调用（如 get_online_friends），服务检测到 401 会自动进入重登录等待');
   }
 
   try {

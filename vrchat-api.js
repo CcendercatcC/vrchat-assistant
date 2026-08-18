@@ -27,6 +27,14 @@ export class VrchatApiClient {
     this.pending2faTypes = [];      // 2FA types required by the pending login (e.g. ['emailOtp','totp'])
     this._cookiePath = '';
     this.#authLock = null;       // single-flight lock for ensureAuth / ensureAuthWithAutoOtp
+    this.otpFetcher = null;        // 注入邮箱 OTP 自动获取函数（用于 401 自动重认证）
+    this._reauthInFlight = false;  // 防止并发 401 重认证
+    this._reauthCooldownUntil = 0; // 非 TOTP 重认证失败后的冷却（防循环）
+  }
+
+  /** 注入邮箱 OTP 获取函数（start-monitor.js 启动时调用） */
+  setOtpFetcher(fn) {
+    this.otpFetcher = fn;
   }
 
   loadCookieFromFile(path) {
@@ -46,9 +54,88 @@ export class VrchatApiClient {
   }
 
   /**
-   * Make an HTTPS request with cookie
+   * Make an HTTPS request with cookie.
+   *
+   * 带 401 自动重认证：业务请求返回 401（cookie 过期）时自动尝试重新登录，
+   * 成功后重放原请求一次；若重新登录需要 TOTP，则抛 { needsTotp: true } 进入
+   * needsTotp 状态（tempAuthCookie 已保留，submit_totp 可直接完成登录）。
+   *
+   * 注意：认证端点自身（/auth/user、/auth、twofactorauth）不走此逻辑，
+   * 避免 ensureAuth / checkAuth 内部形成递归。
    */
-  _request(method, path, body = null, customCookies = null) {
+  async _request(method, path, body = null, customCookies = null) {
+    const res = await this._requestRaw(method, path, body, customCookies);
+    if (res.status === 401 && !customCookies && !this._isAuthEndpoint(path)) {
+      try {
+        const reauthed = await this._tryAutoReauth();
+        if (reauthed) {
+          return await this._requestRaw(method, path, body, customCookies);
+        }
+      } catch (err) {
+        if (err.needsTotp) {
+          // 保留 tempAuthCookie，抛 needsTotp 由 rpc-router 层设置 serverState.needsTotp
+          err.message = `API 登录已失效，需要 TOTP 验证码：请调用 submit_totp 提交当前验证码（${err.message}）`;
+          throw err;
+        }
+        // 其他重认证错误：不吞掉，向上抛
+        throw err;
+      }
+    }
+    return res;
+  }
+
+  /** 认证端点判断——避免 ensureAuth/checkAuth 内部递归触发重认证 */
+  _isAuthEndpoint(path) {
+    return path === '/auth' || path === '/auth/user' || path.startsWith('/auth/twofactorauth');
+  }
+
+  /**
+   * 401 后的自动重认证（single-flight + 冷却）。
+   * 返回 true=已重新登录；false=失败已冷却；抛 { needsTotp } = 需 TOTP 手动提交。
+   */
+  async _tryAutoReauth() {
+    if (this._reauthInFlight) return false;  // 已有重认证进行中，跳过本次
+    if (Date.now() < this._reauthCooldownUntil) return false;
+
+    this._reauthInFlight = true;
+    try {
+      console.log('[VRChat API] ⚠️ 请求返回 401，尝试自动重新登录...');
+      if (this.otpFetcher) {
+        await this.ensureAuthWithAutoOtp(this.otpFetcher);
+      } else {
+        // 无 otpFetcher（如测试/未注入场景）：仍解析 2FA 类型，
+        // 纯 TOTP 账号应进入 needsTotp 而非笼统 needsOtp
+        try {
+          await this.ensureAuth();
+        } catch (err) {
+          if (err.needsOtp) {
+            const types = this.pending2faTypes || [];
+            if (types.includes('totp')) {
+              const totpErr = new Error('账号启用 TOTP 两步验证，请调用 submit_totp 工具提交当前验证码');
+              totpErr.needsTotp = true;
+              throw totpErr;
+            }
+            this.requiresOtp = false;
+            this.tempAuthCookie = '';
+          }
+          throw err;
+        }
+      }
+      console.log('[VRChat API] ✅ 自动重新登录成功');
+      return true;
+    } catch (err) {
+      if (err.needsTotp) throw err;
+      // 非 TOTP 失败（网络/凭据错误等）：冷却 60s，避免高频重试
+      this._reauthCooldownUntil = Date.now() + 60_000;
+      console.error(`[VRChat API] ❌ 自动重新登录失败: ${err.message}`);
+      return false;
+    } finally {
+      this._reauthInFlight = false;
+    }
+  }
+
+  /** 底层原始请求（无 401 自动重认证逻辑） */
+  _requestRaw(method, path, body = null, customCookies = null) {
     return new Promise((resolve, reject) => {
       const url = new URL(API_BASE + path);
       const cookieStr = customCookies || (this.authCookie ? `auth=${this.authCookie}` : '');
