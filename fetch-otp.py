@@ -128,32 +128,45 @@ def _search_mailbox(mail):
     返回最新且在 10 分钟内的邮件 ID，或 None。"""
     since = (datetime.datetime.now() - datetime.timedelta(days=7)).strftime('%d-%b-%Y')
 
-    status, msgs = mail.search(None, f'(FROM "vrchat" SINCE {since})')
-    if not msgs[0]:
-        status, msgs = mail.search(None, f'(FROM "VRChat" SINCE {since})')
-    if not msgs[0]:
-        status, msgs = mail.search(None, f'(SUBJECT "One-Time Code" SINCE {since})')
-    if not msgs[0]:
+    def search(criteria):
+        """执行 SEARCH，返回消息 ID 列表或 None（服务器无结果 / 失败）。
+        imaplib search() 返回 (status, [data])，data[0] 才是 ID 列表（b'1 2 3'）。
+        注意各服务器空结果形态不同：Gmail/QQ 返回 b''，163 返回 b'(none)'，
+        status 为 'NO'/'BAD' 时 data 可能为空列表——统一归一化处理。"""
+        try:
+            status, msgs = mail.search(None, criteria)
+            if status != 'OK' or not msgs or not msgs[0]:
+                return None
+            data = msgs[0].strip()
+            if not data or data.lower() == b'(none)':
+                return None
+            return data.split()
+        except Exception:
+            return None
+
+    all_ids = (search(f'(FROM "vrchat" SINCE {since})')
+               or search(f'(FROM "VRChat" SINCE {since})')
+               or search(f'(SUBJECT "One-Time Code" SINCE {since})'))
+    if all_ids is None:
         # 兜底: 扫最近 10 封的头部
-        status, msgs = mail.search(None, 'ALL')
-        if msgs[0]:
-            all_ids = msgs[0].split()
+        all_ids = search('ALL')
+        if all_ids:
             found_id = None
             for rid in reversed(all_ids[-10:]):
-                status, data = mail.fetch(rid, '(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT)])')
-                if status == 'OK':
-                    hdr = data[0][1].decode('utf-8', errors='ignore')
-                    if 'vrchat' in hdr.lower() or 'one-time' in hdr.lower() or 'code' in hdr.lower():
-                        found_id = rid
-                        break
-            msgs = (status, found_id)
-        else:
-            msgs = (status, None)
+                try:
+                    status, data = mail.fetch(rid, '(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT)])')
+                    if status == 'OK':
+                        hdr = data[0][1].decode('utf-8', errors='ignore')
+                        if 'vrchat' in hdr.lower() or 'one-time' in hdr.lower() or 'code' in hdr.lower():
+                            found_id = rid
+                            break
+                except Exception:
+                    continue
+            all_ids = [found_id] if found_id else None
 
-    if not msgs[0]:
+    if not all_ids:
         return None
 
-    all_ids = msgs[0].split()
     latest_id = None
     # 检查最近 5 封，取最新且 10 分钟内的有效验证码，避免 IMAP 同步延迟取到旧码
     for rid in reversed(all_ids[-5:]):
