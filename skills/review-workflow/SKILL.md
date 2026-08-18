@@ -1,27 +1,28 @@
 ---
-name: pr-review
-description: "Use when 审核 PR / 判断可合并性 / 多轮修改复核 / 参与协作审核。REST-only、端到端实测、分级反馈的完整 PR 审查流程。"
-version: 1.0.0
+name: review-workflow
+description: "Use when 审核 PR / issue（判断可合并性、多轮修改复核、参与协作审核）。REST-only、端到端实测、分级反馈的完整审核流程。"
+version: 1.1.0
 metadata:
   hermes:
-    tags: [github, pr, review, vetting, multi-agent]
+    tags: [github, review, pr, issue, vetting, multi-agent]
 ---
 
-# PR 审核流程（PR Review）
+# 审核工作流（PR / Issue / 协作审核）
 
-本 skill 面向**任何 AI Agent**：当需要审核一个 PR（判断可合并性、多轮修改复核、参与协作审核）时使用。沉淀自本仓库维护方多轮真实审核实践，通用方法可直接复用于其他 GitHub 仓库。
+本 skill 面向**任何 AI Agent**：当需要审核一个 PR 或 issue（判断可合并性/可关闭性、多轮修改复核、参与协作审核）时使用。沉淀自本仓库维护方多轮真实审核实践，通用方法可直接复用于其他 GitHub 仓库。
 
 > 权威定义：仓库 `DEVELOPMENT.md`（PR 硬性要求 §2、跨平台约束 §3）、`AGENT-REVIEW.md`（协作审核协议）、`AGENTS.md`（Agent 义务）。本 skill 是执行方法论，冲突以仓库文档为准。
 
 ## 触发条件
 
 - 使用者说「审核这个 PR / 看看能否合并 / 他又提交了 / 处理下这个 PR」
+- 使用者说「看看这个 issue / 处理下 issue / 这个需求实现了吗 / 能不能关」
 - 协作审核（AGENT-REVIEW 协议）中认领了 PR/issue，需要执行审核
 - 维护方需要复核自己或他人 PR 的多轮修改
 
 ## 核心原则
 
-1. **审核只读，合并权归维护者**：正式 review（APPROVE / REQUEST_CHANGES / COMMENT）可提交，**merge / push 必须先获得明确指令**。「推荐合并」≠「授权合并」，选 review-only 就只提交意见。
+1. **审核只读，合并/关闭权归维护者**：正式 review（APPROVE / REQUEST_CHANGES / COMMENT）与 issue 结论评论可提交，**merge / push / close 必须先获得明确指令**。「推荐合并」≠「授权合并」，选 review-only 就只提交意见。
 2. **REST-only**：gh CLI 的 GraphQL 命令（`gh pr list` / `gh pr view`）对部分仓库会报 `Could not resolve to a Repository`，但 REST（`gh api repos/O/R/...`）正常。**一律用 `gh api`**（记得 `--paginate` 拿全量）。
 3. **端到端实测**：不止读 diff——把 PR 文件提取到工作区实际运行（语法检查 / dry-run / mock 数据驱动）。很多问题只有跑起来才暴露（历史实例：`SqliteError: no such table`、async IIFE 恒真值短路、删 return 的「语法合法但功能挂」）。
 4. **反馈分级**：🔴 阻断项（合并前必修）/ ⚠️ 警告 / 💡 建议 / ✅ 通过项也要列出。
@@ -91,7 +92,18 @@ gh api repos/O/R/pulls/N/comments --jq '.[] | .path, .line, .body[0:40]'
 - 修复 commit 本身是**新回归源**：作者「修复」常重写实现方式，对最新 head 重跑完整场景矩阵（含脏数据/边界），不只比对增量 diff。
 - **本地 `prN` ref 可能陈旧**：fetch 失败后 `git show prN:file` 是旧内容——先 `gh api pulls/N --jq '.head.sha'` 对 SHA，结论一律以 REST 按 head SHA 提取的内容为准。
 
-### 7. 合并（维护者明确授权后）
+### 7. Issue 审核（与 PR 审核并列的第二对象）
+
+Issue 不是「关不关」的二选一——先判断**需求是否已实现**，再决定处置：
+
+1. **收集上下文**：`gh api repos/O/R/issues/N --jq '{title, body, state, labels, assignee, comments, created_at, updated_at}'` + `issues/N/comments --paginate` 看讨论历史。
+2. **需求实现核查**：从 issue body 提取验收点清单 → grep 代码（`gh api repos/O/R/contents/<path>?ref=main`）确认每个点是否落地 → 关联 PR（`gh api search/issues?q=repo:O/R+"#N"+in:body` 或看 PR 引用了 `fixes #N`）。
+3. **关闭前逐条核对验收点**：全部实现 → 发关闭说明评论（列「哪些落地/如何验证」）→ PATCH `state=closed`；有未实现项 → **拆独立新 issue**（body 带原始需求 + 已落地部分 + 剩余项 + 关联链）再关原 issue，别整体关掉留「以后再说」。
+4. **证据要求**：结论评论附可复现证据（定位到模块/函数级别）；「已实现」用代码路径 + 实测输出说话，别凭 PR 合并状态判断。
+5. 关闭后读回验证：`gh api repos/O/R/issues/N --jq '{state, closed_at, closed_by}'`。
+6. ⚠️ `fixes #N` 在 commit message（直接 push main）或 PR body（squash 合并）都会**自动关 issue**——push/合并后读回确认，无需手动 PATCH。
+
+### 8. 合并（维护者明确授权后）
 
 ```bash
 gh pr merge N --squash   # squash 避免"加了又删"的中间 commit 噪音
