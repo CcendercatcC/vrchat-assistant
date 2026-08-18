@@ -4,10 +4,16 @@
  * 从 VRCX SQLite 数据库导入历史数据到新系统
  *
  * 使用:
- *   自动模式:  node migrate-vrcx0.mjs                                   （自动探测数据库路径 + userId）
+ *   自动模式:  node migrate-vrcx0.mjs                                   （按平台自动探测数据库路径 + userId）
  *   手动模式:  node migrate-vrcx0.mjs <VRCX数据库路径> <userId>
  *   自定义目标: node migrate-vrcx0.mjs --db <目标数据库路径>             （默认: ./vrc-monitor.sqlite3）
  *   跳过检测:  node migrate-vrcx0.mjs --force                            （服务运行时强制迁移，风险自负）
+ *
+ * 数据库自动探测（跨平台）:
+ *   Windows: %USERPROFILE%\AppData\Roaming\VRCX[(-0)]\VRCX[(-0)].sqlite3
+ *   macOS:   ~/Library/Application Support/VRCX/VRCX.sqlite3
+ *   Linux:   ~/.config/VRCX/VRCX.sqlite3（原生 Electron 版）
+ *            ~/.wine/drive_c/users/<user>/AppData/Roaming/VRCX/VRCX.sqlite3（Wine 运行 Windows 版，支持 WINEPREFIX 覆盖）
  *
  * ⚠️ 引擎说明：v1.1.0 起改用 better-sqlite3（流式迁移 + 事务提交），
  *    不再整文件重写数据库（旧版 sql.js 的 export() 全量写出是 SQLITE_CORRUPT 根因）。
@@ -24,7 +30,7 @@ import { existsSync, rmSync } from 'node:fs';
 import net from 'node:net';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
-import os from 'node:os';
+import { candidateVrcxDbPaths, findVrcxDb } from './core/vrcx-db-paths.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -72,23 +78,21 @@ const _args0 = parseArgs(process.argv);
 const MONITOR_DB = _args0.db ? path.resolve(_args0.db) : path.join(__dirname, 'vrc-monitor.sqlite3');
 const DDL_PATH = path.join(__dirname, 'core', 'init-db.sql');
 
-// ── 数据库路径解析（优先级：命令行参数 > 新版默认 > 旧版兜底）──
+// ── 数据库路径解析（优先级：命令行参数 > 按平台自动探测，见 core/vrcx-db-paths.js）──
 function resolve_vrcx0_db(positional) {
   // 1. 命令行显式指定
   if (positional[0]) return positional[0];
 
-  // 2. 新版 VRCX 默认路径
-  const newPath = path.join(os.homedir(), 'AppData', 'Roaming', 'VRCX', 'VRCX.sqlite3');
-  if (existsSync(newPath)) return newPath;
+  // 2. 按平台自动探测
+  const detected = findVrcxDb();
+  if (detected) return detected;
 
-  // 3. 旧版 VRCX-0 兜底路径
-  const oldPath = path.join(os.homedir(), 'AppData', 'Roaming', 'VRCX-0', 'VRCX-0.sqlite3');
-  if (existsSync(oldPath)) return oldPath;
-
-  // 4. 都找不到
+  // 3. 都找不到
   console.log('❌ 未找到 VRCX 数据库文件');
-  console.log(`   已尝试: ${newPath}`);
-  console.log(`            ${oldPath}`);
+  console.log('   已尝试:');
+  for (const p of candidateVrcxDbPaths()) {
+    console.log(`     ${p}`);
+  }
   console.log('   请提供正确的数据库路径: node migrate-vrcx0.mjs <VRCX数据库路径>');
   process.exit(1);
 }

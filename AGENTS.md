@@ -34,9 +34,10 @@
 | 状态变更 | `feed_status` | 好友状态文本变更 |
 | Bio 变更 | `feed_bio` | 好友个人简介变更 |
 
-> **数据库位置**：迁移脚本会自动探测以下路径（Windows）：
-> -  VRCX：`%USERPROFILE%\AppData\Roaming\VRCX\VRCX.sqlite3`
-> -  VRCX-0：`%USERPROFILE%\AppData\Roaming\VRCX-0\VRCX-0.sqlite3`
+> **数据库位置**：迁移脚本会按平台自动探测以下路径：
+> -  **Windows**：`%USERPROFILE%\AppData\Roaming\VRCX\VRCX.sqlite3`（VRCX-0：`%USERPROFILE%\AppData\Roaming\VRCX-0\VRCX-0.sqlite3`）
+> -  **Linux**：`~/.config/VRCX/VRCX.sqlite3`（原生 Electron 版）；若通过 Wine 运行 Windows 版：`~/.wine/drive_c/users/<user>/AppData/Roaming/VRCX/VRCX.sqlite3`（自定义 Wine 前缀可用 `WINEPREFIX` 环境变量指定）
+> -  **macOS**：`~/Library/Application Support/VRCX/VRCX.sqlite3`
 >
 > 若自动探测失败，Agent 可让用户提供数据库路径手动指定：`node migrate-vrcx0.mjs <VRCX数据库路径> <userId>`。
 

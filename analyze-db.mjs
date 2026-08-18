@@ -1,12 +1,19 @@
 /**
  * VRCX-0 数据库结构分析 v2
  * 用法: node analyze-db.mjs [VRCX数据库路径]
- * 默认路径按平台自动探测（Windows VRCX-0 默认安装位置）
+ * 默认路径按平台自动探测（规则见 core/vrcx-db-paths.js）
  * 引擎: better-sqlite3（只读打开，与 migrate-vrcx0.mjs 同步迁移，移除 sql.js）
  */
 import Database from 'better-sqlite3';
+import { findVrcxDb } from './core/vrcx-db-paths.js';
 
-const DB_PATH = process.argv[2] || 'C:/Users/<用户名>/AppData/Roaming/VRCX-0/VRCX-0.sqlite3';
+const DB_PATH = process.argv[2] || findVrcxDb();
+
+if (!DB_PATH) {
+  console.log('❌ 未找到 VRCX 数据库文件');
+  console.log('   请提供正确的数据库路径: node analyze-db.mjs <VRCX数据库路径>');
+  process.exit(1);
+}
 
 async function main() {
   const db = new Database(DB_PATH, { readonly: true, fileMustExist: true });
