@@ -111,6 +111,14 @@ metadata:
 - **地图链接**：`https://vrchat.com/home/world/{worldId}`
 - **封面列省略规则**：封面无数据 或 QQ Bot 场景（QQ 消息无法渲染外链图片）时省略封面列，其余列不变
 
+### chill/放松向地图推荐过滤规则（2026-08-15 用户修正）
+
+用户要「chill 的室内图」时：
+- **排除**随机聊天/轮盘配对社交向（如 No Time Two Talk、omegle 式 roulette、大型交流广场）——主题是 social/chat 的不算 chill
+- **聚焦** sleep/onsen/温泉/居家/小憩系，看 author_tag 含 chill/sleep/relax/spa/onsen 的图
+- 备注列标注**当前人数**（occupants/capacity）——爆满（occupants > capacity 或接近满）的图即使主题 chill 也要提示人多，chill 推荐优先人少的
+- 候选补热度：recommend_worlds 输出的 heat 常为 0，用 get_world_name(worldId) 逐个补查 favorites 再按展示格式输出
+
 ## 7. 域内陷阱
 
 ### 世界改名 → 缓存陈旧
