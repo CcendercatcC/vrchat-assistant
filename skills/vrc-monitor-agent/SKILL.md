@@ -95,6 +95,7 @@ metadata:
 | `x_add_creator` | 添加要追踪的 X 博主（VRChat 世界推荐博主；`screen_name` 不带 @） |
 | `x_remove_creator` | 移除追踪的 X 博主 |
 | `x_worlds` | 查看已收录的推荐世界列表（调试用） |
+| `submit_totp` | **提交 TOTP 验证码**：账号启用 Authenticator 两步验证（`/health` 的 `auth.needsTotp: true`）时，提交当前 6 位验证码完成登录（`code` 必填；登录后 WS 自动重连） |
 
 调用方式（HTTP SSE JSON-RPC）：
 

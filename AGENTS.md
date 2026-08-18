@@ -144,7 +144,7 @@ cp desktop/plugin.js "$HERMES_HOME/desktop-plugins/vrc-monitor/"
 
 ### 6. 配置 MCP 接口（可选但推荐）
 
-服务通过 MCP 协议暴露以下工具（get_online_friends / get_friend_info / get_friend_events / get_companions / get_online_pattern / get_nicknames / set_nickname / get_world_name / set_world_note / get_world_history / get_weekly_report / scan_new_worlds / get_new_worlds / get_mutual_friends / search_users / search_groups / search_worlds / search_planet_worlds / recommend_planet_worlds / search_booth_items / get_booth_item / get_booth_history / get_booth_searches / backup_database / get_user_groups / get_group_info / get_group_instances / get_group_announcement / get_group_heat / join_group / leave_group / peek_group_announcement / send_boop / get_boop_emojis / upload_emoji / upload_print / upload_gallery_image / download_print / download_gallery_image / send_friend_request / remove_friend / create_instance / invite_myself / open_world / rate_world / mark_world_visited / add_to_backlog / get_backlog / remove_from_backlog / recommend_worlds / favorite_world / get_favorite_friends_locations / recommend_join / set_join_preference / get_join_preference / record_join_choice / get_join_learning / x_world_digest / x_scan_creators / x_creators / x_add_creator / x_remove_creator / x_worlds / get_my_favorite_worlds / get_my_favorite_groups 等，完整清单与参数见 `skills/vrc-monitor-agent/SKILL.md`「MCP 工具」章节），Hermes Agent 可直接调用，无需 curl 手写 JSON-RPC。
+服务通过 MCP 协议暴露以下工具（get_online_friends / get_friend_info / get_friend_events / get_companions / get_online_pattern / get_nicknames / set_nickname / get_world_name / set_world_note / get_world_history / get_weekly_report / scan_new_worlds / get_new_worlds / get_mutual_friends / search_users / search_groups / search_worlds / search_planet_worlds / recommend_planet_worlds / search_booth_items / get_booth_item / get_booth_history / get_booth_searches / backup_database / get_user_groups / get_group_info / get_group_instances / get_group_announcement / get_group_heat / join_group / leave_group / peek_group_announcement / send_boop / get_boop_emojis / upload_emoji / upload_print / upload_gallery_image / download_print / download_gallery_image / send_friend_request / remove_friend / create_instance / invite_myself / open_world / rate_world / mark_world_visited / add_to_backlog / get_backlog / remove_from_backlog / recommend_worlds / favorite_world / get_favorite_friends_locations / recommend_join / set_join_preference / get_join_preference / record_join_choice / get_join_learning / x_world_digest / x_scan_creators / x_creators / x_add_creator / x_remove_creator / x_worlds / get_my_favorite_worlds / get_my_favorite_groups / submit_totp 等，完整清单与参数见 `skills/vrc-monitor-agent/SKILL.md`「MCP 工具」章节），Hermes Agent 可直接调用，无需 curl 手写 JSON-RPC。
 
 在 Hermes 配置文件（`$HERMES_HOME/config.yaml`，Windows 为 `%LOCALAPPDATA%\hermes\config.yaml`）中添加：
 
@@ -237,6 +237,18 @@ Agent 在配置、使用、维护本软件过程中，若发现原始代码存�
 1. 确认 `credentials.json` 中的 `imap_auth_code` 是 **IMAP 授权码**（非登录密码）
 2. 若自动推断的 IMAP 服务器不正确，可在 `credentials.json` 中添加 `"imap_host"` 手动指定（如 `"imap_host": "imap.gmail.com"`）
 3. 连续多次触发 OTP 时，邮箱 IMAP 同步可能有延迟，服务会在冷却后自动重试（认证失败冷却 120s，限流 401 冷却 5min），无需人工干预
+
+### TOTP（Authenticator 验证码）登录
+
+若 VRChat 账号启用了 **TOTP 两步验证**（Authenticator 应用），服务启动/重连时会进入 `needsTotp` 状态（`/health` 的 `auth.needsTotp` 为 `true`，或日志提示调用 `submit_totp`），此时：
+1. 服务已保留待验证的临时会话，**只差验证码**；
+2. Agent（或用户）打开 Authenticator 应用查看当前 6 位验证码；
+3. 调用 MCP 工具 `submit_totp { code: "123456" }` 完成登录，WebSocket 会自动重连上线。
+
+注意：
+- 账号**同时启用邮箱 OTP 与 TOTP** 时，服务优先走邮箱 OTP 自动抓取，仅在邮箱抓取失败时才兜底转为需要 TOTP 手动提交；
+- 账号**仅启用 TOTP** 时，服务不会尝试邮箱，直接等待 `submit_totp`；
+- 验证码每 30 秒变化，过期需重新获取；提交失败后临时会话保留，可再次提交。
 
 ### 代理说明
 

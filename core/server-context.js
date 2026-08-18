@@ -12,7 +12,7 @@ export const ctx = {
   wsManager: null,
   eventPipeline: null,
   friendState: null,
-  serverState: { started: null, authUser: null, friendCount: 0, needsOtp: false },
+  serverState: { started: null, authUser: null, friendCount: 0, needsOtp: false, needsTotp: false },
   watchlist: { cache: [], dirty: false },
   paths: {
     __dirname: null,

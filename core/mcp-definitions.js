@@ -874,4 +874,16 @@ export const CUSTOM_TOOLS = [
     description: '[查询·收藏] 列出当前账号的世界收藏分组（收藏夹名，含容量上限 capacity）。',
     inputSchema: { type: 'object', properties: {} },
   },
+  // ── 认证 ──
+  {
+    name: 'submit_totp',
+    description: '[认证] 账号启用 TOTP 两步验证时，服务会处于 needsTotp 状态（/health 可见）。调用本工具提交当前 Authenticator 应用的 6 位验证码完成登录。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        code: { type: 'string', description: 'Authenticator 应用中显示的 6 位 TOTP 验证码' },
+      },
+      required: ['code'],
+    },
+  },
 ];

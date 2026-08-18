@@ -160,6 +160,10 @@ async function main() {
     ctx.api.saveCookieToFile(COOKIE_FILE);
   } catch (err) {
     ctx.serverState.needsOtp = false;
+    ctx.serverState.needsTotp = !!err.needsTotp;
+    if (err.needsTotp) {
+      log(`   ⚠️ 账号启用 TOTP 两步验证：请调用 MCP 工具 submit_totp 提交当前验证码`);
+    }
     log(`   ❌ 登录失败: ${err.message}`);
     // 不退出进程，让 MCP/WS 服务启动以便后续重试
   }
