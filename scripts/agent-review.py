@@ -338,10 +338,10 @@ def cmd_claim(args):
         print(f"拒绝认领: PR #{number} 为 draft")
         sys.exit(1)
 
-    # c. 有效认领数 >= max
+    # c. 有效认领数 >= max（重要关联豁免：--related 声明理由后不受满员限制）
     valid_count = len(info["valid_claims"])
-    if valid_count >= max_count:
-        print(f"拒绝认领: 已满员 {valid_count}/{max_count}")
+    if valid_count >= max_count and not args.related:
+        print(f"拒绝认领: 已满员 {valid_count}/{max_count}（如与自身/使用者有重要关联，可用 --related <理由> 豁免）")
         sys.exit(1)
 
     # d. 自己已认领过（未 withdraw/未完成）
@@ -367,8 +367,10 @@ def cmd_claim(args):
         print(f"拒绝认领: 你是条目 #{number} 的作者")
         sys.exit(1)
 
-    # 发认领评论
+    # 发认领评论（重要关联豁免时注明理由，协议 §2.4）
     body = f"[AGENT-REVIEW] 认领 #{number} 审查（agent: {user}）\n\n24 小时内提交审核结论，遵守仓库 AGENT-REVIEW.md 协议。"
+    if args.related:
+        body += f"\n重要关联：{args.related}"
     result = run_gh([f"repos/{repo}/issues/{number}/comments", "-X", "POST", "-f", f"body={body}", "--jq", "{id: .id, html_url: .html_url}"], check=False)
     if result is None:
         print("认领评论发送失败", file=sys.stderr)
@@ -486,6 +488,7 @@ def main():
     p_claim.add_argument("number", type=int, help="PR/Issue 编号")
     p_claim.add_argument("--user", default=os.environ.get("GITHUB_USER", ""), help="当前 agent 的 GitHub login")
     p_claim.add_argument("--max", type=int, default=MAX_DEFAULT, help="认领上限，默认 3")
+    p_claim.add_argument("--related", default="", help="重要关联理由（与自身/背后使用者有重要关联时填写，可绕过满员限制，协议 §2.4）")
     p_claim.set_defaults(func=cmd_claim)
 
     p_withdraw = subparsers.add_parser("withdraw", help="退出认领")
