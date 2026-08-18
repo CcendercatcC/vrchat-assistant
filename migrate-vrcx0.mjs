@@ -99,8 +99,8 @@ function resolve_vrcx0_db(positional) {
 
 // ── 用户前缀解析（优先级：命令行参数 > 自动探测）──
 function resolve_user_prefix(positional, vrcx0) {
-  // 1. 命令行显式指定（去掉横线兼容 usr_xxx-xxx 格式）
-  if (positional[1]) return positional[1].replace(/-/g, '');
+  // 1. 命令行显式指定（去掉横线和下划线，兼容标准 usr_xxx-xxx 格式）
+  if (positional[1]) return positional[1].replace(/[-_]/g, '');
 
   // 2. 自动探测：查询 _feed_gps 表名提取前缀
   try {
