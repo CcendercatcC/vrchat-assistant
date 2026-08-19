@@ -3,6 +3,11 @@
  *
  * POST /favorites 把世界加入用户云端收藏夹分组。
  * 成功后写本地 world_cache.favorited = 1（供 recommend_worlds 反馈加权，免每次调 API 查收藏）。
+ *
+ * ⚠️ VRChat API 契约（官方文档 Add Favorite，2026-08 实测验证）：
+ *   - favoriteId 必须是被收藏对象本身的 ID（world 类型为 wrld_...），不是收藏分组 ID；
+ *     传分组名（worldsN）会被 400 拒绝（"favoriteId must be an ID"），传 fvgrp_ 分组 ID 会按对象 ID 校验失败。
+ *   - 分组通过 tags 数组指定（tags: ["worlds1"]），无 worldId 字段。
  */
 
 import { ctx, log } from '../server-context.js';
@@ -20,7 +25,7 @@ export async function handleFavoriteWorld({ worldId, tag }) {
     throw new Error(`tag must be one of ${FAVORITE_TAGS.join('/')} (got "${tag}")`);
   }
 
-  const body = { type: 'world', favoriteId: tag, tags: [tag], worldId };
+  const body = { type: 'world', favoriteId: worldId, tags: [tag] };
   const r = await api._request('POST', '/favorites', body);
   if (r.status >= 400) {
     // 透传 API 错误（如重复收藏同分组被拒），不崩溃
