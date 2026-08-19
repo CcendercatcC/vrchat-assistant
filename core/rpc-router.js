@@ -51,6 +51,7 @@ import {
 import {
   handleGetFriendEvents,
   handleGetRecentEvents,
+  handleGetFriendPairMeetings,
   handleGetFriendPairScreen,
   handleGetFriendProfileChanges,
   handleGetWorldName,
@@ -327,6 +328,9 @@ export async function handleRpc(rpc, session, res) {
             break;
           case 'get_recent_events':
             result = handleGetRecentEvents(args);
+            break;
+          case 'get_friend_pair_meeting':
+            result = handleGetFriendPairMeetings(args);
             break;
           case 'get_friend_pair_screen':
             result = handleGetFriendPairScreen(args);

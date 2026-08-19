@@ -1107,6 +1107,83 @@ export class Storage {
     };
   }
 
+  // ── 新增：查询两个好友之间的「每次见面」时段（单次见面时长）──
+  //
+  // 按实例切分：同一实例内所有「同屏匹配」事件合并为一次见面，给出段首/段尾/时长。
+  // 精确口径：对好友 B 的每条可识别实例事件，找好友 A 在同一实例且时间戳在 ±window
+  // 内的匹配事件对，作为一次同屏；排除 offline/traveling/private（private 无房主信息，
+  // 不同人不同时间的 private 会被误判为同一房间，故不计）。
+  findFriendPairMeetings(userIdA, userIdB, startTime, endTime, windowMinutes = 30) {
+    const getEvents = (uid) => this._query(
+      `SELECT created_at, json_extract(content_json, '$.location') AS loc FROM events
+       WHERE user_id = $u AND type = 'friend-location'
+       AND created_at >= $start AND created_at <= $end`,
+      { $u: uid, $start: startTime, $end: endTime }
+    );
+
+    const parse = (loc) => {
+      if (!loc || loc === 'offline' || loc === 'traveling') return null;
+      const parts = loc.split(':');
+      const worldId = parts[0];
+      const instanceId = parts.slice(1).join(':');
+      if (instanceId === 'private') return null;
+      if (!worldId || !instanceId) return null;
+      return { world_id: worldId, instance_id: instanceId };
+    };
+
+    const winMs = Math.max(1, windowMinutes) * 60000;
+    const aEvents = getEvents(userIdA).map(r => ({ t: r.created_at, ...(parse(r.loc) || {}) })).filter(e => e.world_id);
+    const bEvents = getEvents(userIdB).map(r => ({ t: r.created_at, ...(parse(r.loc) || {}) })).filter(e => e.world_id);
+
+    // A 的事件按实例分组
+    const aByInst = new Map();
+    for (const e of aEvents) {
+      const k = `${e.world_id}:${e.instance_id}`;
+      if (!aByInst.has(k)) aByInst.set(k, []);
+      aByInst.get(k).push(e.t);
+    }
+
+    // 收集每次见面（按实例聚合，段首到段尾）
+    const meetingsByInst = new Map(); // key -> { world_id, instance_id, min, max }
+    const seen = new Set();
+    for (const be of bEvents) {
+      const k = `${be.world_id}:${be.instance_id}`;
+      const ats = aByInst.get(k);
+      if (!ats) continue;
+      const bt = Date.parse(be.t);
+      for (const at of ats) {
+        if (Math.abs(Date.parse(at) - bt) > winMs) continue;
+        const pairId = `${be.t}|${at}`;
+        if (seen.has(pairId)) continue;
+        seen.add(pairId);
+        const tA = Date.parse(at);
+        const tB = bt;
+        const cur = meetingsByInst.get(k);
+        if (!cur) meetingsByInst.set(k, { world_id: be.world_id, instance_id: be.instance_id, min: Math.min(tA, tB), max: Math.max(tA, tB) });
+        else {
+          cur.min = Math.min(cur.min, tA, tB);
+          cur.max = Math.max(cur.max, tA, tB);
+        }
+      }
+    }
+
+    const meetings = [...meetingsByInst.values()].map(m => ({
+      worldId: m.world_id,
+      instanceId: m.instance_id,
+      startTime: new Date(m.min).toISOString(),
+      endTime: new Date(m.max).toISOString(),
+      durationMinutes: Math.round((m.max - m.min) / 60000),
+    }));
+    meetings.sort((a, b) => Date.parse(b.startTime) - Date.parse(a.startTime));
+    return {
+      userIdA,
+      userIdB,
+      meetingCount: meetings.length,
+      totalDurationSeconds: meetings.reduce((s, m) => s + m.durationMinutes * 60, 0),
+      meetings,
+    };
+  }
+
   // ── 新增：分析好友上线规律 ──
 
   getOnlinePattern(userId, { startTime, endTime, days } = {}) {
