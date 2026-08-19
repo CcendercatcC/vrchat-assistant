@@ -35,6 +35,12 @@ import {
 } from './handlers/instance.js';
 
 import {
+  handleGetFriendFavoriteGroups,
+  handleFavoriteFriend,
+  handleUnfavoriteFriend,
+  handleMoveFriendGroup,
+} from './handlers/friend-favorites.js';
+import {
   handleGetNotifications,
   handleSeeNotification,
   handleHideNotification,
@@ -186,6 +192,20 @@ export async function handleRpc(rpc, session, res) {
             result = await handleSubmitTotp(args);
             break;
           }
+          // 好友收藏分组管理（2026-08-19 新增）
+          // ⚠️ 不包 rateLimiter：handler 内部（fetchFriendGroups）已逐请求限流，外层包裹会死锁（DEVELOPMENT.md §5 事故教训）
+          case 'get_friend_favorite_groups':
+            result = await handleGetFriendFavoriteGroups();
+            break;
+          case 'favorite_friend':
+            result = await handleFavoriteFriend(args);
+            break;
+          case 'unfavorite_friend':
+            result = await handleUnfavoriteFriend(args);
+            break;
+          case 'move_friend_group':
+            result = await handleMoveFriendGroup(args);
+            break;
           // 通知收件箱（2026-08-19 新增）
           case 'get_notifications':
             result = await rateLimiter.execute(() => handleGetNotifications(args));
