@@ -429,6 +429,18 @@ export const CUSTOM_TOOLS = [
     },
   },
 {
+    name: 'set_world_sleep',
+    description: '[action] Manually mark a world as a sleep-friendly map (sets sleep_ok=1, a strong signal in recommend_join/recommend_worlds). isSleep=false clears the marker. Local-only.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        worldId: { type: 'string', description: 'VRChat world ID (wrld_...)' },
+        isSleep: { type: 'boolean', default: true, description: 'true=mark as sleep map, false=clear' },
+      },
+      required: ['worldId'],
+    },
+  },
+{
     name: 'add_to_backlog',
     description: '[action] Add a world to your local to-visit backlog (待逛列表). Worlds stay pending until visited (auto-cleared by location events) or manually removed. Idempotent: re-adding updates reason/priority. Local-only, does not touch VRChat cloud favorites.',
     inputSchema: {
