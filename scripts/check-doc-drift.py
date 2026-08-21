@@ -163,7 +163,7 @@ def gh_all_pr_states():
         r = subprocess.run(
             ["gh", "pr", "list", "--state", "all", "--limit", "100",
              "--json", "number,state,mergedAt",
-             "--jq", '.[] | "\(.number)|\(.state)|\(.mergedAt // "")"'],
+             "--jq", r'.[] | "\(.number)|\(.state)|\(.mergedAt // "")"'],
             capture_output=True, text=True, timeout=30,
         )
         if r.returncode != 0:
