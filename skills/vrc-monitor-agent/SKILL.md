@@ -50,6 +50,7 @@ metadata:
 | `get_new_worlds` | 只读查询已跟踪新世界：onlyUnvisited 只看未逛过、sortBy（favorites/occupants/popularity/created_at）、excludeTheme 排除主题（按 author_tag_* 逗号分隔，SQL 层排除）、limit（默认 10 最大 50） |
 | `rate_world` | **用户反馈**：给世界打好评/烂图标记（rating: 1=好图加权 / -1=烂图降权 / 0=清除），写入 world_kb.user_rating，影响 worldScore 推荐排序 |
 | `mark_world_visited` | **显式确认逛过**某世界（事件驱动 visited 会漏记，开图闭环手动确认用） |
+| `set_world_sleep` | **手动标记睡觉图**（worldId 必填，isSleep 默认 true，false=取消），写入 world_kb.sleep_ok=1，recommend_join / recommend_worlds（sleep 主题）的强信号。本地数据，不动云端 |
 | `add_to_backlog` | **加入待逛列表**（本地待办，不动云端收藏）：worldId 必填，reason/priority（0-2，默认 0）可选。幂等：重复加入更新备注/优先级，加入时间保持首次。状态存 world_kb.backlog（合表方案） |
 | `get_backlog` | **查看待逛列表**：status（pending 默认=未逛 / visited=逛完历史 / all）、sortBy（added_at 默认 / priority / favorites）、limit（1-50）。**逛完自动从未逛区消失**（pending 按 visited 过滤），记录保留在 visited 历史 |
 | `remove_from_backlog` | **移出待逛列表**：worldId 必填。只清 backlog 标记（保留行/世界知识），幂等 |

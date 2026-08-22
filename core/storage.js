@@ -700,6 +700,23 @@ export class Storage {
     return { worldId: row.world_id, worldName: row.world_name || '', visited: row.visited === 1, visitedAt: row.visited_at, backlog: row.backlog === 1 };
   }
 
+  /**
+   * 手动标记某世界是否为适合睡觉的地图（recommend_join / recommend_worlds 用 sleep_ok 强信号）。
+   * isSleep: true=标为睡觉图 / false=取消标记。世界不在表里插兜底行（复用 rateWorld 模式）。
+   */
+  setWorldSleep({ worldId, isSleep = true }) {
+    const flag = isSleep ? 1 : 0;
+    this._run(
+      `INSERT INTO world_kb (world_id, world_name, tags, sleep_ok)
+       VALUES ($worldId, '', '[]', $flag)
+       ON CONFLICT(world_id) DO UPDATE SET sleep_ok = $flag`,
+      { $worldId: worldId, $flag: flag }
+    );
+    const rows = this._query(`SELECT world_id, world_name, sleep_ok FROM world_kb WHERE world_id = $worldId`, { $worldId: worldId });
+    const row = rows[0];
+    return { worldId: row.world_id, worldName: row.world_name || '', isSleep: row.sleep_ok === 1 };
+  }
+
   /** 待逛列表：加入/更新（幂等，重复加入 = 更新备注/优先级；世界不在表里插兜底行） */
   addToBacklog({ worldId, reason = '', priority = 0 }) {
     const now = new Date().toISOString();

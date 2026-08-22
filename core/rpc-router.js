@@ -113,6 +113,7 @@ import {
   handleGetNewWorlds,
   handleRateWorld,
   handleMarkWorldVisited,
+  handleSetWorldSleep,
   handleAddToBacklog,
   handleGetBacklog,
   handleRemoveFromBacklog,
@@ -368,6 +369,9 @@ export async function handleRpc(rpc, session, res) {
             break;
           case 'mark_world_visited':
             result = handleMarkWorldVisited(args);
+            break;
+          case 'set_world_sleep':
+            result = handleSetWorldSleep(args);
             break;
           case 'add_to_backlog':
             result = handleAddToBacklog(args);
