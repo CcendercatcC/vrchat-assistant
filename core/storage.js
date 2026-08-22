@@ -752,6 +752,57 @@ export class Storage {
     return { worldId, removed: rows.length === 0 || rows[0].backlog === 0 };
   }
 
+  /**
+   * 读取 world_kb 某行的信息字段（world_name / author_name / author_id / created_at）。
+   * 用于 #77 的 created_at 预检：已填则 ensureWorldKbInfo 早退省一次 API。
+   * @returns {{worldId, worldName, authorName, authorId, createdAt}}
+   */
+  getWorldKbInfo(worldId) {
+    const rows = this._query(
+      `SELECT world_id, world_name, author_name, author_id, created_at FROM world_kb WHERE world_id = $worldId`,
+      { $worldId: worldId }
+    );
+    const row = rows[0];
+    if (!row) return { worldId, worldName: '', authorName: '', authorId: '', createdAt: '' };
+    return {
+      worldId: row.world_id, worldName: row.world_name || '',
+      authorName: row.author_name || '', authorId: row.author_id || '',
+      createdAt: row.created_at || '',
+    };
+  }
+
+  /**
+   * 幂等回填 world_kb 的信息字段（#76：兜底插入只写标记位，信息字段恒空）。
+   * 仅当对应列当前为空/NULL 时才回填，已存在的值不回写（幂等）。
+   * ⚠️ 注意：本方法是 UPDATE 非 INSERT，隐含「world_kb 行已存在」前提——生产路径由
+   * rateWorld / markWorldVisited / addToBacklog / set_world_sleep 先兜底插入保证成立，
+   * 若独立复用于不存在的行会静默 0 行且后续查询回 undefined，调用方需先确保行存在。
+   * @param {object} p {worldId, name?, authorName?, authorId?, createdAt?}
+   * @returns {{worldId, worldName, authorName, authorId, createdAt}}
+   */
+  backfillWorldKbInfo({ worldId, name, authorName, authorId, createdAt }) {
+    const sets = [];
+    const params = { $worldId: worldId };
+    // 仅在「该列值为空」时回填，避免覆盖扫描/其他来源已写入的真实值
+    if (name !== undefined && name !== '') { sets.push(`world_name = CASE WHEN COALESCE(world_name,'') = '' THEN $name ELSE world_name END`); params.$name = name; }
+    if (authorName !== undefined && authorName !== '') { sets.push(`author_name = CASE WHEN COALESCE(author_name,'') = '' THEN $authorName ELSE author_name END`); params.$authorName = authorName; }
+    if (authorId !== undefined && authorId !== '') { sets.push(`author_id = CASE WHEN COALESCE(author_id,'') = '' THEN $authorId ELSE author_id END`); params.$authorId = authorId; }
+    if (createdAt !== undefined && createdAt !== '') { sets.push(`created_at = CASE WHEN COALESCE(created_at,'') = '' THEN $createdAt ELSE created_at END`); params.$createdAt = createdAt; }
+    if (sets.length > 0) {
+      this._run(`UPDATE world_kb SET ${sets.join(', ')} WHERE world_id = $worldId`, params);
+    }
+    const rows = this._query(
+      `SELECT world_id, world_name, author_name, author_id, created_at FROM world_kb WHERE world_id = $worldId`,
+      { $worldId: worldId }
+    );
+    const row = rows[0];
+    return {
+      worldId: row.world_id, worldName: row.world_name || '',
+      authorName: row.author_name || '', authorId: row.author_id || '',
+      createdAt: row.created_at || '',
+    };
+  }
+
   /** 待逛列表：查询（pending = backlog=1 AND visited=0；visited=1 的逛完历史也可见） */
   getBacklog({ status = 'pending', sortBy = 'added_at', limit = 20 } = {}) {
     const st = ['pending', 'visited', 'all'].includes(status) ? status : 'pending';
