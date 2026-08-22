@@ -304,12 +304,13 @@ export async function handleMarkWorldVisited({ worldId }) {
 }
 
 /** 手动标记某世界为适合睡觉的地图（recommend 用 sleep_ok 强信号） */
-export function handleSetWorldSleep({ worldId, isSleep = true }) {
+export async function handleSetWorldSleep({ worldId, isSleep = true }) {
   const { storage } = ctx;
   if (!worldId) throw new Error('worldId is required');
   const result = storage.setWorldSleep({ worldId, isSleep: !!isSleep });
-  log(`${result.isSleep ? '🛏' : '✖️'} 标记睡觉图: ${worldId}${result.worldName ? ` (${result.worldName})` : ''} → sleep_ok=${result.isSleep ? 1 : 0}`);
-  return result;
+  const info = await ensureWorldKbInfo(ctx, worldId);
+  log(`${result.isSleep ? '🛏' : '✖️'} 标记睡觉图: ${worldId}${info.worldName ? ` (${info.worldName})` : ''} → sleep_ok=${result.isSleep ? 1 : 0}`);
+  return { ...result, worldName: info.worldName };
 }
 
 /** 待逛列表：加入/更新（幂等） */

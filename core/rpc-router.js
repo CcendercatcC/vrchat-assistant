@@ -371,7 +371,7 @@ export async function handleRpc(rpc, session, res) {
             result = await handleMarkWorldVisited(args);
             break;
           case 'set_world_sleep':
-            result = handleSetWorldSleep(args);
+            result = await handleSetWorldSleep(args);
             break;
           case 'add_to_backlog':
             result = await handleAddToBacklog(args);
