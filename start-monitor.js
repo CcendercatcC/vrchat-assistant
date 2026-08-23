@@ -22,7 +22,22 @@ import { EventPipeline } from './core/event-pipeline.js';
 import { backupDatabase } from './core/backup.js';
 import { FriendStateManager } from './core/friend-state.js';
 import { createServer } from './core/http-server.js';
+import { PluginLoader } from './core/plugin-loader.js';
 import { fetchOtpFromEmail } from './core/otp-fetcher.js';
+import {
+  getCreators, addCreator, removeCreator,
+  scanCreatorWorlds, getWorldDigest,
+} from './core/fetch-x-worlds.js';
+import {
+  handleScanNewWorlds, handleGetNewWorlds, handleRateWorld, handleMarkWorldVisited,
+  handleSetWorldSleep,
+  handleAddToBacklog, handleGetBacklog, handleRemoveFromBacklog, handleSearchWorlds,
+} from './core/tools/misc.js';
+import {
+  handleGetFavoriteFriendsLocations, handleSetJoinPreference, handleGetJoinPreference,
+  handleRecordJoinChoice, handleGetJoinLearning, handleRecommendJoin,
+} from './core/tools/recommend.js';
+import { handleRecommendWorlds } from './core/tools/recommend-worlds.js';
 import { parseTotpSecret, generateTotp } from './core/totp.js';
 import { notifier } from './core/notifier.js';
 import { buildChannels } from './core/notify-channels.js';
@@ -118,6 +133,104 @@ function isPortBusy(port, timeoutMs = 800) {
     socket.on('error', () => { socket.destroy(); resolve(false); });
     socket.setTimeout(timeoutMs, () => { socket.destroy(); resolve(false); });
   });
+}
+
+// ── 核心数据服务容器（供官方插件 consume）──
+function registerCoreServices(loader, ctx) {
+  const whitelist = [
+    'getGroupCached',
+    'upsertGroupCache',
+    'getGroupHeat',
+    'setWorldFavorited',
+    'getWorldName',
+    'upsertWorld',
+    'getZhTranslations',
+    'getBoothItemCache',
+    'upsertBoothItem',
+    'listBoothItems',
+    'recordBoothSearch',
+    'getBoothSearches',
+    'getPlanetCache',
+    'setPlanetCache',
+  ];
+  for (const name of whitelist) {
+    if (typeof ctx.storage[name] !== 'function') {
+      log(`⚠️ 核心存储服务 ${name} 不存在，跳过`);
+      continue;
+    }
+    const svc = `storage.${name}`;
+    loader.services.set(svc, (...args) => ctx.storage[name](...args));
+    loader.serviceOwners.set(svc, 'core');
+  }
+
+  // x-creators 服务（供插件 consume）
+  const xSvcs = {
+    'x.creators': () => ({ creators: getCreators(ctx.storage) }),
+    'x.addCreator': ({ screen_name, name } = {}) => addCreator(ctx.storage, { screen_name, name }),
+    'x.removeCreator': ({ screen_name } = {}) => removeCreator(ctx.storage, screen_name || ''),
+    'x.worlds': ({ limit = 50 } = {}) => {
+      const rows = ctx.storage.getAllXWorlds(limit);
+      return {
+        total: rows.length,
+        worlds: rows.map(r => ({
+          worldId: r.world_id,
+          worldName: r.world_name,
+          authorName: r.author_name,
+          favorites: r.favorites,
+          visits: r.visits,
+          popularity: r.popularity,
+          lastRecommendedAt: r.last_recommended_at,
+          tweetCount: r.tweet_count,
+        })),
+      };
+    },
+    'x.scanCreators': () => scanCreatorWorlds(),
+    'x.worldDigest': (args) => {
+      const refArgs = args || {};
+      if (refArgs.refresh) {
+        return scanCreatorWorlds().then(() => getWorldDigest(args || {}));
+      }
+      return getWorldDigest(args || {});
+    },
+  };
+  for (const [name, fn] of Object.entries(xSvcs)) {
+    loader.services.set(name, fn);
+    loader.serviceOwners.set(name, 'core');
+  }
+
+  // world-kb 服务（供插件 consume；handler 绑定 core/tools/misc.js，owner='core'）
+  // searchWorlds 保留原 rateLimiter 包裹（工具条目层原有行为）
+  const worldSvcs = {
+    'world.scanNewWorlds': (args) => handleScanNewWorlds(args || {}),
+    'world.getNewWorlds': (args) => handleGetNewWorlds(args || {}),
+    'world.rateWorld': (args) => handleRateWorld(args || {}),
+    'world.markWorldVisited': (args) => handleMarkWorldVisited(args || {}),
+    'world.setWorldSleep': (args) => handleSetWorldSleep(args || {}),
+    'world.addToBacklog': (args) => handleAddToBacklog(args || {}),
+    'world.getBacklog': (args) => handleGetBacklog(args || {}),
+    'world.removeFromBacklog': (args) => handleRemoveFromBacklog(args || {}),
+    'world.searchWorlds': (args) => ctx.rateLimiter.execute(() => handleSearchWorlds(args || {})),
+  };
+  for (const [name, fn] of Object.entries(worldSvcs)) {
+    loader.services.set(name, fn);
+    loader.serviceOwners.set(name, 'core');
+  }
+
+  // 推荐域服务（供插件 consume；handler 绑定 core/tools/recommend.js / recommend-worlds.js，owner='core'）
+  // 注意：recommend.js 的 handler 内部用 ctx + _query/_run/rateLimiter，完整保留实现，不加额外包裹。
+  const recommendSvcs = {
+    'recommend.favoriteFriendsLocations': (args) => handleGetFavoriteFriendsLocations(args || {}),
+    'recommend.setJoinPreference': (args) => handleSetJoinPreference(args || {}),
+    'recommend.getJoinPreference': (args) => handleGetJoinPreference(args || {}),
+    'recommend.recordJoinChoice': (args) => handleRecordJoinChoice(args || {}),
+    'recommend.getJoinLearning': (args) => handleGetJoinLearning(args || {}),
+    'recommend.recommendJoin': (args) => handleRecommendJoin(args || {}),
+    'recommend.recommendWorlds': (args) => handleRecommendWorlds(args || {}),
+  };
+  for (const [name, fn] of Object.entries(recommendSvcs)) {
+    loader.services.set(name, fn);
+    loader.serviceOwners.set(name, 'core');
+  }
 }
 
 // ── 启动 ──
@@ -265,6 +378,14 @@ async function main() {
 
   // 5. 初始化事件处理管道
   ctx.eventPipeline = new EventPipeline(ctx.storage, null);
+
+  // 5.5 加载插件（失败不阻断核心启动）
+  const pluginLoader = new PluginLoader({ registry, ctx, log, notifier });
+  registerCoreServices(pluginLoader, ctx);
+  await pluginLoader.loadAll();
+  pluginLoader.watch();
+  ctx.pluginLoader = pluginLoader;
+  log(` 插件系统就绪`);
   log(`📨 事件处理管道就绪`);
 
   // 6. 启动 WebSocket
