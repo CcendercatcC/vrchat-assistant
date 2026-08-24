@@ -12,6 +12,10 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { backupDatabase } from './backup.js';
 import { SocialAnalytics } from './analytics/social.js';
+import { WorldStore } from './domains/world-store.js';
+import { CacheStore } from './domains/cache-store.js';
+import { ContactsStore } from './domains/contacts-store.js';
+import { XWorldsStore } from './domains/x-worlds-store.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DDL_PATH = path.join(__dirname, 'init-db.sql');
@@ -20,6 +24,10 @@ const X_WORLDS_DDL_PATH = path.join(__dirname, 'init-x-worlds.sql');
 export class Storage {
   constructor() {
     this.social = new SocialAnalytics(this);
+    this.world = new WorldStore(this);
+    this.cache = new CacheStore(this);
+    this.contacts = new ContactsStore(this);
+    this.xWorlds = new XWorldsStore(this);
   }
 
   /** @type {import('better-sqlite3').Database} */
@@ -426,492 +434,6 @@ export class Storage {
     );
   }
 
-  // ── 世界缓存 ──
-
-  getWorldName(worldId) {
-    const rows = this._query(`SELECT * FROM world_cache WHERE world_id = $worldId`, { $worldId: worldId });
-    return rows[0] || null;
-  }
-
-  // ── 世界中文简介翻译（个人数据，本地表）──
-
-  getZhTranslations(worldIds) {
-    if (!worldIds || worldIds.length === 0) return new Map();
-    const params = {};
-    const ph = worldIds.map((id, i) => { params[`$w${i}`] = id; return `$w${i}`; }).join(',');
-    const rows = this._query(`SELECT world_id, zh FROM world_zh_translations WHERE world_id IN (${ph})`, params);
-    const map = new Map();
-    for (const r of rows) map.set(r.world_id, r.zh);
-    return map;
-  }
-
-  setZhTranslation(worldId, zh) {
-    this._run(
-      `INSERT INTO world_zh_translations (world_id, zh, updated_at) VALUES ($worldId, $zh, datetime('now'))
-       ON CONFLICT(world_id) DO UPDATE SET zh = $zh, updated_at = datetime('now')`,
-      { $worldId: worldId, $zh: zh }
-    );
-  }
-
-  searchWorldsByName(keyword) {
-    const like = `%${keyword}%`;
-    const rows = this._query(
-      `SELECT world_id, name FROM world_cache WHERE name LIKE $like ORDER BY name LIMIT 20`,
-      { $like: like }
-    );
-    const eventRows = this._query(
-      `SELECT world_id, world_name AS name FROM events WHERE world_name LIKE $like AND world_id != '' GROUP BY world_id, world_name ORDER BY world_name LIMIT 20`,
-      { $like: like }
-    );
-    const seen = new Set();
-    const merged = [];
-    for (const r of [...rows, ...eventRows]) {
-      if (!r.world_id || seen.has(r.world_id)) continue;
-      seen.add(r.world_id);
-      merged.push({ worldId: r.world_id, name: r.name || '' });
-    }
-    return merged;
-  }
-
-  _recordWorldChanges(world) {
-    const old = this.getWorldName(world.worldId);
-    if (!old) return;
-    // 数据库列名 → upsertWorld 传入对象的驼峰字段名映射（避免取到 undefined）
-    const fieldMap = {
-      name: 'name',
-      description: 'description',
-      author_name: 'authorName',
-      image_url: 'imageUrl',
-      release_status: 'releaseStatus',
-      capacity: 'capacity',
-      tags: 'tags',
-    };
-    const fields = ['name', 'description', 'author_name', 'image_url', 'release_status', 'capacity', 'tags'];
-    const newTags = JSON.stringify(world.tags || []);
-    for (const f of fields) {
-      const oldValue = f === 'tags' ? String(old.tags ?? '') : String(old[f] ?? '');
-      const newValue = f === 'tags' ? newTags : String(world[fieldMap[f]] ?? '');
-      if (oldValue !== newValue) {
-        this._run(
-          `INSERT INTO world_history (world_id, field, old_value, new_value)
-           VALUES ($worldId, $field, $oldValue, $newValue)`,
-          { $worldId: world.worldId, $field: f, $oldValue: oldValue, $newValue: newValue }
-        );
-      }
-    }
-  }
-
-  upsertWorld(world) {
-    this._recordWorldChanges(world);
-    this._run(
-      `INSERT INTO world_cache
-       (world_id, name, author_id, author_name, description, image_url,
-        release_status, capacity, favorites, tags, updated_at)
-       VALUES ($worldId, $name, $authorId, $authorName, $description, $imageUrl,
-        $releaseStatus, $capacity, $favorites, $tags, datetime('now'))
-       ON CONFLICT(world_id) DO UPDATE SET
-        name = excluded.name,
-        author_id = excluded.author_id,
-        author_name = excluded.author_name,
-        description = excluded.description,
-        image_url = excluded.image_url,
-        release_status = excluded.release_status,
-        capacity = excluded.capacity,
-        favorites = excluded.favorites,
-        tags = excluded.tags,
-        updated_at = datetime('now')`,
-      {
-        $worldId: world.worldId, $name: world.name || '',
-        $authorId: world.authorId || '', $authorName: world.authorName || '',
-        $description: world.description || '', $imageUrl: world.imageUrl || '',
-        $releaseStatus: world.releaseStatus || '',
-        $capacity: world.capacity || 0, $favorites: world.favorites || 0,
-        $tags: JSON.stringify(world.tags || []),
-      }
-    );
-  }
-
-  upsertWorldsBatch(worlds) {
-    for (const w of worlds) {
-      this._recordWorldChanges(w);
-    }
-    const stmt = this.db.prepare(
-      `INSERT INTO world_cache
-       (world_id, name, author_id, author_name, description, image_url,
-        release_status, capacity, favorites, tags, updated_at)
-       VALUES ($worldId, $name, $authorId, $authorName, $description, $imageUrl,
-        $releaseStatus, $capacity, $favorites, $tags, datetime('now'))
-       ON CONFLICT(world_id) DO UPDATE SET
-        name = excluded.name,
-        author_id = excluded.author_id,
-        author_name = excluded.author_name,
-        description = excluded.description,
-        image_url = excluded.image_url,
-        release_status = excluded.release_status,
-        capacity = excluded.capacity,
-        favorites = excluded.favorites,
-        tags = excluded.tags,
-        updated_at = datetime('now')`
-    );
-    for (const w of worlds) {
-      stmt.run(this._normParams({
-        $worldId: w.worldId, $name: w.name || '',
-        $authorId: w.authorId || '', $authorName: w.authorName || '',
-        $description: w.description || '', $imageUrl: w.imageUrl || '',
-        $releaseStatus: w.releaseStatus || '',
-        $capacity: w.capacity || 0, $favorites: w.favorites || 0,
-        $tags: JSON.stringify(w.tags || []),
-      }));
-    }
-  }
-
-  // ── 群组缓存 ──
-
-  getGroupCached(groupId) {
-    const rows = this._query(`SELECT * FROM group_cache WHERE group_id = $g`, { $g: groupId });
-    return rows[0] || null;
-  }
-
-  upsertGroupCache({ groupId, name, description, memberCount }) {
-    this._run(
-      `INSERT INTO group_cache (group_id, name, description, member_count, updated_at)
-       VALUES ($g, $name, $desc, $mc, datetime('now'))
-       ON CONFLICT(group_id) DO UPDATE SET
-         name = excluded.name, description = excluded.description,
-         member_count = excluded.member_count, updated_at = datetime('now')`,
-      { $g: groupId, $name: name || '', $desc: description || '', $mc: memberCount || 0 }
-    );
-  }
-
-  // ── PlanetVRC TTL 缓存 ──
-
-  /** 读缓存：不存在或超 ttlMs 返回 null，否则 JSON.parse(payload) */
-  getPlanetCache(key, ttlMs) {
-    const rows = this._query(`SELECT payload, fetched_at FROM planet_cache WHERE key = $key`, { $key: key });
-    if (rows.length === 0) return null;
-    const row = rows[0];
-    if (ttlMs && row.fetched_at) {
-      const fetchedMs = Date.parse(row.fetched_at);
-      if (Number.isFinite(fetchedMs) && Date.now() - fetchedMs > ttlMs) return null;
-    }
-    try { return JSON.parse(row.payload); } catch { return null; }
-  }
-
-  /** 写缓存：payload 传对象，内部 JSON.stringify，fetched_at 存 ISO 时间戳 */
-  setPlanetCache(key, payload) {
-    this._run(
-      `INSERT INTO planet_cache (key, payload, fetched_at)
-       VALUES ($key, $payload, $fetchedAt)
-       ON CONFLICT(key) DO UPDATE SET payload = excluded.payload, fetched_at = excluded.fetched_at`,
-      { $key: key, $payload: JSON.stringify(payload), $fetchedAt: new Date().toISOString() }
-    );
-  }
-
-  setWorldNote({ worldId, note = '' }) {
-    this._run(
-      `INSERT INTO world_cache (world_id, name, note)
-       VALUES ($worldId, '', $note)
-       ON CONFLICT(world_id) DO UPDATE SET note = $note, updated_at = datetime('now')`,
-      { $worldId: worldId, $note: note }
-    );
-    const rows = this._query(`SELECT world_id, note FROM world_cache WHERE world_id = $worldId`, { $worldId: worldId });
-    const r = rows[0];
-    return { worldId: r.world_id, note: r.note };
-  }
-
-  /** BOOTH 商品快照 upsert（Issue #28：落库旁路缓存，失败不影响实时返回——调用方 try-catch） */
-  upsertBoothItem(item) {
-    this._run(
-      `INSERT INTO booth_items (id, name, price, wishlist_count, shop_name, description, tags, image_url, url, published_at, is_sold_out, updated_at)
-       VALUES ($id, $name, $price, $wishlist, $shop, $desc, $tags, $img, $url, $published, $soldOut, datetime('now'))
-       ON CONFLICT(id) DO UPDATE SET
-         name = excluded.name, price = excluded.price, wishlist_count = excluded.wishlist_count,
-         shop_name = excluded.shop_name, description = excluded.description, tags = excluded.tags,
-         image_url = excluded.image_url, url = excluded.url, published_at = excluded.published_at,
-         is_sold_out = excluded.is_sold_out, updated_at = datetime('now')`,
-      {
-        $id: String(item.id),
-        $name: item.name || '',
-        $price: item.price || '',
-        $wishlist: item.wishlistCount ?? 0,
-        $shop: (item.shop && item.shop.name) || '',
-        $desc: (item.description || '').slice(0, 2000),
-        $tags: JSON.stringify(item.tags || []),
-        $img: (item.images && item.images[0] && item.images[0].original) || '',
-        $url: item.url || '',
-        $published: item.publishedAt || '',
-        $soldOut: item.isSoldOut ? 1 : 0,
-      }
-    );
-  }
-
-  /** BOOTH 商品快照读取（无缓存返回 null） */
-  getBoothItemCache(id) {
-    const rows = this._query(
-      `SELECT id, name, price, wishlist_count AS wishlistCount, shop_name AS shopName,
-              description, tags, image_url AS imageUrl, url, published_at AS publishedAt,
-              is_sold_out AS isSoldOut, updated_at AS updatedAt
-       FROM booth_items WHERE id = $id`,
-      { $id: String(id) }
-    );
-    const r = rows[0];
-    if (!r) return null;
-    try { r.tags = JSON.parse(r.tags || '[]'); } catch { r.tags = []; }
-    return r;
-  }
-
-  /** 按收藏数排序的商品快照列表（趋势跟踪用） */
-  listBoothItems({ sortBy = 'wishlist', limit = 20, minWishlist = 0 } = {}) {
-    const order = sortBy === 'wishlist' ? 'wishlist_count DESC' : 'updated_at DESC';
-    const rows = this._query(
-      `SELECT id, name, price, wishlist_count AS wishlistCount, shop_name AS shopName,
-              image_url AS imageUrl, url, is_sold_out AS isSoldOut, updated_at AS updatedAt
-       FROM booth_items WHERE wishlist_count >= $minWishlist
-       ORDER BY ${order} LIMIT $limit`,
-      { $minWishlist: minWishlist, $limit: Math.max(1, Math.min(100, limit)) }
-    );
-    return rows;
-  }
-
-  /** 记录一次 BOOTH 搜索（结果 id 列表入历史表） */
-  recordBoothSearch(query, resultIds) {
-    this._run(
-      `INSERT INTO booth_search_history (query, result_ids, result_count, created_at)
-       VALUES ($query, $ids, $count, datetime('now'))`,
-      { $query: query, $ids: JSON.stringify(resultIds || []), $count: (resultIds || []).length }
-    );
-  }
-
-  /** 最近搜索历史（含每次结果的商品快照信息） */
-  getBoothSearches({ limit = 10 } = {}) {
-    const rows = this._query(
-      `SELECT id, query, result_ids AS resultIds, result_count AS resultCount, created_at AS createdAt
-       FROM booth_search_history ORDER BY id DESC LIMIT $limit`,
-      { $limit: Math.max(1, Math.min(50, limit)) }
-    );
-    for (const r of rows) {
-      try { r.resultIds = JSON.parse(r.resultIds || '[]'); } catch { r.resultIds = []; }
-    }
-    return rows;
-  }
-
-  /** 云端收藏标记：favorite_world 成功后写本地 world_cache（Issue #25），世界不存在时插入兜底行 */
-  setWorldFavorited({ worldId, favorited = 1 }) {
-    this._run(
-      `INSERT INTO world_cache (world_id, name, favorited)
-       VALUES ($worldId, '', $favorited)
-       ON CONFLICT(world_id) DO UPDATE SET favorited = $favorited, updated_at = datetime('now')`,
-      { $worldId: worldId, $favorited: favorited ? 1 : 0 }
-    );
-    const rows = this._query(`SELECT world_id, name, favorited FROM world_cache WHERE world_id = $worldId`, { $worldId: worldId });
-    const row = rows[0];
-    return { worldId: row.world_id, name: row.name || '', favorited: row.favorited === 1 };
-  }
-
-  /**
-   * 用户反馈：给世界打好评/差评标记（Issue #19）
-   * rating: -1=烂图(junk) / 0=清除标记 / 1=好图
-   * 若世界不在 world_kb 表（如手动收藏的世界），自动插入一行兜底。
-   */
-  rateWorld({ worldId, rating = 0 }) {
-    const r = parseInt(rating, 10);
-    const finalRating = r === -1 ? -1 : (r === 1 ? 1 : 0);
-    this._run(
-      `INSERT INTO world_kb (world_id, world_name, tags, user_rating)
-       VALUES ($worldId, '', '[]', $rating)
-       ON CONFLICT(world_id) DO UPDATE SET user_rating = $rating`,
-      { $worldId: worldId, $rating: finalRating }
-    );
-    const rows = this._query(`SELECT world_id, world_name, user_rating FROM world_kb WHERE world_id = $worldId`, { $worldId: worldId });
-    const row = rows[0];
-    return { worldId: row.world_id, worldName: row.world_name || '', userRating: row.user_rating };
-  }
-
-  /** 显式确认逛过某个世界（Issue #19 痛点 3：事件驱动 visited 不可靠） */
-  markWorldVisited({ worldId }) {
-    const now = new Date().toISOString();
-    // ON CONFLICT 同时清 backlog=0：逛过即从待逛列表移除（与 event-pipeline 事件回写、scan
-    // 回填三处口径一致），避免"已逛但仍标待逛"的矛盾残留。
-    this._run(
-      `INSERT INTO world_kb (world_id, world_name, tags, visited, visited_at)
-       VALUES ($worldId, '', '[]', 1, $now)
-       ON CONFLICT(world_id) DO UPDATE SET visited = 1, visited_at = $now, backlog = 0`,
-      { $worldId: worldId, $now: now }
-    );
-    const rows = this._query(`SELECT world_id, world_name, visited, visited_at, backlog FROM world_kb WHERE world_id = $worldId`, { $worldId: worldId });
-    const row = rows[0];
-    return { worldId: row.world_id, worldName: row.world_name || '', visited: row.visited === 1, visitedAt: row.visited_at, backlog: row.backlog === 1 };
-  }
-
-  /**
-   * 手动标记某世界是否为适合睡觉的地图（recommend_join / recommend_worlds 用 sleep_ok 强信号）。
-   * isSleep: true=标为睡觉图 / false=取消标记。世界不在表里插兜底行（复用 rateWorld 模式）。
-   */
-  setWorldSleep({ worldId, isSleep = true }) {
-    const flag = isSleep ? 1 : 0;
-    this._run(
-      `INSERT INTO world_kb (world_id, world_name, tags, sleep_ok)
-       VALUES ($worldId, '', '[]', $flag)
-       ON CONFLICT(world_id) DO UPDATE SET sleep_ok = $flag`,
-      { $worldId: worldId, $flag: flag }
-    );
-    const rows = this._query(`SELECT world_id, world_name, sleep_ok FROM world_kb WHERE world_id = $worldId`, { $worldId: worldId });
-    const row = rows[0];
-    return { worldId: row.world_id, worldName: row.world_name || '', isSleep: row.sleep_ok === 1 };
-  }
-
-  /** 待逛列表：加入/更新（幂等，重复加入 = 更新备注/优先级；世界不在表里插兜底行） */
-  addToBacklog({ worldId, reason = '', priority = 0 }) {
-    const now = new Date().toISOString();
-    const p = Math.min(Math.max(parseInt(priority, 10) || 0, 0), 2);
-    this._run(
-      `INSERT INTO world_kb (world_id, world_name, tags, backlog, backlog_added_at, backlog_reason, backlog_priority)
-       VALUES ($worldId, '', '[]', 1, $now, $reason, $priority)
-       ON CONFLICT(world_id) DO UPDATE SET
-         backlog = 1,
-         backlog_reason = CASE WHEN $reason != '' THEN $reason ELSE backlog_reason END,
-         backlog_priority = $priority,
-         backlog_added_at = COALESCE(backlog_added_at, $now)`,
-      { $worldId: worldId, $now: now, $reason: reason, $priority: p }
-    );
-    const rows = this._query(
-      `SELECT world_id, world_name, backlog, backlog_added_at, backlog_reason, backlog_priority, visited, visited_at
-       FROM world_kb WHERE world_id = $worldId`,
-      { $worldId: worldId }
-    );
-    const row = rows[0];
-    return {
-      worldId: row.world_id, worldName: row.world_name || '',
-      inBacklog: row.backlog === 1, addedAt: row.backlog_added_at,
-      reason: row.backlog_reason || '', priority: row.backlog_priority,
-      visited: row.visited === 1, visitedAt: row.visited_at,
-    };
-  }
-
-  /** 待逛列表：移除（backlog=0；保留行，世界知识不删） */
-  removeFromBacklog({ worldId }) {
-    this._run(`UPDATE world_kb SET backlog = 0 WHERE world_id = $worldId`, { $worldId: worldId });
-    const rows = this._query(`SELECT world_id, backlog FROM world_kb WHERE world_id = $worldId`, { $worldId: worldId });
-    return { worldId, removed: rows.length === 0 || rows[0].backlog === 0 };
-  }
-
-  /**
-   * 读取 world_kb 某行的信息字段（world_name / author_name / author_id / created_at）。
-   * 用于 #77 的 created_at 预检：已填则 ensureWorldKbInfo 早退省一次 API。
-   * @returns {{worldId, worldName, authorName, authorId, createdAt}}
-   */
-  getWorldKbInfo(worldId) {
-    const rows = this._query(
-      `SELECT world_id, world_name, author_name, author_id, created_at FROM world_kb WHERE world_id = $worldId`,
-      { $worldId: worldId }
-    );
-    const row = rows[0];
-    if (!row) return { worldId, worldName: '', authorName: '', authorId: '', createdAt: '' };
-    return {
-      worldId: row.world_id, worldName: row.world_name || '',
-      authorName: row.author_name || '', authorId: row.author_id || '',
-      createdAt: row.created_at || '',
-    };
-  }
-
-  /**
-   * 幂等回填 world_kb 的信息字段（#76：兜底插入只写标记位，信息字段恒空）。
-   * 仅当对应列当前为空/NULL 时才回填，已存在的值不回写（幂等）。
-   * ⚠️ 注意：本方法是 UPDATE 非 INSERT，隐含「world_kb 行已存在」前提——生产路径由
-   * rateWorld / markWorldVisited / addToBacklog / set_world_sleep 先兜底插入保证成立，
-   * 若独立复用于不存在的行会静默 0 行且后续查询回 undefined，调用方需先确保行存在。
-   * @param {object} p {worldId, name?, authorName?, authorId?, createdAt?}
-   * @returns {{worldId, worldName, authorName, authorId, createdAt}}
-   */
-  backfillWorldKbInfo({ worldId, name, authorName, authorId, createdAt }) {
-    const sets = [];
-    const params = { $worldId: worldId };
-    // 仅在「该列值为空」时回填，避免覆盖扫描/其他来源已写入的真实值
-    if (name !== undefined && name !== '') { sets.push(`world_name = CASE WHEN COALESCE(world_name,'') = '' THEN $name ELSE world_name END`); params.$name = name; }
-    if (authorName !== undefined && authorName !== '') { sets.push(`author_name = CASE WHEN COALESCE(author_name,'') = '' THEN $authorName ELSE author_name END`); params.$authorName = authorName; }
-    if (authorId !== undefined && authorId !== '') { sets.push(`author_id = CASE WHEN COALESCE(author_id,'') = '' THEN $authorId ELSE author_id END`); params.$authorId = authorId; }
-    if (createdAt !== undefined && createdAt !== '') { sets.push(`created_at = CASE WHEN COALESCE(created_at,'') = '' THEN $createdAt ELSE created_at END`); params.$createdAt = createdAt; }
-    if (sets.length > 0) {
-      this._run(`UPDATE world_kb SET ${sets.join(', ')} WHERE world_id = $worldId`, params);
-    }
-    const rows = this._query(
-      `SELECT world_id, world_name, author_name, author_id, created_at FROM world_kb WHERE world_id = $worldId`,
-      { $worldId: worldId }
-    );
-    const row = rows[0];
-    return {
-      worldId: row.world_id, worldName: row.world_name || '',
-      authorName: row.author_name || '', authorId: row.author_id || '',
-      createdAt: row.created_at || '',
-    };
-  }
-
-  /** 待逛列表：查询（pending = backlog=1 AND visited=0；visited=1 的逛完历史也可见） */
-  getBacklog({ status = 'pending', sortBy = 'added_at', limit = 20 } = {}) {
-    const st = ['pending', 'visited', 'all'].includes(status) ? status : 'pending';
-    const sortCol = ['added_at', 'priority', 'favorites'].includes(sortBy) ? sortBy : 'added_at';
-    limit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50);
-    let where = 'WHERE backlog = 1';
-    if (st === 'pending') where += ' AND visited = 0';
-    else if (st === 'visited') where += ' AND visited = 1';
-    const order = sortCol === 'priority'
-      ? 'backlog_priority DESC, backlog_added_at DESC'
-      : `${sortCol === 'added_at' ? 'backlog_added_at' : sortCol} DESC`;
-    const total = this._query(`SELECT COUNT(*) AS cnt FROM world_kb ${where}`)[0].cnt;
-    const rows = this._query(
-      `SELECT world_id, world_name, author_name, favorites, occupants, popularity, description, tags,
-              created_at, visited, visited_at, backlog_added_at, backlog_reason, backlog_priority
-       FROM world_kb ${where} ORDER BY ${order} LIMIT ${limit}`
-    );
-    const worlds = rows.map(r => {
-      let worldTags = [];
-      try { worldTags = JSON.parse(r.tags || '[]'); } catch { /* 脏数据按空数组 */ }
-      return {
-        worldId: r.world_id,
-        worldName: r.world_name || '',
-        authorName: r.author_name || '',
-        favorites: r.favorites || 0,
-        occupants: r.occupants || 0,
-        popularity: r.popularity || 0,
-        description: r.description || '',
-        tags: Array.isArray(worldTags) ? worldTags : [],
-        created: r.created_at || '',
-        visited: r.visited === 1,
-        visitedAt: r.visited_at || '',
-        addedAt: r.backlog_added_at || '',
-        reason: r.backlog_reason || '',
-        priority: r.backlog_priority || 0,
-      };
-    });
-    return { total, status: st, worlds };
-  }
-
-  getWorldHistory(worldId, limit = 50) {
-    const rows = this._query(
-      `SELECT field, old_value, new_value, changed_at FROM world_history WHERE world_id = $worldId ORDER BY id DESC LIMIT $limit`,
-      { $worldId: worldId, $limit: limit }
-    );
-    return rows.map(r => ({ field: r.field, oldValue: r.old_value, newValue: r.new_value, changedAt: r.changed_at }));
-  }
-
-  // ── 关注名单 ──
-
-  addToWatchlist(userId, displayName, priority = 0) {
-    this._run(
-      `INSERT OR REPLACE INTO watchlist (user_id, display_name, priority)
-       VALUES ($userId, $displayName, $priority)`,
-      { $userId: userId, $displayName: displayName || '', $priority: priority }
-    );
-  }
-
-  removeFromWatchlist(userId) {
-    this._run(`DELETE FROM watchlist WHERE user_id = $userId`, { $userId: userId });
-  }
-
-  getWatchlist() {
-    return this._query(`SELECT * FROM watchlist ORDER BY priority DESC, display_name`);
-  }
-
   // ── 配置 ──
 
   getConfig(key, defaultValue = null) {
@@ -921,50 +443,6 @@ export class Storage {
 
   setConfig(key, value) {
     this._run(`INSERT OR REPLACE INTO config (key, value) VALUES ($key, $value)`, { $key: key, $value: String(value) });
-  }
-
-  // ── 昵称映射 ──
-
-  getNicknames({ userId, query } = {}) {
-    if (userId) {
-      const rows = this._query(
-        `SELECT user_id, display_name, nickname, updated_at FROM nicknames WHERE user_id = $userId`,
-        { $userId: userId }
-      );
-      return rows.map(r => ({ userId: r.user_id, displayName: r.display_name, nickname: r.nickname, updatedAt: r.updated_at }));
-    }
-
-    if (query) {
-      const q = `%${query}%`;
-      const rows = this._query(
-        `SELECT user_id, display_name, nickname, updated_at FROM nicknames
-         WHERE display_name LIKE $q OR nickname LIKE $q
-         ORDER BY display_name`,
-        { $q: q }
-      );
-      return rows.map(r => ({ userId: r.user_id, displayName: r.display_name, nickname: r.nickname, updatedAt: r.updated_at }));
-    }
-
-    const rows = this._query(`SELECT user_id, display_name, nickname, updated_at FROM nicknames ORDER BY display_name`);
-    return rows.map(r => ({ userId: r.user_id, displayName: r.display_name, nickname: r.nickname, updatedAt: r.updated_at }));
-  }
-
-  setNickname({ userId, nickname, displayName = '' } = {}) {
-    this._run(
-      `INSERT INTO nicknames (user_id, display_name, nickname, updated_at)
-       VALUES ($userId, $displayName, $nickname, datetime('now'))
-       ON CONFLICT(user_id) DO UPDATE SET
-         display_name = CASE WHEN excluded.display_name = '' THEN nicknames.display_name ELSE excluded.display_name END,
-         nickname = excluded.nickname,
-         updated_at = datetime('now')`,
-      { $userId: userId, $displayName: displayName || '', $nickname: nickname }
-    );
-    const rows = this._query(
-      `SELECT user_id, display_name, nickname, updated_at FROM nicknames WHERE user_id = $userId`,
-      { $userId: userId }
-    );
-    const r = rows[0];
-    return { userId: r.user_id, displayName: r.display_name, nickname: r.nickname, updatedAt: r.updated_at };
   }
 
   // ── 工具方法 ──
@@ -979,45 +457,6 @@ export class Storage {
   getWeeklyCompanions(...args) { return this.social.getWeeklyCompanions(...args); }
   getFriendGroupStats(...args) { return this.social.getFriendGroupStats(...args); }
 
-  /**
-   * 群组热度聚合: 统计窗口内好友/自己在群组房的活动事件
-   * (type=friend-location|user-location 且 location 含 ~group(gmem_/grp_xxx)).
-   * 返回 Map<groupId, {count, users:Set, worlds:Set, hourly:Map<'dow:hour', count>}>
-   * 时间按北京时区分桶 (dow: 0=周日..6=周六).
-   */
-  getGroupHeat(startIso, endIso) {
-    const rows = this._query(
-      `SELECT type, content_json, created_at FROM events
-       WHERE (type='friend-location' OR type='user-location')
-         AND created_at >= $start AND created_at <= $end
-         AND (content_json LIKE '%~group(grp_%' OR content_json LIKE '%~group(gmem_%')
-       ORDER BY created_at ASC`,
-      { $start: startIso, $end: endIso }
-    );
-    const groups = new Map();
-    for (const row of rows) {
-      try {
-        const c = JSON.parse(row.content_json);
-        const loc = c.location || '';
-        const m = loc.match(/~group\((grp_[a-f0-9-]+|gmem_[a-f0-9-]+)\)/);
-        if (!m || !loc.startsWith('wrld_')) continue;
-        const gid = m[1];
-        if (!groups.has(gid)) groups.set(gid, { count: 0, users: new Set(), worlds: new Set(), hourly: new Map() });
-        const s = groups.get(gid);
-        s.count++;
-        s.users.add(c.userId || '');
-        s.worlds.add(loc.split(':')[0]);
-        const d = new Date(row.created_at);
-        if (!Number.isNaN(d.getTime())) {
-          const bj = new Date(d.getTime() + 8 * 60 * 60 * 1000);
-          const key = `${bj.getUTCDay()}:${bj.getUTCHours()}`;
-          s.hourly.set(key, (s.hourly.get(key) || 0) + 1);
-        }
-      } catch {}
-    }
-    return groups;
-  }
-
   getStats() {
     const result = {};
     for (const table of ['events', 'friends', 'world_cache', 'watchlist']) {
@@ -1031,74 +470,54 @@ export class Storage {
   save() { this._save(); }
   close() { this._save(); this.db.close(); }
 
-  // ── X 博主世界推荐（x_world_digest） ──
+  // ── world 域转发（核心实现在 core/domains/world-store.js）──
 
-  getXWorld(worldId) {
-    const rows = this._query(
-      `SELECT * FROM x_world_recommendations WHERE world_id = $worldId`,
-      { $worldId: worldId }
-    );
-    return rows.length > 0 ? rows[0] : null;
-  }
+  getWorldName(...args) { return this.world.getWorldName(...args); }
+  searchWorldsByName(...args) { return this.world.searchWorldsByName(...args); }
+  _recordWorldChanges(...args) { return this.world._recordWorldChanges(...args); }
+  upsertWorld(...args) { return this.world.upsertWorld(...args); }
+  upsertWorldsBatch(...args) { return this.world.upsertWorldsBatch(...args); }
+  setWorldNote(...args) { return this.world.setWorldNote(...args); }
+  setWorldFavorited(...args) { return this.world.setWorldFavorited(...args); }
+  rateWorld(...args) { return this.world.rateWorld(...args); }
+  markWorldVisited(...args) { return this.world.markWorldVisited(...args); }
+  setWorldSleep(...args) { return this.world.setWorldSleep(...args); }
+  addToBacklog(...args) { return this.world.addToBacklog(...args); }
+  removeFromBacklog(...args) { return this.world.removeFromBacklog(...args); }
+  getWorldKbInfo(...args) { return this.world.getWorldKbInfo(...args); }
+  backfillWorldKbInfo(...args) { return this.world.backfillWorldKbInfo(...args); }
+  getBacklog(...args) { return this.world.getBacklog(...args); }
+  getWorldHistory(...args) { return this.world.getWorldHistory(...args); }
 
-  insertXWorld({ worldId, worldName, authorName, description, imageUrl, favorites, visits, popularity, capacity, tags, firstSeenAt, lastRecommendedAt, creators, tweetCount }) {
-    this._run(
-      `INSERT INTO x_world_recommendations
-        (world_id, world_name, author_name, description, image_url, favorites, visits, popularity, capacity, tags,
-         first_seen_at, last_recommended_at, creators, tweet_count)
-       VALUES ($worldId, $worldName, $authorName, $description, $imageUrl, $favorites, $visits, $popularity, $capacity, $tags,
-         $firstSeenAt, $lastRecommendedAt, $creators, $tweetCount)
-       ON CONFLICT(world_id) DO UPDATE SET
-         world_name = $worldName, author_name = $authorName, description = $description, image_url = $imageUrl,
-         favorites = $favorites, visits = $visits, popularity = $popularity, capacity = $capacity, tags = $tags,
-         last_recommended_at = $lastRecommendedAt, tweet_count = $tweetCount`,
-      {
-        $worldId: worldId, $worldName: worldName || '', $authorName: authorName || '',
-        $description: description || '', $imageUrl: imageUrl || '',
-        $favorites: favorites || 0, $visits: visits || 0, $popularity: popularity || 0,
-        $capacity: capacity || 0, $tags: tags || '[]',
-        $firstSeenAt: firstSeenAt || new Date().toISOString(),
-        $lastRecommendedAt: lastRecommendedAt || new Date().toISOString(),
-        $creators: creators || '[]', $tweetCount: tweetCount || 1,
-      }
-    );
-  }
+  // ── cache 域转发（核心实现在 core/domains/cache-store.js）──
 
-  updateXWorld(worldId, { worldName, authorName, description, imageUrl, favorites, visits, popularity, capacity, tags, lastRecommendedAt, creators, tweetCount }) {
-    this._run(
-      `UPDATE x_world_recommendations SET
-         world_name = $worldName, author_name = $authorName, description = $description, image_url = $imageUrl,
-         favorites = $favorites, visits = $visits, popularity = $popularity, capacity = $capacity, tags = $tags,
-         last_recommended_at = $lastRecommendedAt, creators = $creators, tweet_count = $tweetCount
-       WHERE world_id = $worldId`,
-      {
-        $worldId: worldId, $worldName: worldName || '', $authorName: authorName || '',
-        $description: description || '', $imageUrl: imageUrl || '',
-        $favorites: favorites || 0, $visits: visits || 0, $popularity: popularity || 0,
-        $capacity: capacity || 0, $tags: tags || '[]',
-        $lastRecommendedAt: lastRecommendedAt || new Date().toISOString(),
-        $creators: creators || '[]', $tweetCount: tweetCount || 1,
-      }
-    );
-  }
+  getZhTranslations(...args) { return this.cache.getZhTranslations(...args); }
+  setZhTranslation(...args) { return this.cache.setZhTranslation(...args); }
+  getGroupCached(...args) { return this.cache.getGroupCached(...args); }
+  upsertGroupCache(...args) { return this.cache.upsertGroupCache(...args); }
+  getPlanetCache(...args) { return this.cache.getPlanetCache(...args); }
+  setPlanetCache(...args) { return this.cache.setPlanetCache(...args); }
+  getGroupHeat(...args) { return this.cache.getGroupHeat(...args); }
+  upsertBoothItem(...args) { return this.cache.upsertBoothItem(...args); }
+  getBoothItemCache(...args) { return this.cache.getBoothItemCache(...args); }
+  listBoothItems(...args) { return this.cache.listBoothItems(...args); }
+  recordBoothSearch(...args) { return this.cache.recordBoothSearch(...args); }
+  getBoothSearches(...args) { return this.cache.getBoothSearches(...args); }
 
-  getXWorldsSince(sinceIso, { creator, limit = 100 } = {}) {
-    let sql = `SELECT * FROM x_world_recommendations WHERE last_recommended_at >= $since`;
-    const params = { $since: sinceIso };
-    if (creator) {
-      sql += ` AND creators LIKE $creator`;
-      params.$creator = `%${creator}%`;
-    }
-    sql += ` ORDER BY last_recommended_at DESC LIMIT $limit`;
-    params.$limit = limit;
-    return this._query(sql, params);
-  }
+  // ── contacts 域转发（核心实现在 core/domains/contacts-store.js）──
 
-  getAllXWorlds(limit = 200) {
-    return this._query(`SELECT * FROM x_world_recommendations ORDER BY favorites DESC LIMIT $limit`, { $limit: limit });
-  }
+  addToWatchlist(...args) { return this.contacts.addToWatchlist(...args); }
+  removeFromWatchlist(...args) { return this.contacts.removeFromWatchlist(...args); }
+  getWatchlist(...args) { return this.contacts.getWatchlist(...args); }
+  getNicknames(...args) { return this.contacts.getNicknames(...args); }
+  setNickname(...args) { return this.contacts.setNickname(...args); }
 
-  clearXWorlds() {
-    this._run(`DELETE FROM x_world_recommendations`);
-  }
+  // ── xWorlds 域转发（核心实现在 core/domains/x-worlds-store.js）──
+
+  getXWorld(...args) { return this.xWorlds.getXWorld(...args); }
+  insertXWorld(...args) { return this.xWorlds.insertXWorld(...args); }
+  updateXWorld(...args) { return this.xWorlds.updateXWorld(...args); }
+  getXWorldsSince(...args) { return this.xWorlds.getXWorldsSince(...args); }
+  getAllXWorlds(...args) { return this.xWorlds.getAllXWorlds(...args); }
+  clearXWorlds(...args) { return this.xWorlds.clearXWorlds(...args); }
 }
