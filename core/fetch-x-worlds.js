@@ -31,6 +31,40 @@ const NITTER_TIMEOUT_MS = 12000;   // 单实例超时（短，便于快速回退
 const NITTER_MIN_BYTES = 200;      // 空壳检测：响应体小于此字节视为不可用
 const MAX_TWEETS_PER_CREATOR = 20; // Nitter RSS 固定返回最近 ~20 条
 
+// ── X SearchTimeline GraphQL 兜底数据源 ─────────────────────
+// 背景：Nitter 实例不稳定（403/404/SSL 挂/部分博主无缓存），且 RSS 仅返回最近 ~20 条，
+// 导致高频博主（如 Bradlee1011）3 天 10+ 条推荐只抓到 3 条。X 的 SearchTimeline GraphQL
+// 用 guest token 可拉取完整推文流（product=Latest，count=20 可翻页），作为 Nitter 失败时的兜底。
+// 注：X API 同样会限流/轮换 queryId，故只作降级兜底，不替代 Nitter。
+const X_BEARER_TOKEN = 'AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA';
+// SearchTimeline queryId 会被 X 定期轮换，故支持环境变量覆盖（无需改代码）
+const X_SEARCH_QUERY_ID = process.env.VRC_MONITOR_X_SEARCH_QUERY_ID || 'hyPfJYJ_XAtDYoslQc-Rgg';
+const X_SEARCH_FEATURES = {
+  'rweb_tipjar_consumption_enabled': true,
+  'responsive_web_graphql_exclude_directive_enabled': true,
+  'verified_phone_label_enabled': false,
+  'creator_subscriptions_tweet_preview_api_enabled': true,
+  'responsive_web_graphql_timeline_navigation_enabled': true,
+  'responsive_web_graphql_skip_user_profile_image_extensions_enabled': false,
+  'c9s_tweet_anatomy_moderator_badge_enabled': true,
+  'tweetypie_unmention_optimization_enabled': true,
+  'responsive_web_edit_tweet_api_enabled': true,
+  'graphql_is_translatable_rweb_tweet_is_translatable_enabled': true,
+  'view_counts_everywhere_api_enabled': true,
+  'longform_notetweets_consumption_enabled': true,
+  'responsive_web_twitter_article_tweet_consumption_enabled': false,
+  'tweet_awards_web_tipping_enabled': false,
+  'freedom_of_speech_not_reach_fetch_enabled': true,
+  'standardized_nudges_misinfo': true,
+  'tweet_with_visibility_results_prefer_gql_limited_actions_policy_enabled': true,
+  'rweb_video_timestamps_enabled': true,
+  'longform_notetweets_rich_text_read_enabled': true,
+  'responsive_web_enhance_cards_enabled': false,
+};
+const X_GUEST_TOKEN_TTL_MS = 3 * 3600 * 1000; // guest token 缓存 3 小时
+let _xGuestToken = null;
+let _xGuestTokenAt = 0;
+
 /**
  * 代理解析：默认【直连】（不设代理）。
  * 仅当显式设置 VRC_MONITOR_HTTP_PROXY / HTTPS_PROXY / HTTP_PROXY 时才走代理，
@@ -47,11 +81,11 @@ function resolveProxy() {
  * 代理策略：显式配置代理 → 走 HttpsProxyAgent；否则直连。
  * 返回 { status, headers, body }。
  */
-function httpRequest(url, { headers = {}, timeoutMs = NITTER_TIMEOUT_MS, agent = null } = {}) {
+function httpRequest(url, { headers = {}, timeoutMs = NITTER_TIMEOUT_MS, agent = null, method = 'GET', body = null } = {}) {
   return new Promise((resolve, reject) => {
     const isHttps = url.startsWith('https:');
     const lib = isHttps ? https : http;
-    const opts = { headers, method: 'GET' };
+    const opts = { headers, method };
     if (agent) opts.agent = agent;
     const req = lib.request(url, opts, (res) => {
       const chunks = [];
@@ -75,36 +109,47 @@ function httpRequest(url, { headers = {}, timeoutMs = NITTER_TIMEOUT_MS, agent =
     });
     req.on('error', (e) => reject(e));
     req.setTimeout(timeoutMs, () => req.destroy(new Error('timeout')));
+    if (body) req.write(body);
     req.end();
   });
 }
 
-/** 尝试一次请求：有代理先走代理，失败（ECONNREFUSED/超时等）则回退直连 */
-async function tryFetchOnce(url) {
+/**
+ * 带代理回退的通用请求：配置代理 → 先走代理（失败回退直连）。
+ * 支持 headers/method/body/timeoutMs。与 Nitter 的 tryFetchOnce 共用同一
+ * "先代理后直连"逻辑，避免新增网络路径（如 SearchTimeline）绕过代理。
+ * 返回 { status, headers, body }；全部失败抛 FETCH_FAILED。
+ */
+async function tryFetchWithProxy(url, { headers = {}, method = 'GET', body = null, timeoutMs = NITTER_TIMEOUT_MS } = {}) {
   const proxy = resolveProxy();
   const errors = [];
-  const headers = {
-    'User-Agent': UA,
-    'Accept': 'application/rss+xml, application/xml, text/xml, */*',
-    'Accept-Encoding': 'gzip, deflate',
-  };
   if (proxy) {
     try {
       const agent = new HttpsProxyAgent(proxy);
-      return await httpRequest(url, { headers, agent });
+      return await httpRequest(url, { headers, agent, method, body, timeoutMs });
     } catch (e) {
       errors.push(`代理(${proxy})失败: ${e.code || e.message}`);
     }
   }
   // 直连（无代理配置，或代理失败回退）
   try {
-    return await httpRequest(url, { headers });
+    return await httpRequest(url, { headers, method, body, timeoutMs });
   } catch (e) {
     errors.push(`直连失败: ${e.code || e.message}`);
   }
   const err = new Error(errors.join('；'));
   err.code = 'FETCH_FAILED';
   throw err;
+}
+
+/** Nitter RSS 用：先代理后直连（RSS UA + XML Accept 头），薄封装 tryFetchWithProxy */
+async function tryFetchOnce(url) {
+  const headers = {
+    'User-Agent': UA,
+    'Accept': 'application/rss+xml, application/xml, text/xml, */*',
+    'Accept-Encoding': 'gzip, deflate',
+  };
+  return tryFetchWithProxy(url, { headers });
 }
 
 /**
@@ -145,6 +190,148 @@ export async function fetchCreatorRss(screenName) {
   err.code = 'NITTER_UNREACHABLE';
   err.details = errors;
   throw err;
+}
+
+// ── X SearchTimeline 兜底 ──────────────────────────────────
+
+/**
+ * 激活并缓存 X guest token（公开匿名 token，用于 SearchTimeline GraphQL）。
+ * 缓存 3 小时，避免每次抓取都重新激活。
+ */
+async function getXGuestToken() {
+  const now = Date.now();
+  if (_xGuestToken && now - _xGuestTokenAt < X_GUEST_TOKEN_TTL_MS) return _xGuestToken;
+  const resp = await tryFetchWithProxy('https://api.twitter.com/1.1/guest/activate.json', {
+      headers: { 'User-Agent': UA, 'Authorization': `Bearer ${X_BEARER_TOKEN}`, 'Content-Type': 'application/json' },
+      timeoutMs: 15000,
+      method: 'POST',
+    });
+  if (resp.status !== 200) {
+    const e = new Error(`X guest token 激活失败：HTTP ${resp.status}`);
+    e.code = 'X_GUEST_ACTIVATE_FAILED';
+    throw e;
+  }
+  const data = JSON.parse(resp.body);
+  if (!data.guest_token) {
+    const e = new Error('X guest token 响应缺少 guest_token 字段');
+    e.code = 'X_GUEST_ACTIVATE_FAILED';
+    throw e;
+  }
+  _xGuestToken = data.guest_token;
+  _xGuestTokenAt = now;
+  return _xGuestToken;
+}
+
+/**
+ * 从 SearchTimeline GraphQL 响应递归提取推文（含 quoted/retweeted 嵌套）。
+ * 返回 [{ id, url, time (ISO), text, worldIds, worldNames, authorName }]。
+ */
+function parseSearchTimelineTweets(respObj, screenName) {
+  const tweets = [];
+  const seen = new Set();
+  function walk(o) {
+    if (o && typeof o === 'object') {
+      if (o.legacy && typeof o.legacy === 'object') {
+        const lg = o.legacy;
+        if (lg.id_str && lg.full_text && !seen.has(lg.id_str)) {
+          seen.add(lg.id_str);
+          const url = `https://x.com/${screenName}/status/${lg.id_str}`;
+          const time = lg.created_at ? new Date(lg.created_at).toISOString() : null;
+          const parsed = extractWorldsFromTweetText(lg.full_text);
+          tweets.push({ id: lg.id_str, url, time, text: lg.full_text, ...parsed });
+        }
+      }
+      for (const v of Object.values(o)) walk(v);
+    } else if (Array.isArray(o)) {
+      for (const v of o) walk(v);
+    }
+  }
+  walk(respObj);
+  return tweets;
+}
+
+/**
+ * X SearchTimeline GraphQL 兜底抓取：from:{screen_name} 按 Latest 排序拉取推文。
+ * 相比 Nitter RSS 的 ~20 条限制，SearchTimeline 可翻页拿完整推文流，
+ * 且不依赖 Nitter 实例缓存（解决 Bradlee1011 等 Nitter 404 的博主）。
+ * 返回结构与 fetchCreatorRss 一致；失败时抛 X_SEARCH_UNREACHABLE。
+ */
+export async function fetchCreatorViaSearchTimeline(screenName, { maxTweets = 50 } = {}) {
+  let guestToken;
+  try {
+    guestToken = await getXGuestToken();
+  } catch (e) {
+    const err = new Error(`X guest token 激活失败（@${screenName}）：${e.message}`);
+    err.code = 'X_SEARCH_UNREACHABLE';
+    throw err;
+  }
+
+  const all = [];
+  let cursor = null;
+  let pages = 0;
+  while (all.length < maxTweets && pages < 5) {
+    const variables = {
+      rawQuery: `from:${screenName}`,
+      count: 20,
+      product: 'Latest',
+      querySource: 'typed_query',
+    };
+    if (cursor) variables.cursor = cursor;
+    const body = JSON.stringify({ queryId: X_SEARCH_QUERY_ID, variables, features: X_SEARCH_FEATURES });
+    const url = `https://x.com/i/api/graphql/${X_SEARCH_QUERY_ID}/SearchTimeline`;
+        const resp = await tryFetchWithProxy(url, {
+          headers: {
+            'User-Agent': UA,
+            'Authorization': `Bearer ${X_BEARER_TOKEN}`,
+            'x-guest-token': guestToken,
+            'Content-Type': 'application/json',
+            'X-Twitter-Active-User': 'yes',
+            'X-Twitter-Client-Language': 'en',
+          },
+          timeoutMs: 20000,
+          body,
+          method: 'POST',
+        });
+    if (resp.status !== 200) {
+      const err = new Error(`X SearchTimeline 请求失败（@${screenName}）：HTTP ${resp.status}`);
+      err.code = 'X_SEARCH_UNREACHABLE';
+      throw err;
+    }
+    let obj;
+    try { obj = JSON.parse(resp.body); } catch { obj = null; }
+    if (!obj) break;
+    const tweets = parseSearchTimelineTweets(obj, screenName);
+    for (const t of tweets) {
+      if (!all.some(x => x.id === t.id)) all.push(t);
+    }
+    // 找 bottom cursor（翻页）
+    cursor = findBottomCursor(obj);
+    pages++;
+    if (!cursor) break;
+  }
+  if (all.length === 0) {
+    const err = new Error(`X SearchTimeline 未返回推文（@${screenName}）`);
+    err.code = 'X_SEARCH_UNREACHABLE';
+    throw err;
+  }
+  return all;
+}
+
+/** 从 GraphQL 响应递归找 Bottom cursor（翻页游标） */
+function findBottomCursor(obj) {
+  if (obj && typeof obj === 'object') {
+    if (obj.cursorType === 'Bottom' && obj.value) return obj.value;
+    for (const v of Object.values(obj)) {
+      const r = findBottomCursor(v);
+      if (r) return r;
+    }
+  } else if (Array.isArray(obj)) {
+    for (const v of obj) {
+      const r = findBottomCursor(v);
+      if (r) return r;
+    }
+  }
+  return null;
 }
 
 // ── 博主清单 ──────────────────────────────────────────────
@@ -195,6 +382,65 @@ export function removeCreator(storage, screenName) {
 // ── Nitter RSS 抓取（多实例回退 + 代理支持，见上方 fetchCreatorRss） ──
 
 /**
+ * 从单条推文文本提取世界信息（RSS 与 SearchTimeline 共用）。
+ * 返回 { worldIds: string[], worldNames: string[], authorName: string }。
+ */
+export function extractWorldsFromTweetText(text) {
+  const fullText = text || '';
+
+  // 世界链接：vrchat.com/home/world/wrld_xxx 或 vrchat.com/home/launch?worldId=wrld_xxx
+  const worldIds = [...new Set(
+    [
+      ...fullText.matchAll(/vrchat\.com\/home\/world\/(wrld_[0-9a-f-]+)/gi),
+      ...fullText.matchAll(/vrchat\.com\/home\/launch\?[^"'\s]*worldId=([0-9a-f-]+)/gi),
+      ...fullText.matchAll(/vrchat\.com\/home\/launch\?worldId=wrld_([0-9a-f-]+)/gi),
+    ].map(x => {
+      // 归一化：带 wrld_ 前缀的直接用；launch 里可能带或不带前缀
+      const raw = x[1];
+      return raw.startsWith('wrld_') ? raw : `wrld_${raw}`;
+    }).filter(id => {
+      // 过滤截断残片：RSS 链接显示文本可能被省略号截断（如 wrld_6…、wrld_d593cc64-de55-496c-9f83-）
+      // 合法 worldId = "wrld_" + 8-4-4-4-12 的 UUID（36 字符 + 5 前缀 = 41），残片长度不足直接丢弃
+      const hex = id.slice(5).replace(/-/g, '');
+      return /^[0-9a-f]{32}$/i.test(hex);
+    })
+  )];
+
+  // 世界名（多格式兼容）：
+  //   "World: XXX" / "ワールド：XXX" / "World name: XXX" / "World：XXX"
+  // 名字在 By:/Platform:/换行/# 处截断，避免吞掉作者和描述
+  const worldNames = [];
+  const nameRe = /(?:World(?:\s*name)?|ワールド)\s*[:：]\s*([^\n#|]{2,80}?)(?=\s*(?:By|by|作者|Platform|プラットフォーム)[:：]|\n|#|\||$)/gi;
+  let nm;
+  while ((nm = nameRe.exec(fullText)) !== null) {
+    const name = nm[1].replace(/https?:\/\/\S+/g, '').trim().replace(/[|｜].*$/, '').trim();
+    if (name && !worldNames.includes(name)) worldNames.push(name);
+  }
+
+  // 作者名提取（By: XXX，到 Platform/#/换行/描述边界截断）
+  const authorName = extractAuthor(fullText);
+
+  // 三行格式（八谷凛奈等）："世界名\n作者名\n-- 描述" 或 "世界名 作者名 -- 描述"
+  // 且文本带 #VRChat_world紹介
+  const looksLikeWorldIntro = /#VRChat_world紹介|#VRChat_world紹介|ワールド紹介|World.*紹介/i.test(fullText);
+  if (looksLikeWorldIntro && worldNames.length === 0 && worldIds.length === 0) {
+    const inline = fullText.match(/([^\n#|]{2,60}?)\s+([A-Za-z0-9_\-\.]{2,40})\s+--\s+/);
+    const threeLine = !inline
+      ? fullText.match(/([^\n]{2,60})\n\s*([A-Za-z0-9_\-\.]{2,40})\n\s*--/)
+      : null;
+    const matched = inline || threeLine;
+    if (matched) {
+      const wName = matched[1].trim();
+      if (wName && !/[#|]/.test(wName) && !/^RT\b/.test(wName)) {
+        worldNames.push(wName);
+      }
+    }
+  }
+
+  return { worldIds, worldNames, authorName };
+}
+
+/**
  * 解析 Nitter RSS XML → 推文数组
  */
 export function parseRss(xml, screenName) {
@@ -213,60 +459,9 @@ export function parseRss(xml, screenName) {
     const tweetId = tweetIdMatch ? tweetIdMatch[1] : '';
     const time = pubDate ? new Date(pubDate).toISOString() : null;
 
-    // 合并 title + description 提取世界链接（Nitter 的 description 含完整链接）
+    // 合并 title + description 提取世界信息（Nitter 的 description 含完整链接）
     const fullText = `${title} ${stripHtml(desc)}`;
-
-    // 世界链接：vrchat.com/home/world/wrld_xxx 或 vrchat.com/home/launch?worldId=wrld_xxx
-    const worldIds = [...new Set(
-      [
-        ...fullText.matchAll(/vrchat\.com\/home\/world\/(wrld_[0-9a-f-]+)/gi),
-        ...fullText.matchAll(/vrchat\.com\/home\/launch\?[^"'\s]*worldId=([0-9a-f-]+)/gi),
-        ...fullText.matchAll(/vrchat\.com\/home\/launch\?worldId=wrld_([0-9a-f-]+)/gi),
-      ].map(x => {
-        // 归一化：带 wrld_ 前缀的直接用；launch 里可能带或不带前缀
-        const raw = x[1];
-        return raw.startsWith('wrld_') ? raw : `wrld_${raw}`;
-      }).filter(id => {
-        // 过滤截断残片：RSS 链接显示文本可能被省略号截断（如 wrld_6…、wrld_d593cc64-de55-496c-9f83-）
-        // 合法 worldId = "wrld_" + 8-4-4-4-12 的 UUID（36 字符 + 5 前缀 = 41），残片长度不足直接丢弃
-        const hex = id.slice(5).replace(/-/g, '');
-        return /^[0-9a-f]{32}$/i.test(hex);
-      })
-    )];
-
-    // 世界名（多格式兼容）：
-    //   "World: XXX" / "ワールド：XXX" / "World name: XXX" / "World：XXX"
-    // 名字在 By:/Platform:/换行/# 处截断，避免吞掉作者和描述
-    const worldNames = [];
-    const nameRe = /(?:World(?:\s*name)?|ワールド)\s*[:：]\s*([^\n#|]{2,80}?)(?=\s*(?:By|by|作者|Platform|プラットフォーム)[:：]|\n|#|\||$)/gi;
-    let nm;
-    while ((nm = nameRe.exec(fullText)) !== null) {
-      const name = nm[1].replace(/https?:\/\/\S+/g, '').trim().replace(/[|｜].*$/, '').trim();
-      if (name && !worldNames.includes(name)) worldNames.push(name);
-    }
-
-    // 作者名提取（By: XXX，到 Platform/#/换行/描述边界截断）
-    // 用于搜索辅助匹配，防止"名字包含"误报（如 NOIR → Noir - Nocturne）
-    const authorName = extractAuthor(fullText);
-
-    // 三行格式（八谷凛奈等）："世界名\n作者名\n-- 描述" 或 "世界名 作者名 -- 描述"
-    // 且文本带 #VRChat_world紹介
-    const looksLikeWorldIntro = /#VRChat_world紹介|#VRChat_world紹介|ワールド紹介|World.*紹介/i.test(fullText);
-    if (looksLikeWorldIntro && worldNames.length === 0 && worldIds.length === 0) {
-      // 优先同行式 "名称 作者 -- 描述"（Nitter 标题行，最可靠）
-      // 其次换行分隔三行式（desc 的 <br> 换行）
-      const inline = fullText.match(/([^\n#|]{2,60}?)\s+([A-Za-z0-9_\-\.]{2,40})\s+--\s+/);
-      const threeLine = !inline
-        ? fullText.match(/([^\n]{2,60})\n\s*([A-Za-z0-9_\-\.]{2,40})\n\s*--/)
-        : null;
-      const matched = inline || threeLine;
-      if (matched) {
-        const wName = matched[1].trim();
-        if (wName && !/[#|]/.test(wName) && !/^RT\b/.test(wName)) {
-          worldNames.push(wName);
-        }
-      }
-    }
+    const { worldIds, worldNames, authorName } = extractWorldsFromTweetText(fullText);
 
     tweets.push({
       id: tweetId,
@@ -457,6 +652,57 @@ function mapWorld(w) {
 // ── 扫描主流程 ─────────────────────────────────────────────
 
 /**
+ * 统一抓取入口：先 Nitter RSS（主源），失败/空/数据不足回退 X SearchTimeline（兜底）。
+ * 返回 { tweets, source }，source ∈ 'nitter' | 'search_timeline' | 'nitter+search_timeline'。
+ *
+ * 降级语义（明确）：
+ *  - fetchCreatorRss 内部已把「空 RSS / 0 条推文」视为该实例失败（continue 下一个），
+ *    全部实例失败时抛 NITTER_UNREACHABLE → 触发 SearchTimeline 回退（"空数组算失败"已覆盖）。
+ *  - 若 Nitter 返回非空但推文数 < minTweets（高频博主 Nitter RSS 仅 ~20 条可能覆盖不全 3 天窗口），
+ *    也尝试 SearchTimeline 补充并合并去重（minTweets 默认 0 = 仅失败才回退，保持向后兼容；
+ *    可通过 env VRC_MONITOR_X_MIN_TWEETS 配置为 >0，让"数据不足"也触发补充）。
+ *  - 双源均失败/均空时抛 X_FETCH_ALL_FAILED（含诊断、可读错误提示）。
+ */
+export async function fetchCreatorTweets(screenName, { minTweets = 0 } = {}) {
+  const minTweetsEffective = parseInt(process.env.VRC_MONITOR_X_MIN_TWEETS, 10) || minTweets || 0;
+  let tweets = [];
+  let source = '';
+  try {
+    tweets = await fetchCreatorRss(screenName);
+    source = 'nitter';
+    if (minTweetsEffective > 0 && tweets.length < minTweetsEffective) {
+      log(`⚠️ x-world @${screenName} Nitter 仅 ${tweets.length} 条(< minTweets=${minTweetsEffective})，尝试 SearchTimeline 补充`);
+      try {
+        const extra = await fetchCreatorViaSearchTimeline(screenName);
+        const seen = new Set(tweets.map(t => t.id));
+        for (const t of extra) {
+          if (t.id && !seen.has(t.id)) { tweets.push(t); seen.add(t.id); }
+        }
+        source = 'nitter+search_timeline';
+      } catch (e2) {
+        log(`  （SearchTimeline 补充失败，保留 Nitter 数据：${e2.message.slice(0, 60)}）`);
+      }
+    }
+  } catch (e) {
+    log(`⚠️ x-world @${screenName} Nitter 不可达，回退 X SearchTimeline：${e.message}`);
+    try {
+      tweets = await fetchCreatorViaSearchTimeline(screenName);
+      source = 'search_timeline';
+    } catch (e2) {
+      const err = new Error(`@${screenName} 双数据源均失败（Nitter + X SearchTimeline）：${e2.message}。建议检查网络或设置 HTTPS_PROXY。`);
+      err.code = 'X_FETCH_ALL_FAILED';
+      throw err;
+    }
+  }
+  if (tweets.length === 0) {
+    const err = new Error(`@${screenName} 双数据源均未返回推文。建议检查网络或设置 HTTPS_PROXY。`);
+    err.code = 'X_FETCH_ALL_FAILED';
+    throw err;
+  }
+  return { tweets, source };
+}
+
+/**
  * 抓取所有博主的最新推文 → 提取世界 → 查询统计 → 写入数据库。
  * 返回本次扫描摘要。
  */
@@ -474,7 +720,7 @@ export async function scanCreatorWorlds({ force = false } = {}) {
   for (const creator of creators) {
     const screen = creator.screen_name;
     try {
-      const tweets = await fetchCreatorRss(screen);
+      const { tweets } = await fetchCreatorTweets(screen);
       totalTweets += tweets.length;
 
       // 收集该博主推荐的世界（按推文时间去重，跨推文合并）
@@ -515,9 +761,9 @@ export async function scanCreatorWorlds({ force = false } = {}) {
       results.push({ screen_name: screen, name: creator.name || screen, tweets: tweets.length, worlds: saved });
     } catch (e) {
       log(`❌ x-world scan @${screen}: ${e.message}`);
-      // 结构化错误：Nitter 不可达 → 用户可读的降级提示
-      const errorInfo = e.code === 'NITTER_UNREACHABLE'
-        ? `Nitter 全部实例不可达（网络受限/需代理）。请在服务环境设置 HTTPS_PROXY 或 VRC_MONITOR_HTTP_PROXY 后重试。`
+      // 结构化错误：双源均失败 → 用户可读的降级提示
+      const errorInfo = e.code === 'X_FETCH_ALL_FAILED'
+        ? `Nitter 与 X SearchTimeline 双数据源均不可达（网络受限/需代理）。请在服务环境设置 HTTPS_PROXY 或 VRC_MONITOR_HTTP_PROXY 后重试。`
         : e.message;
       results.push({ screen_name: screen, name: creator.name || screen, tweets: 0, worlds: 0, error: errorInfo });
     }
