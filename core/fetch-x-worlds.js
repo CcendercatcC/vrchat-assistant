@@ -65,6 +65,25 @@ const X_GUEST_TOKEN_TTL_MS = 3 * 3600 * 1000; // guest token 缓存 3 小时
 let _xGuestToken = null;
 let _xGuestTokenAt = 0;
 
+// ── Playwright 浏览器抓取（主通道，2026 Nitter RSS / SearchTimeline 均已失效）──
+// Anubis/Cloudflare 反爬拦截裸 HTTP 客户端，必须有头浏览器才能通过（无头被硬拒绝）。
+const X_PLAYWRIGHT_ENABLED = process.env.VRC_MONITOR_X_PLAYWRIGHT !== '0'; // 默认开
+const X_PLAYWRIGHT_INSTANCES = (process.env.VRC_MONITOR_X_PLAYWRIGHT_INSTANCES || 'https://nitter.tiekoetter.com')
+  .split(',').map(s => s.trim()).filter(Boolean);
+const X_PLAYWRIGHT_CHANNEL = process.env.VRC_MONITOR_X_PLAYWRIGHT_CHANNEL || 'msedge'; // msedge | chrome | chromium
+const X_PLAYWRIGHT_TIMEOUT_MS = parseInt(process.env.VRC_MONITOR_X_PLAYWRIGHT_TIMEOUT_MS, 10) || 45000;
+let _pw = null, _pwErr = null; // 懒加载缓存
+
+async function getPlaywright() {
+  if (_pw) return _pw;
+  if (_pwErr) throw _pwErr;
+  try { _pw = await import('playwright'); return _pw; }
+  catch (e) {
+    _pwErr = new Error(`Playwright 未安装或不可用：${e.message}。请 npm i playwright && npx playwright install chromium`);
+    throw _pwErr;
+  }
+}
+
 /**
  * 代理解析：默认【直连】（不设代理）。
  * 仅当显式设置 VRC_MONITOR_HTTP_PROXY / HTTPS_PROXY / HTTP_PROXY 时才走代理，
@@ -332,6 +351,113 @@ function findBottomCursor(obj) {
     }
   }
   return null;
+}
+
+// ── Playwright 浏览器抓取（有头，绕过 Anubis/Cloudflare）──
+
+/** 从推文容器内的 <a href> 中提取世界链接（innerText 不含 href，需单独抽取） */
+export function extractWorldIdsFromLinks(links) {
+  const ids = new Set();
+  for (const link of links || []) {
+    let m;
+    if ((m = link.match(/vrchat\.com\/home\/world\/(wrld_[0-9a-f-]+)/i))) {
+      const raw = m[1];
+      const hex = raw.slice(5).replace(/-/g, '');
+      if (/^[0-9a-f]{32}$/i.test(hex)) ids.add(raw);
+    } else if ((m = link.match(/vrchat\.com\/home\/launch\?[^]*worldId=(wrld_[0-9a-f-]+)/i))) {
+      const raw = m[1];
+      const hex = raw.slice(5).replace(/-/g, '');
+      if (/^[0-9a-f]{32}$/i.test(hex)) ids.add(raw);
+    }
+  }
+  return [...ids];
+}
+
+export function buildTweetFromBrowserItem({ text, url, time, links }) {
+  const parsed = extractWorldsFromTweetText(text);
+  // 合并文本提取 + 链接 href 提取的世界 ID（.tweet-content innerText 不含 <a> href）
+  const worldIds = [...new Set([...parsed.worldIds, ...extractWorldIdsFromLinks(links)])];
+  // 归一化 URL：去掉 #m 锚点
+  let normalized = url || '';
+  if (normalized.includes('#m')) {
+    normalized = normalized.split('#m')[0];
+  }
+  // 从 /status/{id} 提取 tweet id
+  let id = '';
+  const m = normalized.match(/\/status\/(\d+)/);
+  if (m) id = m[1];
+  return {
+    id,
+    url: normalized,
+    time: time || null,
+    text,
+    worldIds,
+    worldNames: parsed.worldNames,
+    authorName: parsed.authorName,
+  };
+}
+
+export async function fetchCreatorViaBrowser(screenName) {
+  const pw = await getPlaywright();
+  const proxy = resolveProxy();
+  const errors = [];
+  for (const base of X_PLAYWRIGHT_INSTANCES) {
+    let browser = null;
+    const url = `${base}/${encodeURIComponent(screenName)}`;
+    try {
+      const args = [
+        '--no-sandbox',
+        '--mute-audio',
+        '--disable-infobars',
+        '--window-position=-2400,-2400',
+        '--window-size=1280,900',
+      ];
+      if (proxy) args.push(`--proxy-server=${proxy}`);
+      browser = await pw.chromium.launch({
+        channel: X_PLAYWRIGHT_CHANNEL,
+        headless: false,
+        args,
+      });
+      const page = await browser.newPage();
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: X_PLAYWRIGHT_TIMEOUT_MS });
+      await page.waitForSelector('.tweet-content', { timeout: X_PLAYWRIGHT_TIMEOUT_MS });
+      const rawTweets = await page.evaluate(() => {
+        const items = [];
+        const contentEls = document.querySelectorAll('.tweet-content');
+        for (const el of contentEls) {
+          const text = el.innerText || '';
+          // 优先 a.tweet-link，其次包含 /status/ 的链接
+          let link = el.closest('.timeline-item')?.querySelector('a.tweet-link')?.href || '';
+          if (!link) {
+            const statusLink = el.closest('.timeline-item')?.querySelector('a[href*="/status/"]')?.href || '';
+            link = statusLink;
+          }
+          let time = null;
+          const dateEl = el.closest('.timeline-item')?.querySelector('.tweet-date a[title]');
+          if (dateEl) time = dateEl.getAttribute('title') || null;
+          // 抽取该推文容器内的 vrchat 链接（世界链接在 <a href>，innerText 不含）
+          const links = Array.from((el.closest('.timeline-item')?.querySelectorAll('a') || []))
+            .map(a => a.href).filter(h => h && /vrchat\.com\//.test(h));
+          items.push({ text, url: link, time, links });
+        }
+        return items;
+      });
+      await browser.close();
+      browser = null;
+      const tweets = rawTweets.map(t => buildTweetFromBrowserItem(t));
+      if (tweets.length > 0) return tweets;
+      errors.push(`${base} → 页面无推文`);
+    } catch (e) {
+      errors.push(`${base} → ${e.message || e.code || '未知错误'}`);
+      if (browser) { await browser.close().catch(() => {}); browser = null; }
+    } finally {
+      if (browser) { await browser.close().catch(() => {}); }
+    }
+  }
+  const err = new Error(`浏览器抓取全部失败（@${screenName}）：${errors.join('；')}`);
+  err.code = 'X_BROWSER_UNREACHABLE';
+  err.details = errors;
+  throw err;
 }
 
 // ── 博主清单 ──────────────────────────────────────────────
@@ -652,18 +778,28 @@ function mapWorld(w) {
 // ── 扫描主流程 ─────────────────────────────────────────────
 
 /**
- * 统一抓取入口：先 Nitter RSS（主源），失败/空/数据不足回退 X SearchTimeline（兜底）。
- * 返回 { tweets, source }，source ∈ 'nitter' | 'search_timeline' | 'nitter+search_timeline'。
+ * 统一抓取入口：先 Playwright 浏览器（主源），失败回退 Nitter RSS → X SearchTimeline（兜底）。
+ * 返回 { tweets, source }，source ∈ 'browser' | 'nitter' | 'search_timeline' | 'nitter+search_timeline'。
  *
  * 降级语义（明确）：
+ *  - fetchCreatorViaBrowser 用有头浏览器绕过 Anubis/Cloudflare，失败时 log 警告并回退 HTTP 通道。
  *  - fetchCreatorRss 内部已把「空 RSS / 0 条推文」视为该实例失败（continue 下一个），
  *    全部实例失败时抛 NITTER_UNREACHABLE → 触发 SearchTimeline 回退（"空数组算失败"已覆盖）。
  *  - 若 Nitter 返回非空但推文数 < minTweets（高频博主 Nitter RSS 仅 ~20 条可能覆盖不全 3 天窗口），
  *    也尝试 SearchTimeline 补充并合并去重（minTweets 默认 0 = 仅失败才回退，保持向后兼容；
  *    可通过 env VRC_MONITOR_X_MIN_TWEETS 配置为 >0，让"数据不足"也触发补充）。
- *  - 双源均失败/均空时抛 X_FETCH_ALL_FAILED（含诊断、可读错误提示）。
+ *  - 三通道均失败/均空时抛 X_FETCH_ALL_FAILED（含诊断、可读错误提示）。
  */
 export async function fetchCreatorTweets(screenName, { minTweets = 0 } = {}) {
+  if (X_PLAYWRIGHT_ENABLED) {
+    try {
+      const tweets = await fetchCreatorViaBrowser(screenName);
+      return { tweets, source: 'browser' };
+    } catch (e) {
+      log(`⚠️ x-world @${screenName} 浏览器抓取失败，回退 HTTP 通道：${e.message}`);
+      // 落到下方原 Nitter RSS → SearchTimeline 链
+    }
+  }
   const minTweetsEffective = parseInt(process.env.VRC_MONITOR_X_MIN_TWEETS, 10) || minTweets || 0;
   let tweets = [];
   let source = '';
@@ -689,13 +825,13 @@ export async function fetchCreatorTweets(screenName, { minTweets = 0 } = {}) {
       tweets = await fetchCreatorViaSearchTimeline(screenName);
       source = 'search_timeline';
     } catch (e2) {
-      const err = new Error(`@${screenName} 双数据源均失败（Nitter + X SearchTimeline）：${e2.message}。建议检查网络或设置 HTTPS_PROXY。`);
+      const err = new Error(`@${screenName} Nitter / X SearchTimeline / 浏览器抓取均不可用（2026 上游反向爬 + 网络受限），该通道当前无法获取新推荐。`);
       err.code = 'X_FETCH_ALL_FAILED';
       throw err;
     }
   }
   if (tweets.length === 0) {
-    const err = new Error(`@${screenName} 双数据源均未返回推文。建议检查网络或设置 HTTPS_PROXY。`);
+    const err = new Error(`@${screenName} Nitter / X SearchTimeline / 浏览器抓取均未返回推文（2026 上游反向爬 + 网络受限），该通道当前无法获取新推荐。`);
     err.code = 'X_FETCH_ALL_FAILED';
     throw err;
   }
@@ -761,9 +897,9 @@ export async function scanCreatorWorlds({ force = false } = {}) {
       results.push({ screen_name: screen, name: creator.name || screen, tweets: tweets.length, worlds: saved });
     } catch (e) {
       log(`❌ x-world scan @${screen}: ${e.message}`);
-      // 结构化错误：双源均失败 → 用户可读的降级提示
+      // 结构化错误：三通道均失败 → 用户可读的降级提示
       const errorInfo = e.code === 'X_FETCH_ALL_FAILED'
-        ? `Nitter 与 X SearchTimeline 双数据源均不可达（网络受限/需代理）。请在服务环境设置 HTTPS_PROXY 或 VRC_MONITOR_HTTP_PROXY 后重试。`
+        ? `Nitter / X SearchTimeline / 浏览器抓取均不可用（2026 上游反向爬 + 网络受限），该通道当前无法获取新推荐。`
         : e.message;
       results.push({ screen_name: screen, name: creator.name || screen, tweets: 0, worlds: 0, error: errorInfo });
     }
