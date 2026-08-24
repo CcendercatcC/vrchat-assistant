@@ -75,6 +75,7 @@ gh api repos/O/R/issues/N/comments --input - <<'EOF' {"body": "..."} EOF
 - ⚠️ **inline 行号必须落在该文件 diff hunk 内**（`@@ -X,N +Y,M @@` 范围，hunk 外的内容放 review body）——否则 422 整条 review 被拒。
 - ⚠️ **AGENTS.md 等未在 PR files 里的文件无法发 inline**，只能 review body 点名文件+行号。
 - MSYS 环境：`--input`/`--body-file` 传路径用 Windows 格式 `D:/...` 或 `$(cygpath -w ...)`。
+- ⚠️ **review.json 内部字符串严禁裸控制符**：`--input` 只免 shell 层转义，若 JSON 字符串值里混入**真实换行/制表符**（ASCII 0~31），Hermes `write_file` 的 JSON 校验会抛 `JSONDecodeError: Invalid control character` 并**拒绝写入**，载荷文件根本没落盘，后续 `--input` 提交失败。修法：用 `json.dump` 序列化载荷（自动转义 `\n`，`ensure_ascii=False` 保留中文），或手写时字符串内一律用字面 `\n`（反斜杠+n 两字符），绝不敲真实回车。
 
 ### 5. 读回验证（REST 读回 = 可信证据，自报不算）
 
