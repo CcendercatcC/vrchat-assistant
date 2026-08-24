@@ -1,0 +1,16 @@
+services:
+  vrchat-assistant:
+    build: .
+    container_name: vrchat-assistant
+    restart: unless-stopped
+    ports:
+      - "8799:8799"
+    environment:
+      - VRC_MONITOR_SAFE_MODE=true
+      - VRC_MONITOR_HOST=0.0.0.0
+      - VRC_MONITOR_PORT=8799
+    volumes:
+      - ./credentials.json:/app/credentials.json:ro
+      - ./auth_cookie.txt:/app/auth_cookie.txt
+      - ./data:/app/data
+      - ./backups:/app/backups
