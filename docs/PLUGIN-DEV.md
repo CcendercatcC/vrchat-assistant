@@ -209,7 +209,7 @@ api.registerTool({
 | 工具前缀 | 建议 `hello_`，便于辨识来源；破坏性工具（`remove_`/`delete_`/`leave_`/`decline_`/`hide_`/`unfavorite_`/`unfriend_` 等）必须声明 `destructive: true` |
 | 依赖 | `depends` 声明依赖插件名；拓扑排序加载；依赖缺失/成环拒绝加载 |
 
-**零依赖约定**：v1 插件只准使用 Node ≥18 内置模块（含全局 fetch）。确需第三方包属进阶场景，需在清单声明 `dependencies` 并自带安装说明——主仓官方插件一律零依赖。
+**零依赖约定**：v1 插件只准使用 Node ≥22 内置模块（含全局 fetch）。确需第三方包属进阶场景，需在清单声明 `dependencies` 并自带安装说明——主仓官方插件一律零依赖。
 
 ---
 

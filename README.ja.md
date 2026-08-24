@@ -27,7 +27,7 @@
 
 ## クイックスタート
 
-**前提条件**：Node.js ≥ 18、VRChat アカウント（メール OTP または TOTP 二段階認証を有効化）。メール OTP ログイン時のみ IMAP 対応メール（OTP コード受信用）が必要です。
+**前提条件**：Node.js ≥ 22、VRChat アカウント（メール OTP または TOTP 二段階認証を有効化）。メール OTP ログイン時のみ IMAP 対応メール（OTP コード受信用）が必要です。
 
 1. リポジトリをクローンし、`credentials.example.json` を `credentials.json` にコピーして VRChat アカウントを記入；認証は二択——メール OTP なら IMAP 認証コード、または `totp_secret` を設定して TOTP 自動ログイン
 2. サービス起動：`node start-monitor.js`
@@ -45,11 +45,13 @@
 | [skills/](./skills/) | すぐ使える Agent Skill 集（MCP ツール一覧、クエリワークフロー、開発ガイドラインなど。導入方法は AGENTS.md） | ツール呼び出し / 開発前 |
 | [DEVELOPMENT.md](./DEVELOPMENT.md) | 開発ガイドライン：クロスプラットフォーム制約、PR 要件、データプライバシー、コード規約 | コード変更 / PR 提出時 |
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | システムアーキテクチャ：データフロー、モジュール責務、依存関係 | コードベース理解時 |
+| [docs/PLUGIN-API.md](./docs/PLUGIN-API.md) | プラグイン契約（v1.1）：プラグインとコアの唯一の契約 — 6 面 API、安全・命名制約 | プラグイン作成前に必読 |
+| [docs/PLUGIN-DEV.md](./docs/PLUGIN-DEV.md) | プラグイン開発ガイド：ディレクトリ構成、register(api)、6 面 API、コアサービス利用 | プラグイン作成 / 機能拡張時 |
 | [docs/history/](./docs/history/INDEX.md) | プロジェクト進化史：マイルストーン、月次リリース/PR とその意義 | 新規エージェントは最初に読む |
 | [service-windows/](./service-windows/README.md) | Windows 自動起動 + クラッシュ自己復旧 + 毎日修復レポート（ワンクリックスクリプト） | Windows で常駐運用する場合 |
 | [service-linux/](./service-linux/README.md) | Linux systemd ユーザーサービス：自動起動 + クラッシュ自己復旧 + journal ログ（ワンクリックスクリプト） | Linux で常駐運用する場合 |
 
-**MCP ツール**：サービスはフレンド照会、ソーシャル操作、メディア管理、グループ操作、ワールドレコメンド、アセット検索などの分野をカバーする MCP ツールを公開しています。**完全なツール一覧（全ツール）は [skills/vrc-monitor-agent/SKILL.md](./skills/vrc-monitor-agent/SKILL.md) の「MCP ツール」セクションに統一登録されています**——エージェントはそこから呼び出します。他の skill は各分野のワークフロー補助です（ツールの重複登録はしません）：`vrchat-social-queries`（ソーシャル：オンライン/同インスタンス/パターン/ニックネーム）、`vrchat-world-queries`（ワールド：待逛/レコメンド/情報探索）、`vrchat-group-queries`（グループ：照会/アナウンス）、`booth-query-display`（BOOTH 検索/表示）、`vrchat-assistant-development`（開発ガイドライン）、`review-workflow`（PR/issue レビューワークフロー）。
+**MCP ツール**：サービスはフレンド照会、ソーシャル操作、メディア管理、グループ操作、ワールドレコメンド、アセット検索などの分野をカバーする MCP ツールを公開しています。これらのツールは**コア領域ツール + 公式プラグイン領域ツール**のレイヤーで構成され（プラグイン領域：booth / favorites / groups / media / planet / recommend / world-kb / x-creators）、統一レジストリによって順に出力されます。**完全なツール一覧（全ツール）は [skills/vrc-monitor-agent/SKILL.md](./skills/vrc-monitor-agent/SKILL.md) の「MCP ツール」セクションに統一登録されています**——エージェントはそこから呼び出します。他の skill は各分野のワークフロー補助です（ツールの重複登録はしません）：`vrchat-social-queries`（ソーシャル：オンライン/同インスタンス/パターン/ニックネーム）、`vrchat-world-queries`（ワールド：待逛/レコメンド/情報探索）、`vrchat-group-queries`（グループ：照会/アナウンス）、`booth-query-display`（BOOTH 検索/表示）、`vrchat-assistant-development`（開発ガイドライン）、`review-workflow`（PR/issue レビューワークフロー）。
 
 ## 🧰 補助ツール（ローカル・任意）
 

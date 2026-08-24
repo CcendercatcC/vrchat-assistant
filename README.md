@@ -27,7 +27,7 @@
 
 ## 快速开始
 
-**前置条件**：Node.js ≥ 18、一个 VRChat 账号（开启邮箱 OTP 或 TOTP 两步验证）。仅用邮箱 OTP 登录时才需要支持 IMAP 的邮箱（接收验证码）。
+**前置条件**：Node.js ≥ 22、一个 VRChat 账号（开启邮箱 OTP 或 TOTP 两步验证）。仅用邮箱 OTP 登录时才需要支持 IMAP 的邮箱（接收验证码）。
 
 1. 克隆仓库，复制 `credentials.example.json` 为 `credentials.json`，填入 VRChat 账号；认证二选一——邮箱 OTP 登录填邮箱 IMAP 授权码，或配置 `totp_secret` 走 TOTP 自动登录
 2. 启动服务：`node start-monitor.js`
