@@ -55,9 +55,25 @@ export function sendError(res, id, message) {
 // ── 请求路由 ──
 async function handleRequest(req, res) {
   const { storage, rateLimiter, wsManager, friendState, eventPipeline, serverState, paths } = ctx;
+  const pathname = (req.url || '').split('?')[0];
+
+  // ── 全局 HTTP 鉴权中间件（由 auth-guard 插件或环境配置提供）──
+  if (ctx.pluginLoader?.hasService('http.authenticate')) {
+    const authResult = ctx.pluginLoader.consume('http.authenticate', req);
+    if (!authResult || !authResult.ok) {
+      const errBody = JSON.stringify({ error: 'Unauthorized', message: authResult?.message || 'Invalid or missing API token' });
+      res.writeHead(401, {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(errBody),
+        'WWW-Authenticate': 'Bearer error="invalid_token"',
+      });
+      res.end(errBody);
+      return;
+    }
+  }
 
   // Health check
-  if (req.method === 'GET' && req.url === '/health') {
+  if (req.method === 'GET' && pathname === '/health') {
     const uptime = serverState.started ? Math.floor((Date.now() - serverState.started) / 1000) : 0;
     const status = {
       ok: true,
@@ -82,20 +98,20 @@ async function handleRequest(req, res) {
   }
 
   // MCP endpoint probe
-  if (req.method === 'GET' && req.url === '/mcp') {
+  if (req.method === 'GET' && pathname === '/mcp') {
     res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Content-Length': 0 });
     res.end();
     return;
   }
 
   // MCP session termination（SDK 关闭连接时调用，2026-08-17 加：之前 404 导致客户端 warning）
-  if (req.method === 'DELETE' && req.url === '/mcp') {
+  if (req.method === 'DELETE' && pathname === '/mcp') {
     res.writeHead(204);
     res.end();
     return;
   }
 
-  if (req.method !== 'POST' || req.url !== '/mcp') {
+  if (req.method !== 'POST' || pathname !== '/mcp') {
     res.writeHead(404);
     res.end('Not Found');
     return;

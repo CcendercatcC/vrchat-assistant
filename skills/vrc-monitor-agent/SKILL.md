@@ -109,6 +109,9 @@ metadata:
 | `see_notification` / `hide_notification` | **通知已读/隐藏**：标记已读 PUT .../see；隐藏清除 PUT .../hide（旧 v1 hide 即删除）。notificationId 必填 |
 | `accept_friend_request` | **接受好友请求**（2026-08-19 新增）：PUT /auth/user/notifications/{id}/accept，**接受即直接加为好友**，不可逆，必须 confirm: true 才执行，否则只预览 |
 | `decline_friend_request` | **拒绝好友请求**（2026-08-19 新增）：旧 v1 无独立拒绝端点，hide 即清除该通知（对方不会收到明确拒绝提示），必须 confirm: true 才执行，否则只预览 |
+| `auth_get_status` | **公网鉴权状态查询**（2026-08-25 新增）：查看当前服务的网络监听 IP/Port、Token 保护状态与公网安全就绪度评估 |
+| `auth_generate_token` | **生成安全访问 Token**（2026-08-25 新增）：生成 32 字节高强度密码学随机 Token 并提供 .env 配置片段 |
+| `auth_verify_token` | **校验访问 Token**（2026-08-25 新增）：校验给定 Token 是否与当前生效配置相匹配 |
 
 调用方式（HTTP SSE JSON-RPC）：
 

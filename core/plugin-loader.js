@@ -510,6 +510,19 @@ export class PluginLoader {
     }
   }
 
+  /** 检查是否注册了指定服务 */
+  hasService(name) {
+    return this.services.has(name);
+  }
+
+  /** 调用已注册的服务 */
+  consume(name, ...args) {
+    if (!this.services.has(name)) {
+      throw new Error(`服务 ${name} 不存在`);
+    }
+    return this.services.get(name)(...args);
+  }
+
   /** 返回插件状态数组（供 /health） */
   getStatus() {
     const status = [];

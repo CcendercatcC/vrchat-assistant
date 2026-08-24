@@ -60,7 +60,8 @@ try {
 
 // ── 路径常量 → 写入 ctx.paths ──
 // DB / 备份目录可通过 .env 的 VRC_MONITOR_DB_PATH / VRC_MONITOR_BACKUP_DIR 覆盖
-const PORT = 8799;
+const PORT = parseInt(process.env.VRC_MONITOR_PORT || '8799', 10);
+const HOST = process.env.VRC_MONITOR_HOST || '127.0.0.1';
 const COOKIE_FILE = path.join(__dirname, 'auth_cookie.txt');
 const CRED_FILE = path.join(__dirname, 'credentials.json');
 const NOTIFY_FILE = path.join(__dirname, 'notify-config.json');
@@ -72,7 +73,7 @@ const BACKUP_DIR = process.env.VRC_MONITOR_BACKUP_DIR
   : path.join(__dirname, 'backups');
 const BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 每 24h 自动备份
 
-Object.assign(ctx.paths, { __dirname, PORT, COOKIE_FILE, CRED_FILE, DB_PATH, BACKUP_DIR, BACKUP_INTERVAL_MS });
+Object.assign(ctx.paths, { __dirname, PORT, HOST, COOKIE_FILE, CRED_FILE, DB_PATH, BACKUP_DIR, BACKUP_INTERVAL_MS });
 
 // ── WebSocket 事件 → 好友状态更新 ──
 async function _updateFriendState(event) {
@@ -230,6 +231,14 @@ function registerCoreServices(loader, ctx) {
     loader.services.set(name, fn);
     loader.serviceOwners.set(name, 'core');
   }
+
+  // 认证与网络配置服务（供 auth-guard 插件查询，owner='core'）
+  loader.services.set('core.authConfig', () => ({
+    token: process.env.VRC_MONITOR_AUTH_TOKEN || process.env.VRC_MONITOR_API_KEY || null,
+    host: process.env.VRC_MONITOR_HOST || '127.0.0.1',
+    port: parseInt(process.env.VRC_MONITOR_PORT || '8799', 10),
+  }));
+  loader.serviceOwners.set('core.authConfig', 'core');
 }
 
 // ── 启动 ──
@@ -438,13 +447,13 @@ async function main() {
 
   // 7b. 启动 MCP 服务
   const server = createServer();
-  server.listen(PORT, '127.0.0.1', () => {
-    log(`\n🚀 MCP 服务运行在 http://127.0.0.1:${PORT}/mcp\n`);
+  server.listen(PORT, HOST, () => {
+    log(`\n🚀 MCP 服务运行在 http://${HOST}:${PORT}/mcp\n`);
     log('可用工具:');
     for (const t of registry.listTools()) {
       log(`  ${t.name} — ${t.description}`);
     }
-    log(`\n健康检查: http://127.0.0.1:${PORT}/health`);
+    log(`\n健康检查: http://${HOST}:${PORT}/health`);
     log('\n按 Ctrl+C 停止\n');
   });
 }

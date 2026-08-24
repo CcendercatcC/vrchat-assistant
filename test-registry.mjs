@@ -43,6 +43,8 @@ const notifier = { notifyAuth: () => {} };
 const loader = new PluginLoader({ registry, ctx, log, notifier });
 const whitelist = ['getGroupCached','upsertGroupCache','getGroupHeat','setWorldFavorited','getWorldName','upsertWorld','getZhTranslations','getBoothItemCache','upsertBoothItem','listBoothItems','recordBoothSearch','getBoothSearches','getPlanetCache','setPlanetCache'];
 for (const n of whitelist) { if (typeof ctx.storage[n] === 'function') { const svc = 'storage.' + n; loader.services.set(svc, (...a) => ctx.storage[n](...a)); loader.serviceOwners.set(svc, 'core'); } }
+loader.services.set('core.authConfig', () => ({ token: null, host: '127.0.0.1', port: 8799 }));
+loader.serviceOwners.set('core.authConfig', 'core');
 await loader.loadAll();
 
 const safeMode = process.env.VRC_MONITOR_SAFE_MODE === 'true';
