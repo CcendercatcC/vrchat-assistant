@@ -19,7 +19,6 @@ import { RateLimiter } from './core/rate-limiter.js';
 import { VrchatApiClient } from './vrchat-api.js';
 import { WsManager } from './core/ws-manager.js';
 import { EventPipeline } from './core/event-pipeline.js';
-import { backupDatabase } from './core/backup.js';
 import { FriendStateManager } from './core/friend-state.js';
 import { createServer } from './core/http-server.js';
 import { PluginLoader } from './core/plugin-loader.js';
@@ -428,7 +427,7 @@ async function main() {
   // 7a. 数据库自动备份：启动时立即做一次 + 每 24h 一次（保留最近 2 份）
   const runAutoBackup = async () => {
     try {
-      const r = await backupDatabase(ctx.storage.db, BACKUP_DIR);
+      const r = await ctx.storage.backup(BACKUP_DIR);
       log(`💾 自动备份完成: ${r.path} (${r.size} bytes)`);
     } catch (e) {
       log(`⚠️ 自动备份失败: ${e.message}`);

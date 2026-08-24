@@ -10,6 +10,7 @@ import Database from 'better-sqlite3';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { backupDatabase } from './backup.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DDL_PATH = path.join(__dirname, 'init-db.sql');
@@ -146,6 +147,37 @@ export class Storage {
     } else {
       this.db.prepare(sql).run();
     }
+  }
+
+  // 公开薄封装（消除外部对 this.db / _query / _run 的直接耦合）
+  query(sql, params = {}) {
+    if (Object.keys(params).length > 0) {
+      return this.db.prepare(sql).all(this._normParams(params));
+    }
+    return this.db.prepare(sql).all();
+  }
+
+  run(sql, params = {}) {
+    if (params !== undefined && Object.keys(params).length > 0) {
+      return this.db.prepare(sql).run(this._normParams(params));
+    }
+    return this.db.prepare(sql).run();
+  }
+
+  get(sql, params = {}) {
+    return this.db.prepare(sql).get(this._normParams(params));
+  }
+
+  exec(sql) {
+    return this.db.exec(sql);
+  }
+
+  transaction(fn) {
+    return this.db.transaction(fn);
+  }
+
+  backup(dir) {
+    return backupDatabase(this.db, dir);
   }
 
   // ── 事件流 ──

@@ -6,7 +6,6 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { ctx, log, invalidateWatchlistCache } from '../server-context.js';
 import { isJunkWorld, worldScore, classifyWorlds, fetchFreshWorlds } from '../new-worlds.js';
-import { backupDatabase } from '../backup.js';
 
 export function handleGetDatabaseStats() {
   const { storage, friendState, eventPipeline } = ctx;
@@ -42,7 +41,7 @@ export async function handleScanNewWorlds({ days = 7, dryRun = false }) {
 
   const { fresh } = await fetchFreshWorlds(api, rateLimiter, { days, maxFetch: 200 });
 
-  const visitedRows = storage._query(
+  const visitedRows = storage.query(
     `SELECT DISTINCT world_id FROM events
      WHERE world_id IS NOT NULL AND world_id != ''
        AND (
@@ -53,7 +52,7 @@ export async function handleScanNewWorlds({ days = 7, dryRun = false }) {
   );
   const visited = new Set(visitedRows.map(r => r.world_id));
 
-  const trackedRows = storage._query('SELECT world_id FROM world_kb');
+  const trackedRows = storage.query('SELECT world_id FROM world_kb');
   const tracked = new Set(trackedRows.map(r => r.world_id));
 
   const { unvisited, visitedFresh, toAdd, alreadyTracked } = classifyWorlds(fresh, visited, tracked);
@@ -63,7 +62,7 @@ export async function handleScanNewWorlds({ days = 7, dryRun = false }) {
   const now = new Date().toISOString();
 
   if (!dryRun) {
-    const upsert = storage.db.prepare(
+    const upsertSql =
       `INSERT INTO world_kb (world_id, world_name, author_name, author_id, created_at, first_seen_at, favorites, occupants, popularity, visited, visited_at, tags, description)
        VALUES (@world_id, @world_name, @author_name, @author_id, @created_at, @first_seen_at, @favorites, @occupants, @popularity, @visited, @visited_at, @tags, @description)
        ON CONFLICT(world_id) DO UPDATE SET
@@ -75,19 +74,17 @@ export async function handleScanNewWorlds({ days = 7, dryRun = false }) {
          visited = excluded.visited,
          visited_at = excluded.visited_at,
          tags = excluded.tags,
-         description = excluded.description`
-    );
-    const markVisited = storage.db.prepare(
+         description = excluded.description`;
+    const markVisitedSql =
       `UPDATE world_kb SET
          visited = 1,
          visited_at = CASE WHEN visited = 0 THEN @visited_at ELSE visited_at END,
          backlog = 0
-       WHERE world_id = @world_id AND (visited = 0 OR backlog = 1)`
-    );
+       WHERE world_id = @world_id AND (visited = 0 OR backlog = 1)`;
 
-    const tx = storage.db.transaction(() => {
+    const tx = storage.transaction(() => {
       for (const w of toAdd) {
-        upsert.run({
+        storage.run(upsertSql, {
           world_id: w.id,
           world_name: w.name || '',
           author_name: w.authorName || '',
@@ -106,7 +103,7 @@ export async function handleScanNewWorlds({ days = 7, dryRun = false }) {
       }
       for (const w of fresh) {
         if (visited.has(w.id)) {
-          const r = markVisited.run({ world_id: w.id, visited_at: now });
+          const r = storage.run(markVisitedSql, { world_id: w.id, visited_at: now });
           if (r.changes > 0) updated++;
         }
       }
@@ -121,7 +118,7 @@ export async function handleScanNewWorlds({ days = 7, dryRun = false }) {
   const ratingRows = unvisited.length > 0
     ? (() => {
         unvisited.forEach((w, i) => { ratingParams[`w${i}`] = w.id; });
-        return storage._query(
+        return storage.query(
           `SELECT world_id, user_rating FROM world_kb WHERE world_id IN (${unvisited.map((_, i) => `$w${i}`).join(',')})`,
           ratingParams
         );
@@ -185,14 +182,14 @@ export function handleGetNewWorlds({ onlyUnvisited = false, limit = 10, sortBy =
     excludedThemes.forEach((t, i) => { whereParams[`th${i}`] = `author_tag_${t}`; });
   }
 
-  const total = storage._query(
+  const total = storage.query(
     `SELECT COUNT(*) AS cnt FROM world_kb ${where}`,
     whereParams
   )[0].cnt;
 
   // 超额取数兜底：排除后可能不足 limit，取 3 倍候选再 JS 精过滤（tags 解析）
   const fetchLimit = Math.min(limit * 3, 100);
-  const rows = storage._query(
+  const rows = storage.query(
     `SELECT world_id, world_name, author_name, created_at, first_seen_at, favorites, occupants, popularity, visited, visited_at, tags, user_rating
      FROM world_kb
      ${where}
@@ -326,7 +323,7 @@ export function handleSetNickname({ userId, nickname, displayName }) {
 
 export async function handleBackupDatabase() {
   try {
-    const result = await backupDatabase(ctx.storage.db, ctx.paths.BACKUP_DIR);
+    const result = await ctx.storage.backup(ctx.paths.BACKUP_DIR);
     log(`💾 手动备份完成: ${result.path} (${result.size} bytes)`);
     return result;
   } catch (e) {

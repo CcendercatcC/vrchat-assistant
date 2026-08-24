@@ -262,7 +262,7 @@ export async function handleGetWeeklyReport({ days = 7 }) {
 
   // 5. 群组活动（自己进过的群组房）——从 sessions 对应的事件里找 ~group(grp_/gmem_xxx)
   //    直接查 user-location 事件的 groupId
-  const myGroupRows = storage._query(
+  const myGroupRows = storage.query(
     `SELECT content_json, created_at FROM events WHERE type='user-location' AND created_at >= $s AND created_at <= $e
      AND (content_json LIKE '%~group(grp_%' OR content_json LIKE '%~group(gmem_%') ORDER BY created_at`,
     { $s: startIso, $e: endIso }

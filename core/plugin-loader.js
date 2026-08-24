@@ -245,7 +245,7 @@ export class PluginLoader {
       return `${pre}${prefix}${tableName}`;
     });
 
-    ctx.storage.db.exec(sql);
+    ctx.storage.exec(sql);
   }
 
   /** 加载单个插件 */

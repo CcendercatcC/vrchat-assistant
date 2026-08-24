@@ -33,7 +33,7 @@ function buildScoreContext() {
   // 睡觉图集合（world_kb.sleep_ok=1）+ 安静图名字判定
   const sleepWorlds = new Set();
   try {
-    const sw = ctx.storage._query('SELECT world_id FROM world_kb WHERE sleep_ok=1');
+    const sw = ctx.storage.query('SELECT world_id FROM world_kb WHERE sleep_ok=1');
     for (const r of sw) sleepWorlds.add(r.world_id);
   } catch (e) { /* 表不存在/无数据按空处理 */ }
   const QUIET_RE = /(寝|眠|睡眠|睡觉|睡|sleep|quiet|静か|静寂|calm|relax|リラックス|ゆったり|安らぎ|癒し|冥想|meditation)/i;
@@ -523,7 +523,7 @@ function computeListBaseline(top) {
 function analyzeJoinLearning() {
   const { storage } = ctx;
   const MIN_SAMPLES = 5;
-  const rows = storage._query('SELECT * FROM join_choices ORDER BY id DESC LIMIT 20');
+  const rows = storage.query('SELECT * FROM join_choices ORDER BY id DESC LIMIT 20');
   if (rows.length < MIN_SAMPLES) {
     return { enabled: false, samples: rows.length, minSamples: MIN_SAMPLES, crowd: null, familiarityMult: 1, quietBias: false, preferredCrowdRange: null, worldType: null };
   }
@@ -624,7 +624,7 @@ export async function handleRecordJoinChoice({ userId, displayName } = {}) {
   if (!hit) throw new Error(`推荐列表中没有找到「${displayName || userId}」——请先运行 recommend_join 并从中选择`);
   const rank = top.indexOf(hit) + 1;
   const baseline = lastRecommendSnapshot.baseline;
-  ctx.storage._run(
+  ctx.storage.run(
     `INSERT INTO join_choices (user_id, display_name, world_id, world_name, instance_type, instance_users, instance_capacity, fill_ratio, familiarity_score, is_quiet_world, recommend_score, rank_in_list, list_count, list_avg_users, list_avg_fill, list_quiet_ratio, world_tags)
      VALUES ($userId, $displayName, $worldId, $worldName, $instanceType, $instanceUsers, $instanceCapacity, $fillRatio, $familiarityScore, $isQuietWorld, $recommendScore, $rank, $listCount, $listAvgUsers, $listAvgFill, $listQuietRatio, $worldTags)`,
     {
@@ -652,7 +652,7 @@ export async function handleGetJoinLearning() {
     // 旧缓存可能缺 preferredCrowdRange/worldType 字段——缺则重新分析
     const cached = raw ? JSON.parse(raw) : null;
     const learning = (cached && 'preferredCrowdRange' in cached && 'worldType' in cached) ? cached : analyzeJoinLearning();
-    const count = ctx.storage._query('SELECT COUNT(*) AS c FROM join_choices')[0].c;
+    const count = ctx.storage.query('SELECT COUNT(*) AS c FROM join_choices')[0].c;
     return { choicesCount: count, learning };
   } catch (e) {
     return { error: `读取失败: ${e.message}` };

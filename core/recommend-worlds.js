@@ -189,7 +189,7 @@ export function buildAuthorProfile(ctx) {
     // 30 天窗口（issue #18 定案：按 30 天窗口切分，避免远古事件让「熟客」失真）
     const cutoff = new Date(Date.now() - 30 * 86400000).toISOString();
     const aggregate = (type) => {
-      const rows = storage._query(
+      const rows = storage.query(
         `SELECT wc.author_id AS author_id, COUNT(DISTINCT e.world_id) AS cnt, MAX(e.created_at) AS last_seen
          FROM events e
          JOIN world_cache wc ON wc.world_id = e.world_id
@@ -216,9 +216,9 @@ export function buildAuthorProfile(ctx) {
 
 /** local 源：world_kb 全量（sleep_ok 列旧库可能缺失，PRAGMA 检查回退） */
 function collectLocalCandidates(storage) {
-  const cols = storage._query(`PRAGMA table_info(world_kb)`);
+  const cols = storage.query(`PRAGMA table_info(world_kb)`);
   const hasSleepOk = cols.some(c => c.name === 'sleep_ok');
-  const rows = storage._query(
+  const rows = storage.query(
     `SELECT world_id, world_name, author_name, author_id, created_at, favorites,
             occupants, popularity, visited, visited_at, tags, description, user_rating
             ${hasSleepOk ? ', sleep_ok' : ''}
@@ -586,7 +586,7 @@ export async function recommendWorlds(ctxArg, args = {}) {
   let skippedVisited = 0;
   if (excludeVisited) {
     const visitedSet = new Set(
-      storage._query(`SELECT world_id FROM world_kb WHERE visited = 1`).map(r => r.world_id)
+      storage.query(`SELECT world_id FROM world_kb WHERE visited = 1`).map(r => r.world_id)
     );
     scored = scored.filter(c => {
       const visited = !!c.visited || (!!c.worldId && visitedSet.has(c.worldId));
@@ -595,7 +595,7 @@ export async function recommendWorlds(ctxArg, args = {}) {
     });
     // 5a. 待逛列表排除：正在待逛的世界不重复推荐（等用户逛完/移出后再推）
     const backlogSet = new Set(
-      storage._query(`SELECT world_id FROM world_kb WHERE backlog = 1 AND visited = 0`).map(r => r.world_id)
+      storage.query(`SELECT world_id FROM world_kb WHERE backlog = 1 AND visited = 0`).map(r => r.world_id)
     );
     if (backlogSet.size > 0) {
       scored = scored.filter(c => !(c.worldId && backlogSet.has(c.worldId)));

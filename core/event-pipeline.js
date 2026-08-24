@@ -148,13 +148,14 @@ export class EventPipeline {
     // 首次访问（visited=0）置 visited=1 并刷新 visited_at；再次访问保留原 visited_at，仅清 backlog。
     if (worldId) {
       try {
-        this.storage.db.prepare(
+        this.storage.run(
           `UPDATE world_kb SET
              visited = 1,
              visited_at = CASE WHEN visited = 0 THEN @visited_at ELSE visited_at END,
              backlog = 0
-           WHERE world_id = @world_id AND (visited = 0 OR backlog = 1)`
-        ).run({ world_id: worldId, visited_at: event.receivedAt || new Date().toISOString() });
+           WHERE world_id = @world_id AND (visited = 0 OR backlog = 1)`,
+          { world_id: worldId, visited_at: event.receivedAt || new Date().toISOString() }
+        );
       } catch {
         // world_kb 表缺失（旧库）时静默跳过，不影响事件管道
       }

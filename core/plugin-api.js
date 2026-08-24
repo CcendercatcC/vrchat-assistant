@@ -106,9 +106,17 @@ function buildDbNamespace({ pluginName, prefix, ctx }) {
     if (typeof sql !== 'string') throw new Error('SQL 必须是字符串');
     let rewritten = rewrite(sql);
     validatePrefixes(rewritten);
-    const stmt = ctx.storage.db.prepare(rewritten);
-    if (params !== undefined) return stmt[method](params);
-    return stmt[method]();
+    if (method === 'run') {
+      if (params !== undefined) return ctx.storage.run(rewritten, params);
+      return ctx.storage.run(rewritten);
+    }
+    if (method === 'get') {
+      if (params !== undefined) return ctx.storage.get(rewritten, params);
+      return ctx.storage.get(rewritten);
+    }
+    // method === 'all'
+    if (params !== undefined) return ctx.storage.query(rewritten, params);
+    return ctx.storage.query(rewritten);
   }
 
   function createHandle(alias) {
@@ -126,10 +134,10 @@ function buildDbNamespace({ pluginName, prefix, ctx }) {
         if (typeof sql !== 'string') throw new Error('SQL 必须是字符串');
         let rewritten = rewrite(sql);
         validatePrefixes(rewritten);
-        return ctx.storage.db.exec(rewritten);
+        return ctx.storage.exec(rewritten);
       },
       transaction(fn) {
-        return ctx.storage.db.transaction(() => fn(createHandle(alias)))();
+        return ctx.storage.transaction(() => fn(createHandle(alias)))();
       },
     };
   }
@@ -146,7 +154,7 @@ function buildDbNamespace({ pluginName, prefix, ctx }) {
       if (typeof sql !== 'string') throw new Error('SQL 必须是字符串');
       let rewritten = rewrite(sql);
       validatePrefixes(rewritten);
-      return ctx.storage.db.exec(rewritten);
+      return ctx.storage.exec(rewritten);
     },
   };
 }
