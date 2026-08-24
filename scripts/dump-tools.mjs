@@ -3,7 +3,7 @@
  * dump-tools.mjs — 加载全部插件后，把 registry.listTools() 的工具名输出到 stdout（每行一个）。
  *
  * 供 scripts/check-doc-drift.py 等作为权威工具清单来源使用（插件化后工具分布在 core + 官方插件，
- * 需启动 PluginLoader 才能拿到完整 91 个工具名）。无凭据、无副作用，用临时 SQLite。
+ * 需启动 PluginLoader 才能拿到完整 92 个工具名）。无凭据、无副作用，用临时 SQLite。
  */
 import { readFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
