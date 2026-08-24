@@ -40,6 +40,16 @@ export default function register(api) {
     return { userId: targetId, count: groups.length, groups };
   }
 
+  async function resolveUserName(userId) {
+    if (!userId) return null;
+    try {
+      const u = await api.vrchat.fetch(`/users/${userId}`);
+      return (u && u.displayName) || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
   async function handleGetGroupInfo({ groupId, includeAnnouncement }) {
     if (!groupId) throw new Error('groupId is required');
     const d = await api.vrchat.fetch(`/groups/${groupId}`);
@@ -60,8 +70,9 @@ export default function register(api) {
         if (a && typeof a === 'object' && a.text) {
           result.announcement = {
             id: a.id, title: a.title, text: a.text,
-            authorId: a.authorId, createdAt: a.createdAt,
-            updatedAt: a.updatedAt, visibility: a.visibility,
+            authorId: a.authorId, authorName: await resolveUserName(a.authorId),
+            createdAt: a.createdAt, updatedAt: a.updatedAt,
+            visibility: a.visibility,
           };
         } else {
           result.announcement = null;
@@ -103,6 +114,7 @@ export default function register(api) {
           title: d.title,
           text: d.text,
           authorId: d.authorId,
+          authorName: await resolveUserName(d.authorId),
           createdAt: d.createdAt,
           updatedAt: d.updatedAt,
           visibility: d.visibility,
@@ -186,8 +198,9 @@ export default function register(api) {
       if (a && typeof a === 'object' && a.text) {
         announcement = {
           id: a.id, title: a.title, text: a.text,
-          authorId: a.authorId, createdAt: a.createdAt,
-          updatedAt: a.updatedAt, visibility: a.visibility,
+          authorId: a.authorId, authorName: await resolveUserName(a.authorId),
+          createdAt: a.createdAt, updatedAt: a.updatedAt,
+          visibility: a.visibility,
         };
       }
       return { groupId, joinState, peekable: true, joinedNow, announcement };
