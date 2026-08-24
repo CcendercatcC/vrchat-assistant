@@ -35,6 +35,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # 仓库根�
 NUMERIC_RESIDUE_TARGETS = [
     "README.md", "README.en.md", "README.ja.md", "AGENTS.md", "ARCHITECTURE.md",
     "core/", "skills/", "start-monitor.js", "hermes-plugin/",
+    "plugins/", "docs/",
 ]
 # 数字残留正则：覆盖 skill 中的几种写法
 NUMERIC_RE = re.compile(
@@ -91,6 +92,9 @@ def scan_numeric_residue():
         full = os.path.join(REPO, target)
         if os.path.isdir(full):
             for root, _dirs, files in os.walk(full):
+                # 跳过 docs/history/ —— 历史演进记录含"发布当日"合法数字（点时间快照），非当前态漂移
+                _dirs[:] = [d for d in _dirs if not os.path.relpath(os.path.join(root, d), REPO)
+                            .replace("\\", "/").startswith("docs/history")]
                 for fn in files:
                     if not fn.endswith((".md", ".js", ".py", ".yaml", ".yml", ".json")):
                         continue

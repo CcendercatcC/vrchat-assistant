@@ -2,7 +2,7 @@
  * test-registry.mjs — registry 完整性无凭据测试（PR-2 插件化版，自包含，供 CI 使用）
  *
  * 启动 PluginLoader 加载全部插件后校验：
- *   1. listTools() 数量 = 91（core + 官方插件，逐字节 = core/tool-order.json 全量 + 定义合法）
+ *   1. listTools() 数量 = 92（core + 官方插件，逐字节 = core/tool-order.json 全量 + 定义合法）
  *   2. 工具名唯一
  *   3. 每个工具定义合法（name/description/inputSchema/handler）
  *   4. listTools() 返回顺序与 core/tool-order.json 完全一致
