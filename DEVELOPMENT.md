@@ -87,9 +87,15 @@ PR 由 AI Agent 编写提交（人类只提出需求、不直接编码）。以�
 
 - 端口、绑定地址、数据目录、Node 路径等运行参数应可通过环境变量覆盖。
 - 现状：端口（`start-monitor.js` 中硬编码 8799）与绑定地址（127.0.0.1）是已知限制，改造方向是环境变量可配置；已有 `VRC_MONITOR_DIR` / `VRC_MONITOR_NODE` 支持。**新增参数直接做成环境变量可配置，不要新增硬编码。**
-- X 博主抓取相关（`core/fetch-x-worlds.js`，双数据源降级）：
+- X 博主抓取相关（`core/fetch-x-worlds.js`，三通道降级）：
   - `VRC_MONITOR_X_SEARCH_QUERY_ID`：X SearchTimeline GraphQL 的 queryId（默认 `hyPfJYJ_XAtDYoslQc-Rgg`）。X 会不定期轮换 queryId 导致 SearchTimeline 兜底失效，更新方法：从 x.com 访问页面的 JS bundle，或社区维护文档（如 github.com/fa0311/TwitterInternalAPIDocument 的 `docs/json/API.json`，搜 `SearchTimeline` 的 `queryId`）查询最新值后覆盖，无需改代码。
   - `VRC_MONITOR_X_MIN_TWEETS`：Nitter RSS 返回推文数低于该值时，尝试用 X SearchTimeline 补充并合并去重（默认 0 = 仅当 Nitter 完全失败才降级；设 >0 让高频博主「Nitter 只回 ~20 条覆盖不全」时也触发补充，缓解漏抓）。
+  - `VRC_MONITOR_X_PLAYWRIGHT`：Playwright 浏览器抓取开关。默认开启（`1`/`true`/空），设为 `0` 时禁用浏览器通道，直接走 Nitter RSS → SearchTimeline 链。
+  - `VRC_MONITOR_X_PLAYWRIGHT_INSTANCES`：浏览器抓取入口实例列表，逗号分隔（默认 `https://nitter.tiekoetter.com`）。可配置多个 Nitter 实例作为回退。
+  - `VRC_MONITOR_X_PLAYWRIGHT_CHANNEL`：Playwright 浏览器通道（默认 `msedge`）。可选 `msedge`、`chrome`、`chromium`，需已安装对应浏览器且 Playwright 已 `npx playwright install`。
+  - `VRC_MONITOR_X_PLAYWRIGHT_TIMEOUT_MS`：浏览器 goto / waitForSelector 超时（默认 45000 ms）。
+  - **浏览器抓取现在作为 `x_scan_creators` / `x_world_digest` 的默认主通道**（Nitter RSS / SearchTimeline 2026 已失效，保留作降级）。
+  - **注意**：Anubis 会拦截无头浏览器，浏览器抓取必须有头（`headless:false`，默认离屏+最小化，窗口置于 `-2400,-2400`）；服务跑在无头 Linux 服务器 / 容器时需要 `xvfb-run` 等提供虚拟显示（该路径待验证）。
 
 ### 3.5 网络环境差异
 

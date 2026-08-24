@@ -65,6 +65,37 @@ const X_GUEST_TOKEN_TTL_MS = 3 * 3600 * 1000; // guest token 缓存 3 小时
 let _xGuestToken = null;
 let _xGuestTokenAt = 0;
 
+// ── Playwright 浏览器抓取（主通道，2026 Nitter RSS / SearchTimeline 均已失效）──
+// Anubis/Cloudflare 反爬拦截裸 HTTP 客户端，必须有头浏览器才能通过（无头被硬拒绝）。
+let _pw = null, _pwErr = null; // 懒加载缓存
+
+/**
+ * 懒读取 Playwright 浏览器抓取配置。
+ * 由于 start-monitor.js 在 import 本模块之后才加载 .env，模块顶层 const 会导致
+ * .env 里的变量失效，因此改为运行时每次读取 process.env。
+ */
+function getXPlaywrightConfig() {
+  const env = process.env;
+  return {
+    enabled: env.VRC_MONITOR_X_PLAYWRIGHT !== '0',
+    channel: env.VRC_MONITOR_X_PLAYWRIGHT_CHANNEL || 'auto', // auto|msedge|chrome|chromium
+    instances: (env.VRC_MONITOR_X_PLAYWRIGHT_INSTANCES || 'https://nitter.tiekoetter.com')
+      .split(',').map(s => s.trim()).filter(Boolean),
+    timeoutMs: parseInt(env.VRC_MONITOR_X_PLAYWRIGHT_TIMEOUT_MS, 10) || 45000,
+    stateFile: env.VRC_MONITOR_X_PLAYWRIGHT_STATE_FILE || '', // 可选：storageState 持久化路径
+  };
+}
+
+async function getPlaywright() {
+  if (_pw) return _pw;
+  if (_pwErr) throw _pwErr;
+  try { _pw = await import('playwright'); return _pw; }
+  catch (e) {
+    _pwErr = new Error(`Playwright 未安装或不可用：${e.message}。请 npm i playwright && npx playwright install chromium`);
+    throw _pwErr;
+  }
+}
+
 /**
  * 代理解析：默认【直连】（不设代理）。
  * 仅当显式设置 VRC_MONITOR_HTTP_PROXY / HTTPS_PROXY / HTTP_PROXY 时才走代理，
@@ -74,6 +105,36 @@ function resolveProxy() {
   const env = process.env;
   return env.VRC_MONITOR_HTTP_PROXY || env.HTTPS_PROXY || env.https_proxy
     || env.HTTP_PROXY || env.http_proxy || '';
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+let _detectedChannel = null; // 缓存已探测成功的通道，避免每次 launch 探测浪费
+
+/**
+ * 自动探测可用的 Playwright 浏览器通道。
+ * .env 显式指定 channel 时优先用它，失败再按 msedge → chrome → chromium 回退探测。
+ * 探测结果缓存到模块级变量，后续调用直接复用（同一进程内不重复 launch）。
+ */
+async function detectChannel(pw, requestedChannel, launchArgs) {
+  if (_detectedChannel) return _detectedChannel;
+  const preferred = requestedChannel && requestedChannel !== 'auto' ? [requestedChannel] : [];
+  const candidates = [...preferred, 'msedge', 'chrome', 'chromium'];
+  const tried = new Set();
+  for (const channel of candidates) {
+    if (tried.has(channel)) continue;
+    tried.add(channel);
+    try {
+      const browser = await pw.chromium.launch({ channel, headless: false, args: launchArgs });
+      await browser.close();
+      log(`x-world Playwright channel detected: ${channel}`);
+      _detectedChannel = channel;
+      return channel;
+    } catch (e) {
+      log(`x-world Playwright channel ${channel} unavailable: ${e.message.slice(0, 80)}`);
+    }
+  }
+  throw new Error('Playwright 无可用浏览器通道（msedge/chrome/chromium 均不可启动）');
 }
 
 /**
@@ -332,6 +393,172 @@ function findBottomCursor(obj) {
     }
   }
   return null;
+}
+
+// ── Playwright 浏览器抓取（有头，绕过 Anubis/Cloudflare）──
+
+/** 从推文容器内的 <a href> 中提取世界链接（innerText 不含 href，需单独抽取） */
+export function extractWorldIdsFromLinks(links) {
+  const ids = new Set();
+  for (const link of links || []) {
+    let m;
+    if ((m = link.match(/vrchat\.com\/home\/world\/(wrld_[0-9a-f-]+)/i))) {
+      const raw = m[1];
+      const hex = raw.slice(5).replace(/-/g, '');
+      if (/^[0-9a-f]{32}$/i.test(hex)) ids.add(raw);
+    } else if ((m = link.match(/vrchat\.com\/home\/launch\?[^]*worldId=(wrld_[0-9a-f-]+)/i))) {
+      const raw = m[1];
+      const hex = raw.slice(5).replace(/-/g, '');
+      if (/^[0-9a-f]{32}$/i.test(hex)) ids.add(raw);
+    }
+  }
+  return [...ids];
+}
+
+export function buildTweetFromBrowserItem({ text, url, time, links }) {
+  const parsed = extractWorldsFromTweetText(text);
+  // 合并文本提取 + 链接 href 提取的世界 ID（.tweet-content innerText 不含 <a> href）
+  const worldIds = [...new Set([...parsed.worldIds, ...extractWorldIdsFromLinks(links)])];
+  // 归一化 URL：去掉 #m 锚点
+  let normalized = url || '';
+  if (normalized.includes('#m')) {
+    normalized = normalized.split('#m')[0];
+  }
+  // 从 /status/{id} 提取 tweet id
+  let id = '';
+  const m = normalized.match(/\/status\/(\d+)/);
+  if (m) id = m[1];
+  return {
+    id,
+    url: normalized,
+    time: time || null,
+    text,
+    worldIds,
+    worldNames: parsed.worldNames,
+    authorName: parsed.authorName,
+  };
+}
+
+export async function fetchCreatorViaBrowser(screenName) {
+  const pw = await getPlaywright();
+  const proxy = resolveProxy();
+  const cfg = getXPlaywrightConfig();
+  const timeoutMs = cfg.timeoutMs;
+  const stateFile = cfg.stateFile;
+  const errors = [];
+  for (const base of cfg.instances) {
+    let browser = null;
+    const url = `${base}/${encodeURIComponent(screenName)}`;
+    try {
+      const args = [
+        '--no-sandbox',
+        '--mute-audio',
+        '--disable-infobars',
+        '--window-position=-2400,-2400',
+        '--window-size=1280,900',
+      ];
+      if (proxy) args.push(`--proxy-server=${proxy}`);
+
+      const channel = await detectChannel(pw, cfg.channel, args);
+      browser = await pw.chromium.launch({
+        channel,
+        headless: false,
+        args,
+      });
+
+      // 复用已通过 Anubis 验证的 cookie，减少重复挑战
+      const contextOptions = {};
+      if (stateFile) {
+        try {
+          const fs = await import('node:fs/promises');
+          await fs.access(stateFile);
+          contextOptions.storageState = stateFile;
+        } catch { /* 状态文件不存在时忽略，走全新上下文 */ }
+      }
+      const page = await browser.newPage(contextOptions);
+
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
+
+      // 轮询等待推文内容（Anubis 挑战页会自动跳转，需跨导航等待）
+      const challengeRe = /anubis|不是机器人|not a bot|checkpoint|confirming|just a moment/i;
+      let challengeSeen = 0;
+      let lastChallenge = false;
+      const startAt = Date.now();
+      let contentFound = false;
+      while (Date.now() - startAt < timeoutMs) {
+        let bodyText = '';
+        try { bodyText = await page.locator('body').innerText(); }
+        catch { /* 导航中 context 被销毁，忽略 */ }
+        const isChallenge = challengeRe.test(bodyText);
+        if (isChallenge) {
+          challengeSeen++;
+          lastChallenge = true;
+          if (challengeSeen > 3) {
+            // 触发重新挑战
+            await page.reload({ waitUntil: 'domcontentloaded', timeout: timeoutMs }).catch(() => {});
+            challengeSeen = 0;
+          } else {
+            await sleep(1000);
+          }
+          continue;
+        }
+        lastChallenge = false;
+        let tweetCount = 0;
+        try { tweetCount = await page.locator('.tweet-content').count(); }
+        catch { /* 导航中，下一轮再试 */ }
+        if (tweetCount > 0) {
+          contentFound = true;
+          break;
+        }
+        await sleep(1000);
+      }
+      if (!contentFound) {
+        throw new Error(`轮询等待推文超时（${timeoutMs}ms），最后${lastChallenge ? '检测到挑战页' : '未检测到 .tweet-content'}`);
+      }
+
+      // 成功后持久化 storageState，供下次扫描复用
+      if (stateFile) {
+        try { await page.context().storageState({ path: stateFile }); }
+        catch (e) { log(`x-world storageState 保存失败：${e.message}`); }
+      }
+
+      const rawTweets = await page.evaluate(() => {
+        const items = [];
+        const contentEls = document.querySelectorAll('.tweet-content');
+        for (const el of contentEls) {
+          const text = el.innerText || '';
+          // 优先 a.tweet-link，其次包含 /status/ 的链接
+          let link = el.closest('.timeline-item')?.querySelector('a.tweet-link')?.href || '';
+          if (!link) {
+            const statusLink = el.closest('.timeline-item')?.querySelector('a[href*="/status/"]')?.href || '';
+            link = statusLink;
+          }
+          let time = null;
+          const dateEl = el.closest('.timeline-item')?.querySelector('.tweet-date a[title]');
+          if (dateEl) time = dateEl.getAttribute('title') || null;
+          // 抽取该推文容器内的 vrchat 链接（世界链接在 <a href>，innerText 不含）
+          const links = Array.from((el.closest('.timeline-item')?.querySelectorAll('a') || []))
+            .map(a => a.href).filter(h => h && /vrchat\.com\//.test(h));
+          items.push({ text, url: link, time, links });
+        }
+        return items;
+      });
+      await browser.close();
+      browser = null;
+      const tweets = rawTweets.map(t => buildTweetFromBrowserItem(t));
+      if (tweets.length > 0) return tweets;
+      errors.push(`${base} → 页面无推文`);
+    } catch (e) {
+      errors.push(`${base} → ${e.message || e.code || '未知错误'}`);
+      if (browser) { await browser.close().catch(() => {}); browser = null; }
+    } finally {
+      if (browser) { await browser.close().catch(() => {}); }
+    }
+  }
+  const err = new Error(`浏览器抓取全部失败（@${screenName}）：${errors.join('；')}`);
+  err.code = 'X_BROWSER_UNREACHABLE';
+  err.details = errors;
+  throw err;
 }
 
 // ── 博主清单 ──────────────────────────────────────────────
@@ -652,18 +879,29 @@ function mapWorld(w) {
 // ── 扫描主流程 ─────────────────────────────────────────────
 
 /**
- * 统一抓取入口：先 Nitter RSS（主源），失败/空/数据不足回退 X SearchTimeline（兜底）。
- * 返回 { tweets, source }，source ∈ 'nitter' | 'search_timeline' | 'nitter+search_timeline'。
+ * 统一抓取入口：先 Playwright 浏览器（主源），失败回退 Nitter RSS → X SearchTimeline（兜底）。
+ * 返回 { tweets, source }，source ∈ 'browser' | 'nitter' | 'search_timeline' | 'nitter+search_timeline'。
  *
  * 降级语义（明确）：
+ *  - fetchCreatorViaBrowser 用有头浏览器绕过 Anubis/Cloudflare，失败时 log 警告并回退 HTTP 通道。
  *  - fetchCreatorRss 内部已把「空 RSS / 0 条推文」视为该实例失败（continue 下一个），
  *    全部实例失败时抛 NITTER_UNREACHABLE → 触发 SearchTimeline 回退（"空数组算失败"已覆盖）。
  *  - 若 Nitter 返回非空但推文数 < minTweets（高频博主 Nitter RSS 仅 ~20 条可能覆盖不全 3 天窗口），
  *    也尝试 SearchTimeline 补充并合并去重（minTweets 默认 0 = 仅失败才回退，保持向后兼容；
  *    可通过 env VRC_MONITOR_X_MIN_TWEETS 配置为 >0，让"数据不足"也触发补充）。
- *  - 双源均失败/均空时抛 X_FETCH_ALL_FAILED（含诊断、可读错误提示）。
+ *  - 三通道均失败/均空时抛 X_FETCH_ALL_FAILED（含诊断、可读错误提示）。
  */
 export async function fetchCreatorTweets(screenName, { minTweets = 0 } = {}) {
+  const xCfg = getXPlaywrightConfig();
+  if (xCfg.enabled) {
+    try {
+      const tweets = await fetchCreatorViaBrowser(screenName);
+      return { tweets, source: 'browser' };
+    } catch (e) {
+      log(`⚠️ x-world @${screenName} 浏览器抓取失败，回退 HTTP 通道：${e.message}`);
+      // 落到下方原 Nitter RSS → SearchTimeline 链
+    }
+  }
   const minTweetsEffective = parseInt(process.env.VRC_MONITOR_X_MIN_TWEETS, 10) || minTweets || 0;
   let tweets = [];
   let source = '';
@@ -689,13 +927,13 @@ export async function fetchCreatorTweets(screenName, { minTweets = 0 } = {}) {
       tweets = await fetchCreatorViaSearchTimeline(screenName);
       source = 'search_timeline';
     } catch (e2) {
-      const err = new Error(`@${screenName} 双数据源均失败（Nitter + X SearchTimeline）：${e2.message}。建议检查网络或设置 HTTPS_PROXY。`);
+      const err = new Error(`@${screenName} Nitter / X SearchTimeline / 浏览器抓取均不可用（2026 上游反向爬 + 网络受限），该通道当前无法获取新推荐。`);
       err.code = 'X_FETCH_ALL_FAILED';
       throw err;
     }
   }
   if (tweets.length === 0) {
-    const err = new Error(`@${screenName} 双数据源均未返回推文。建议检查网络或设置 HTTPS_PROXY。`);
+    const err = new Error(`@${screenName} Nitter / X SearchTimeline / 浏览器抓取均未返回推文（2026 上游反向爬 + 网络受限），该通道当前无法获取新推荐。`);
     err.code = 'X_FETCH_ALL_FAILED';
     throw err;
   }
@@ -761,9 +999,9 @@ export async function scanCreatorWorlds({ force = false } = {}) {
       results.push({ screen_name: screen, name: creator.name || screen, tweets: tweets.length, worlds: saved });
     } catch (e) {
       log(`❌ x-world scan @${screen}: ${e.message}`);
-      // 结构化错误：双源均失败 → 用户可读的降级提示
+      // 结构化错误：三通道均失败 → 用户可读的降级提示
       const errorInfo = e.code === 'X_FETCH_ALL_FAILED'
-        ? `Nitter 与 X SearchTimeline 双数据源均不可达（网络受限/需代理）。请在服务环境设置 HTTPS_PROXY 或 VRC_MONITOR_HTTP_PROXY 后重试。`
+        ? `Nitter / X SearchTimeline / 浏览器抓取均不可用（2026 上游反向爬 + 网络受限），该通道当前无法获取新推荐。`
         : e.message;
       results.push({ screen_name: screen, name: creator.name || screen, tweets: 0, worlds: 0, error: errorInfo });
     }
