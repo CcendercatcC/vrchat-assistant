@@ -142,11 +142,18 @@ export class EventPipeline {
     // 逛过的世界同步标记 world_kb.visited（2026-08-12 修复）：
     // 之前 visited 只在 scan_new_worlds 时更新，用户逛过但没再扫描的世界会一直标"未逛"，
     // 导致 get_new_worlds(onlyUnvisited) 把已逛的世界当新世界推荐。此处事件驱动回写，逛完即标记。
+    // 同时清 backlog（2026-08-24 修复）：add_to_backlog 描述称「location 事件自动清除」，实际
+    // 仅靠 pending 视图过滤（WHERE visited=0），backlog 标志从不归零，导致"已逛但仍标待逛"残留。
+    // 此处只要世界在待逛列表（backlog=1）就清 backlog=0（含"已逛过、再加回待逛、再次访问"的场景）：
+    // 首次访问（visited=0）置 visited=1 并刷新 visited_at；再次访问保留原 visited_at，仅清 backlog。
     if (worldId) {
       try {
         this.storage.db.prepare(
-          `UPDATE world_kb SET visited = 1, visited_at = @visited_at
-           WHERE world_id = @world_id AND visited = 0`
+          `UPDATE world_kb SET
+             visited = 1,
+             visited_at = CASE WHEN visited = 0 THEN @visited_at ELSE visited_at END,
+             backlog = 0
+           WHERE world_id = @world_id AND (visited = 0 OR backlog = 1)`
         ).run({ world_id: worldId, visited_at: event.receivedAt || new Date().toISOString() });
       } catch {
         // world_kb 表缺失（旧库）时静默跳过，不影响事件管道
