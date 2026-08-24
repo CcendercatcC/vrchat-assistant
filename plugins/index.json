@@ -14,6 +14,7 @@
     "updated": "2026-08-23"
   },
   "plugins": [
+    { "name": "auth-guard", "git": "", "description": "HTTP 访问鉴权与公网安全防护插件（Token 保护/状态查询）", "maintainer": "psenY" },
     { "name": "booth", "git": "", "description": "BOOTH 素材搜索/历史（booth.pm）", "maintainer": "ggg123124（核心维护者·占位）" },
     { "name": "favorites", "git": "", "description": "VRChat 云端收藏夹：好友/世界分组与收藏", "maintainer": "ggg123124（核心维护者·占位）" },
     { "name": "groups", "git": "", "description": "VRChat 群组：查询/加入/离开/公告/热度", "maintainer": "ggg123124（核心维护者·占位）" },
