@@ -67,12 +67,24 @@ let _xGuestTokenAt = 0;
 
 // ── Playwright 浏览器抓取（主通道，2026 Nitter RSS / SearchTimeline 均已失效）──
 // Anubis/Cloudflare 反爬拦截裸 HTTP 客户端，必须有头浏览器才能通过（无头被硬拒绝）。
-const X_PLAYWRIGHT_ENABLED = process.env.VRC_MONITOR_X_PLAYWRIGHT !== '0'; // 默认开
-const X_PLAYWRIGHT_INSTANCES = (process.env.VRC_MONITOR_X_PLAYWRIGHT_INSTANCES || 'https://nitter.tiekoetter.com')
-  .split(',').map(s => s.trim()).filter(Boolean);
-const X_PLAYWRIGHT_CHANNEL = process.env.VRC_MONITOR_X_PLAYWRIGHT_CHANNEL || 'msedge'; // msedge | chrome | chromium
-const X_PLAYWRIGHT_TIMEOUT_MS = parseInt(process.env.VRC_MONITOR_X_PLAYWRIGHT_TIMEOUT_MS, 10) || 45000;
 let _pw = null, _pwErr = null; // 懒加载缓存
+
+/**
+ * 懒读取 Playwright 浏览器抓取配置。
+ * 由于 start-monitor.js 在 import 本模块之后才加载 .env，模块顶层 const 会导致
+ * .env 里的变量失效，因此改为运行时每次读取 process.env。
+ */
+function getXPlaywrightConfig() {
+  const env = process.env;
+  return {
+    enabled: env.VRC_MONITOR_X_PLAYWRIGHT !== '0',
+    channel: env.VRC_MONITOR_X_PLAYWRIGHT_CHANNEL || 'auto', // auto|msedge|chrome|chromium
+    instances: (env.VRC_MONITOR_X_PLAYWRIGHT_INSTANCES || 'https://nitter.tiekoetter.com')
+      .split(',').map(s => s.trim()).filter(Boolean),
+    timeoutMs: parseInt(env.VRC_MONITOR_X_PLAYWRIGHT_TIMEOUT_MS, 10) || 45000,
+    stateFile: env.VRC_MONITOR_X_PLAYWRIGHT_STATE_FILE || '', // 可选：storageState 持久化路径
+  };
+}
 
 async function getPlaywright() {
   if (_pw) return _pw;
@@ -93,6 +105,36 @@ function resolveProxy() {
   const env = process.env;
   return env.VRC_MONITOR_HTTP_PROXY || env.HTTPS_PROXY || env.https_proxy
     || env.HTTP_PROXY || env.http_proxy || '';
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+let _detectedChannel = null; // 缓存已探测成功的通道，避免每次 launch 探测浪费
+
+/**
+ * 自动探测可用的 Playwright 浏览器通道。
+ * .env 显式指定 channel 时优先用它，失败再按 msedge → chrome → chromium 回退探测。
+ * 探测结果缓存到模块级变量，后续调用直接复用（同一进程内不重复 launch）。
+ */
+async function detectChannel(pw, requestedChannel, launchArgs) {
+  if (_detectedChannel) return _detectedChannel;
+  const preferred = requestedChannel && requestedChannel !== 'auto' ? [requestedChannel] : [];
+  const candidates = [...preferred, 'msedge', 'chrome', 'chromium'];
+  const tried = new Set();
+  for (const channel of candidates) {
+    if (tried.has(channel)) continue;
+    tried.add(channel);
+    try {
+      const browser = await pw.chromium.launch({ channel, headless: false, args: launchArgs });
+      await browser.close();
+      log(`x-world Playwright channel detected: ${channel}`);
+      _detectedChannel = channel;
+      return channel;
+    } catch (e) {
+      log(`x-world Playwright channel ${channel} unavailable: ${e.message.slice(0, 80)}`);
+    }
+  }
+  throw new Error('Playwright 无可用浏览器通道（msedge/chrome/chromium 均不可启动）');
 }
 
 /**
@@ -400,8 +442,11 @@ export function buildTweetFromBrowserItem({ text, url, time, links }) {
 export async function fetchCreatorViaBrowser(screenName) {
   const pw = await getPlaywright();
   const proxy = resolveProxy();
+  const cfg = getXPlaywrightConfig();
+  const timeoutMs = cfg.timeoutMs;
+  const stateFile = cfg.stateFile;
   const errors = [];
-  for (const base of X_PLAYWRIGHT_INSTANCES) {
+  for (const base of cfg.instances) {
     let browser = null;
     const url = `${base}/${encodeURIComponent(screenName)}`;
     try {
@@ -413,14 +458,70 @@ export async function fetchCreatorViaBrowser(screenName) {
         '--window-size=1280,900',
       ];
       if (proxy) args.push(`--proxy-server=${proxy}`);
+
+      const channel = await detectChannel(pw, cfg.channel, args);
       browser = await pw.chromium.launch({
-        channel: X_PLAYWRIGHT_CHANNEL,
+        channel,
         headless: false,
         args,
       });
-      const page = await browser.newPage();
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: X_PLAYWRIGHT_TIMEOUT_MS });
-      await page.waitForSelector('.tweet-content', { timeout: X_PLAYWRIGHT_TIMEOUT_MS });
+
+      // 复用已通过 Anubis 验证的 cookie，减少重复挑战
+      const contextOptions = {};
+      if (stateFile) {
+        try {
+          const fs = await import('node:fs/promises');
+          await fs.access(stateFile);
+          contextOptions.storageState = stateFile;
+        } catch { /* 状态文件不存在时忽略，走全新上下文 */ }
+      }
+      const page = await browser.newPage(contextOptions);
+
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
+
+      // 轮询等待推文内容（Anubis 挑战页会自动跳转，需跨导航等待）
+      const challengeRe = /anubis|不是机器人|not a bot|checkpoint|confirming|just a moment/i;
+      let challengeSeen = 0;
+      let lastChallenge = false;
+      const startAt = Date.now();
+      let contentFound = false;
+      while (Date.now() - startAt < timeoutMs) {
+        let bodyText = '';
+        try { bodyText = await page.locator('body').innerText(); }
+        catch { /* 导航中 context 被销毁，忽略 */ }
+        const isChallenge = challengeRe.test(bodyText);
+        if (isChallenge) {
+          challengeSeen++;
+          lastChallenge = true;
+          if (challengeSeen > 3) {
+            // 触发重新挑战
+            await page.reload({ waitUntil: 'domcontentloaded', timeout: timeoutMs }).catch(() => {});
+            challengeSeen = 0;
+          } else {
+            await sleep(1000);
+          }
+          continue;
+        }
+        lastChallenge = false;
+        let tweetCount = 0;
+        try { tweetCount = await page.locator('.tweet-content').count(); }
+        catch { /* 导航中，下一轮再试 */ }
+        if (tweetCount > 0) {
+          contentFound = true;
+          break;
+        }
+        await sleep(1000);
+      }
+      if (!contentFound) {
+        throw new Error(`轮询等待推文超时（${timeoutMs}ms），最后${lastChallenge ? '检测到挑战页' : '未检测到 .tweet-content'}`);
+      }
+
+      // 成功后持久化 storageState，供下次扫描复用
+      if (stateFile) {
+        try { await page.context().storageState({ path: stateFile }); }
+        catch (e) { log(`x-world storageState 保存失败：${e.message}`); }
+      }
+
       const rawTweets = await page.evaluate(() => {
         const items = [];
         const contentEls = document.querySelectorAll('.tweet-content');
@@ -791,7 +892,8 @@ function mapWorld(w) {
  *  - 三通道均失败/均空时抛 X_FETCH_ALL_FAILED（含诊断、可读错误提示）。
  */
 export async function fetchCreatorTweets(screenName, { minTweets = 0 } = {}) {
-  if (X_PLAYWRIGHT_ENABLED) {
+  const xCfg = getXPlaywrightConfig();
+  if (xCfg.enabled) {
     try {
       const tweets = await fetchCreatorViaBrowser(screenName);
       return { tweets, source: 'browser' };
