@@ -56,6 +56,7 @@ metadata:
 | `remove_from_backlog` | **移出待逛列表**：worldId 必填。只清 backlog 标记（保留行/世界知识），幂等 |
 | `recommend_worlds` | **多源融合世界推荐**：local 新世界池 × PlanetVRC × 官方主题搜索 × 用户反馈，评分（热度+新鲜度+主题+作者画像 30 天窗口熟客）+ 可解释 reasons；theme/excludeTheme/sources/excludeVisited 参数 |
 | `favorite_world` | **云端收藏**：加入 VRChat 收藏夹分组（worlds0-4，默认 worlds0），写操作需确认，成功后本地 favorited=1 供推荐加权 |
+| `unfavorite_world` | **移除世界收藏**：DELETE /favorites/{记录id}（先查记录 id 再删，可逆）。worldId 必填；tag 可选（省略=从全部所在分组移除）。写操作，confirm: true 才执行 |
 | `get_nicknames` / `set_nickname` | 好友昵称映射（查询/写入，本地库） |
 | `get_mutual_friends` | 共同好友列表：你与目标用户（userId 或 displayName 精确匹配）的共同好友，自动带本地昵称 |
 | `get_watchlist` / `add_to_watchlist` / `remove_from_watchlist` | 关注名单 |
