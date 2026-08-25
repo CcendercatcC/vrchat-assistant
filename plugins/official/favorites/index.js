@@ -160,7 +160,7 @@ export default function register(api) {
         zhMap = await api.consume('storage.getZhTranslations', ids);
       } catch { /* 表不存在则跳过 */ }
 
-      const worlds = favs.map(f => {
+      const worlds = favs.map((f, idx) => {
         const w = detailMap.get(f.worldId) || {};
         return {
           worldId: f.worldId,
@@ -176,6 +176,7 @@ export default function register(api) {
           tags: Array.isArray(w.tags) ? w.tags : [],
           category: classify(w),
           favoriteGroup: f.favoriteGroupName || '',
+          favOrder: idx,
           cached: w.cached === true,
         };
       });
@@ -184,6 +185,7 @@ export default function register(api) {
         favorites: (a, b) => b.favorites - a.favorites,
         visits: (a, b) => b.visits - a.visits,
         name: (a, b) => a.worldName.localeCompare(b.worldName, 'ja'),
+        added: (a, b) => a.favOrder - b.favOrder,
       };
       const sorter = sorters[sortBy] || sorters.favorites;
 
@@ -368,7 +370,7 @@ export default function register(api) {
       type: 'object',
       properties: {
         limit: { type: 'number', description: '每类返回条数上限，默认 500' },
-        sortBy: { type: 'string', enum: ['favorites', 'visits', 'name'], description: '排序方式，默认 favorites' },
+        sortBy: { type: 'string', enum: ['favorites', 'visits', 'name', 'added'], description: '排序方式（added=按收藏时间倒序，最新添加在前，基于 /favorites 返回顺序；默认 favorites）' },
       },
     },
     handler: async (args) => handleGetMyFavoriteWorlds(args),
