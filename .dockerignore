@@ -1,6 +1,12 @@
 node_modules
-backups
-data
-vrc-monitor.sqlite3*
 .git
+.env
+.env.*
+credentials.json
+auth_cookie.txt
+notify-config.json
+data
+backups
+*.sqlite3*
 service-logs
+.system_generated

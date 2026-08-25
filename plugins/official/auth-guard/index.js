@@ -47,7 +47,11 @@ export function safeCompare(a, b) {
   if (typeof a !== 'string' || typeof b !== 'string') return false;
   const bufA = Buffer.from(a);
   const bufB = Buffer.from(b);
-  if (bufA.length !== bufB.length) return false;
+  if (bufA.length !== bufB.length) {
+    // 长度不等时做一次确定性同长比对，消除长度不同短路的时间差异
+    timingSafeEqual(bufA, bufA);
+    return false;
+  }
   return timingSafeEqual(bufA, bufB);
 }
 

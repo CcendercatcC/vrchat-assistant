@@ -15,4 +15,7 @@ ENV NODE_ENV=production VRC_MONITOR_HOST=0.0.0.0 VRC_MONITOR_PORT=8799 VRC_MONIT
 
 EXPOSE 8799
 
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:' + (process.env.VRC_MONITOR_PORT || '8799') + '/health', { headers: process.env.VRC_MONITOR_AUTH_TOKEN ? { 'Authorization': 'Bearer ' + process.env.VRC_MONITOR_AUTH_TOKEN } : {} }).then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"
+
 CMD ["node", "start-monitor.js"]
