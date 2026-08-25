@@ -60,6 +60,8 @@ try {
 
 // ── 路径常量 → 写入 ctx.paths ──
 // DB / 备份目录可通过 .env 的 VRC_MONITOR_DB_PATH / VRC_MONITOR_BACKUP_DIR 覆盖
+const PORT = parseInt(process.env.VRC_MONITOR_PORT || '8799', 10);
+const HOST = process.env.VRC_MONITOR_HOST || '127.0.0.1';
 const COOKIE_FILE = process.env.VRC_MONITOR_COOKIE_FILE
   || (existsSync(path.join(__dirname, 'data')) ? path.join(__dirname, 'data', 'auth_cookie.txt') : path.join(__dirname, 'auth_cookie.txt'));
 const CRED_FILE = process.env.VRC_MONITOR_CRED_FILE
