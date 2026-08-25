@@ -177,7 +177,7 @@ export default function register(api) {
       try {
         await api.vrchat.fetch(`/favorites/${rec.id}`, { method: 'DELETE' });
       } catch (e) {
-        if (e.status !== 404) throw e;
+        if (e.status !== 404 && e.status !== 400) throw e;
       }
     }
     try {
