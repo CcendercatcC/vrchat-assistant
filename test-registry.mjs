@@ -2,7 +2,7 @@
  * test-registry.mjs — registry 完整性无凭据测试（PR-2 插件化版，自包含，供 CI 使用）
  *
  * 启动 PluginLoader 加载全部插件后校验：
- *   1. listTools() 数量 = 92（core + 官方插件，逐字节 = core/tool-order.json 全量 + 定义合法）
+ *   1. listTools() 数量 = 95（core + 官方插件，逐字节 = core/tool-order.json 全量 + 定义合法）
  *   2. 工具名唯一
  *   3. 每个工具定义合法（name/description/inputSchema/handler）
  *   4. listTools() 返回顺序与 core/tool-order.json 完全一致
@@ -43,13 +43,15 @@ const notifier = { notifyAuth: () => {} };
 const loader = new PluginLoader({ registry, ctx, log, notifier });
 const whitelist = ['getGroupCached','upsertGroupCache','getGroupHeat','setWorldFavorited','getWorldName','upsertWorld','getZhTranslations','getBoothItemCache','upsertBoothItem','listBoothItems','recordBoothSearch','getBoothSearches','getPlanetCache','setPlanetCache'];
 for (const n of whitelist) { if (typeof ctx.storage[n] === 'function') { const svc = 'storage.' + n; loader.services.set(svc, (...a) => ctx.storage[n](...a)); loader.serviceOwners.set(svc, 'core'); } }
+loader.services.set('core.authConfig', () => ({ token: null, host: '127.0.0.1', port: 8799 }));
+loader.serviceOwners.set('core.authConfig', 'core');
 await loader.loadAll();
 
 const safeMode = process.env.VRC_MONITOR_SAFE_MODE === 'true';
 const tools = registry.listTools();
 const names = tools.map(t => t.name);
 
-// 1. 数量（tool-order.json 全量 = 92；safe-mode 下过滤 DESTRUCTIVE_TOOLS 10 个）
+// 1. 数量（tool-order.json 全量 = 95；safe-mode 下过滤 DESTRUCTIVE_TOOLS 10 个）
 const expectedCount = safeMode ? order.length - 10 : order.length;
 assert(tools.length === expectedCount, `listTools() returned ${tools.length}, expected ${expectedCount}`);
 
@@ -98,7 +100,7 @@ if (safeMode) {
 }
 
 if (pass) {
-  console.log('registry integrity: PASS (plugins loaded, 92 tools, order+defs OK)');
+  console.log(`registry integrity: PASS (plugins loaded, ${tools.length} tools, order+defs OK)`);
   process.exit(0);
 } else {
   console.log('registry integrity: FAIL');

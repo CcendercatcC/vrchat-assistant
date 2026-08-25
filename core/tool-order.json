@@ -91,6 +91,9 @@
     "see_notification",
     "hide_notification",
     "accept_friend_request",
-    "decline_friend_request"
+    "decline_friend_request",
+    "auth_get_status",
+    "auth_generate_token",
+    "auth_verify_token"
   ]
 }
