@@ -226,7 +226,7 @@ api.registerTool({
 
 1. 禁止 `import` 任何 `core/` 路径、`start-monitor.js`；禁止动态 `import()` 非插件自身文件；
 2. 禁止读取含 `KEY`/`SECRET`/`TOKEN`/`PASSWORD`/`COOKIE`/`AUTH`（忽略大小写）的环境变量与仓库根目录此类配置文件；允许读取 `VRC_MONITOR_*` 公共配置（排除上述敏感项）；
-3. 禁止读写数据库文件本体（`vrc-monitor.sqlite3*`）；一切持久化走 `api.db`；
+3. 禁止读写数据库文件本体（`data/vrc-monitor.sqlite3*`）；一切持久化走 `api.db`；
 4. 禁止访问凭据加密存储、核心 `secure_secrets`（或等价）表、任何主密钥解密接口；
 5. 禁止 `child_process`；
 6. 禁止 `process.exit` / 未捕获的顶层副作用：插件代码必须在 `register()` 内执行，import 时不得有副作用（热加载依赖此保证）。

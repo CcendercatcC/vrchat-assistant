@@ -24,7 +24,7 @@ metadata:
 2. get_group_info(groupId) → 群组详情（成员数/描述/joinState；`includeAnnouncement: true` 附带公告，非成员 null）
 3. get_group_instances(groupId) → 群组当前开的房（空 [] = 没开房；返回 worldName/人数）
 4. get_group_announcement(groupId) → 群组公告（活动安排/集会日期）
-5. **查群主/创建人**：`get_group_info` **不含 ownerId**——裸 API `GET https://api.vrchat.cloud/api/1/groups/{groupId}`（Cookie: auth=… 从 auth_cookie.txt 读，UA 必带）返回完整对象，含 `ownerId`/`createdAt`/`onlineMemberCount`/`rules` 等 MCP 工具没暴露的字段；再 `get_friend_info(ownerId)` 调出群主资料
+5. **查群主/创建人**：`get_group_info` **不含 ownerId**——裸 API `GET https://api.vrchat.cloud/api/1/groups/{groupId}`（Cookie: auth=… 从 data/auth_cookie.txt 读，UA 必带）返回完整对象，含 `ownerId`/`createdAt`/`onlineMemberCount`/`rules` 等 MCP 工具没暴露的字段；再 `get_friend_info(ownerId)` 调出群主资料
 ```
 
 **陷阱：**
@@ -37,7 +37,7 @@ metadata:
 
 **公告 403 别一看到就当故障，先分性质：**
 - **非成员群必 403**（响应体 `You're not a member.`）= VRChat 规则，查非成员群的公告就是拿不到——**正常业务**。想查别人的私人小群公告，提前预期会失败
-- **成员群偶发瞬时 403** = 限流/抖动（同 cookie 直连 API 却是 200）。诊断法：urllib 直连 `GET /groups/{id}/announcement`（auth_cookie.txt + UA），换 UA 也是 200 → 排除 UA/WAF 因素 → 瞬时抖动，重试即好
+- **成员群偶发瞬时 403** = 限流/抖动（同 cookie 直连 API 却是 200）。诊断法：urllib 直连 `GET /groups/{id}/announcement`（data/auth_cookie.txt + UA），换 UA 也是 200 → 排除 UA/WAF 因素 → 瞬时抖动，重试即好
 - 工具已对 403/404 返回 `{groupId, announcement: null}` 不抛错
 
 ## 3. join / leave / peek

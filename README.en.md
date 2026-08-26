@@ -55,9 +55,9 @@ This project is **AI-first**: it is built for AI agents to use and extend. Human
 
 ## 🧰 Auxiliary Tools (local, optional)
 
-- `open-world.mjs`: create a room and open it in a **running VRChat client** (named-pipe direct send, silent fallback to API invite) — `node open-world.mjs <world ID or name>`
-- `prepare_image.py`: pre-upload image processing (emoji squaring / Prints 16:9 / Gallery 4:3)
-- `migrate-vrcx0.mjs`: one-click migration of historical data from VRCX — `node migrate-vrcx0.mjs`
+- `scripts/open-world.mjs`: create a room and open it in a **running VRChat client** (named-pipe direct send, silent fallback to API invite) — `node scripts/open-world.mjs <world ID or name>`
+- `scripts/prepare_image.py`: pre-upload image processing (emoji squaring / Prints 16:9 / Gallery 4:3)
+- `scripts/migrate-vrcx0.mjs`: one-click migration of historical data from VRCX — `node scripts/migrate-vrcx0.mjs`
 
 ## 🛠 Troubleshooting
 

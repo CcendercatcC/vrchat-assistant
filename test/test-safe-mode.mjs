@@ -12,11 +12,11 @@
  * 无需 VRChat 凭据 / 网络，可离线运行。退出码 0=全部通过。
  */
 import assert from 'node:assert/strict';
-import { CUSTOM_TOOLS } from './core/mcp-definitions.js';
-import { DESTRUCTIVE_TOOLS, isSafeModeEnabled, filterTools, assertToolAllowed } from './core/safe-mode.js';
-import { createServer } from './core/http-server.js';
-import { ctx } from './core/server-context.js';
-import { RateLimiter } from './core/rate-limiter.js';
+import { CUSTOM_TOOLS } from '../core/mcp-definitions.js';
+import { DESTRUCTIVE_TOOLS, isSafeModeEnabled, filterTools, assertToolAllowed } from '../core/safe-mode.js';
+import { createServer } from '../core/http-server.js';
+import { ctx } from '../core/server-context.js';
+import { RateLimiter } from '../core/rate-limiter.js';
 
 let passed = 0;
 function ok(name) { passed++; console.log(`  ✅ ${name}`); }

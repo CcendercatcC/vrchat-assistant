@@ -1,5 +1,5 @@
 // 测试 fetch-x-worlds.js 的新函数（extractWorldsFromTweetText + 降级）
-import { extractWorldsFromTweetText, fetchCreatorTweets, fetchCreatorViaSearchTimeline } from './core/fetch-x-worlds.js';
+import { extractWorldsFromTweetText, fetchCreatorTweets, fetchCreatorViaSearchTimeline } from '../core/fetch-x-worlds.js';
 
 let pass = 0, fail = 0;
 function assert(label, cond) {

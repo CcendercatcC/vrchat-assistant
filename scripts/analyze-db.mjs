@@ -5,7 +5,7 @@
  * 引擎: better-sqlite3（只读打开，与 migrate-vrcx0.mjs 同步迁移，移除 sql.js）
  */
 import Database from 'better-sqlite3';
-import { findVrcxDb } from './core/vrcx-db-paths.js';
+import { findVrcxDb } from '../core/vrcx-db-paths.js';
 
 const DB_PATH = process.argv[2] || findVrcxDb();
 

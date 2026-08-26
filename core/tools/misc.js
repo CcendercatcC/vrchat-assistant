@@ -553,7 +553,7 @@ export const tools = [
   },
   {
     "name": "backup_database",
-    "description": "[system] Immediately back up the local database (WAL online backup, no restart needed). Keeps the 2 most recent backups in backups/.",
+    "description": "[system] Immediately back up the local database (WAL online backup, no restart needed). Keeps the 2 most recent backups in data/backups/.",
     "inputSchema": {
       "type": "object",
       "properties": {}

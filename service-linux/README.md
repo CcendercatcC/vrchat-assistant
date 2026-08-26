@@ -48,9 +48,9 @@ loginctl enable-linger    # 登出后继续运行
 |------|--------|------|
 | `VRC_MONITOR_DIR` | `start-monitor.js` 基于自身脚本目录自动探测 | 项目根目录（systemd 方案无需手动设置） |
 | `VRC_MONITOR_NODE` | 安装脚本烘焙的 node 路径 | node 可执行文件路径 |
-| `VRC_MONITOR_PYTHON` | PATH 中的 `python` | 执行 fetch-otp.py 的解释器。**systemd 用户服务 PATH 较精简，安装脚本检测到 PATH 无 `python` 时会自动注入 `python3` 路径**；若手动安装且 PATH 无 python，必须自行设置，否则 OTP 自动登录失败会陷入重试循环 |
-| `VRC_MONITOR_DB_PATH` | `<仓库>/vrc-monitor.sqlite3` | 数据库文件位置（可迁移到独立数据盘） |
-| `VRC_MONITOR_BACKUP_DIR` | `<仓库>/backups` | 自动备份目录 |
+| `VRC_MONITOR_PYTHON` | PATH 中的 `python` | 执行 scripts/fetch-otp.py 的解释器。**systemd 用户服务 PATH 较精简，安装脚本检测到 PATH 无 `python` 时会自动注入 `python3` 路径**；若手动安装且 PATH 无 python，必须自行设置，否则 OTP 自动登录失败会陷入重试循环 |
+| `VRC_MONITOR_DB_PATH` | `<仓库>/data/vrc-monitor.sqlite3` | 数据库文件位置（可迁移到独立数据盘） |
+| `VRC_MONITOR_BACKUP_DIR` | `<仓库>/data/backups` | 自动备份目录 |
 | `HTTPS_PROXY` / `HTTP_PROXY` | 无 | 网络代理（服务自动直连 6s 失败后回退 WS 代理） |
 
 示例（drop-in）：

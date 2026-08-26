@@ -55,9 +55,9 @@
 
 ## 🧰 辅助工具（本机可选）
 
-- `open-world.mjs`：创建房间并在**运行中的 VRChat 客户端**内打开（命名管道直发，失败静默回退 API 邀请）— `node open-world.mjs <世界ID或名字>`
-- `prepare_image.py`：上传前图片处理（emoji 方形化 / Prints 16:9 / Gallery 4:3）
-- `migrate-vrcx0.mjs`：从 VRCX 一键迁移历史数据 — `node migrate-vrcx0.mjs`
+- `scripts/open-world.mjs`：创建房间并在**运行中的 VRChat 客户端**内打开（命名管道直发，失败静默回退 API 邀请）— `node scripts/open-world.mjs <世界ID或名字>`
+- `scripts/prepare_image.py`：上传前图片处理（emoji 方形化 / Prints 16:9 / Gallery 4:3）
+- `scripts/migrate-vrcx0.mjs`：从 VRCX 一键迁移历史数据 — `node scripts/migrate-vrcx0.mjs`
 
 ## 🛠 故障排查
 

@@ -34,7 +34,7 @@ metadata:
 | `get_booth_searches` | **BOOTH 搜索历史**：最近搜索词 + 结果 + 时间 |
 | `get_my_favorite_worlds` | **我的收藏世界**（2026-08-14 新增）：拉取全部收藏世界，按标签分类（🎮游戏/👻恐怖/🎵音乐体验/🌄风景观光/🧍Avatar模型/🍻社交聚会/😴休闲睡觉/📷拍照/其他），返回世界名/作者/收藏/浏览/简介/分类。数据经 `GET /worlds/favorites` 分页一次拉全（含实时 `occupants`），**秒级返回**，无需逐个查详情。`sortBy` 支持 `favorites`/`visits`/`name`/`added`（**added=按收藏时间倒序，最新添加在前**，基于 `/favorites` 返回顺序，与客户端 "Date Added" 一致）；配套 `favorites-pdf.py` 一键生成中文 PDF |
 | `get_my_favorite_groups` | **我的收藏分组**：世界收藏夹名 + 容量上限 `capacity` |
-| `backup_database` | 立即备份数据库（WAL 在线备份，保留最近 2 份到 backups/）；服务启动 + 每 24h 自动备份 |
+| `backup_database` | 立即备份数据库（WAL 在线备份，保留最近 2 份到 data/backups/）；服务启动 + 每 24h 自动备份 |
 | `get_friend_events` | 某好友的事件历史（本地库） |
 | `get_recent_events` | 最新事件流 |
 | `get_companions` | **同屏交叉查询**（指定时间窗口内同实例的好友；可查自己或任意好友）。**默认不返回 userTimeline**（位置事件多时输出会过大被截断），仅返回 companions 汇总；需逐条位置明细时传 `includeTimeline=true` |
@@ -177,7 +177,7 @@ boop 通知落库的顶层事件类型是 `notification-v2`（不是 boop），b
 ### OTP 登录
 
 - 服务自动从邮箱 IMAP 抓取 OTP 验证码登录，无人值守
-- QQ 邮箱有"自动分类"功能会把验证码邮件归档到分类文件夹（IMAP 名含 `VRChat`，modified UTF-7 编码）——fetch-otp.py 已带文件夹遍历兜底，若 OTP 一直失败先想到这个
+- QQ 邮箱有"自动分类"功能会把验证码邮件归档到分类文件夹（IMAP 名含 `VRChat`，modified UTF-7 编码）——scripts/fetch-otp.py 已带文件夹遍历兜底，若 OTP 一直失败先想到这个
 - 认证失败有 120s 冷却，401 限流 5min 冷却，会自愈
 
 ### 登录状态主动通知（issue #69）

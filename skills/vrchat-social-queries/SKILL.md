@@ -115,7 +115,7 @@ curl -s http://127.0.0.1:8799/mcp -X POST \
 直查 SQLite（只读）比 MCP 分页高效（数据库文件在项目目录，WAL 模式可并发读）：
 
 ```python
-con = sqlite3.connect(r'file:<项目目录>/vrc-monitor.sqlite3?mode=ro', uri=True)
+con = sqlite3.connect(r'file:<项目目录>/data/vrc-monitor.sqlite3?mode=ro', uri=True)
 cur.execute("SELECT created_at, content_json FROM events WHERE user_id=? AND type='friend-location' AND world_id=? ORDER BY created_at", (UID, WID))
 ```
 

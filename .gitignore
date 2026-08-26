@@ -1,4 +1,4 @@
-# ── 凭据与隐私（绝不入库）──
+# ── 凭据与运行时数据（绝不入库）──
 credentials.json
 credentials.local.json
 auth_cookie.txt
@@ -7,6 +7,7 @@ notify-config.json
 *.sqlite3
 *.sqlite3-journal
 monitor.log
+data/
 
 # ── 环境与运行时 ──
 .env

@@ -79,5 +79,5 @@ cat DEVELOPMENT.md                  # 或 read_file
 - ⚠️ **限流不要嵌套**（2026-08-09 真实死锁）：handler 内已逐请求限流时，RPC case 层不要再包一层 rateLimiter.execute，会整 handler 挂死
 - ⚠️ **工具登记位置已变更（2026-08-15）**：权威登记 = `skills/vrc-monitor-agent/SKILL.md` 工具表格，不是 README
 - ⚠️ **README / skill 不写工具总数**：全仓库禁止"N 个 MCP 工具"表述，只维护工具名清单
-- ⚠️ **DB 变更必须幂等迁移**：存量库 vrc-monitor.sqlite3 存在，ALTER TABLE 用 IF NOT EXISTS
+- ⚠️ **DB 变更必须幂等迁移**：存量库 data/vrc-monitor.sqlite3 存在，ALTER TABLE 用 IF NOT EXISTS
 - ⚠️ **Windows 增强必须可回退**：命名管道等平台专属逻辑，探测失败要静默回退跨平台路径，功能不缺失

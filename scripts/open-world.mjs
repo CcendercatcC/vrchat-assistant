@@ -20,17 +20,17 @@
  * 注意：管道增强仅 Windows；API 邀请回退全平台可用。
  *       主题词功能已移除（原依赖 world-themes.mjs，该文件已不在仓库中）。
  */
-import { VrchatApiClient } from './vrchat-api.js';
-import { openInstance } from './core/vrchat-launch.js';
+import { VrchatApiClient } from '../vrchat-api.js';
+import { openInstance } from '../core/vrchat-launch.js';
 import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
-import { RateLimiter } from './core/rate-limiter.js';
+import { RateLimiter } from '../core/rate-limiter.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const CRED_FILE = path.join(__dirname, 'credentials.json');
-const COOKIE_FILE = path.join(__dirname, 'auth_cookie.txt');
+const CRED_FILE = path.join(__dirname, '..', 'credentials.json');
+const COOKIE_FILE = path.join(__dirname, '..', 'data', 'auth_cookie.txt');
 
 // 平台说明：命名管道增强仅 Windows（core/vrchat-launch.js 内平台门控）；
 // 非 Windows / VRChat 未运行时自动回退 API 邀请（不在此处退出）
@@ -130,7 +130,7 @@ if (!/^wrld_/.test(target)) {
           }
         } catch { /* ignore */ }
       }
-      const db = new Database(dbPath || path.join(__dirname, 'vrc-monitor.sqlite3'), { readonly: true, timeout: 10000 });
+      const db = new Database(dbPath || path.join(__dirname, '..', 'data', 'vrc-monitor.sqlite3'), { readonly: true, timeout: 10000 });
       const rows = db.prepare(
         `SELECT world_id, world_name FROM events
          WHERE world_name IS NOT NULL AND world_name != '' AND world_name = ?

@@ -6,11 +6,11 @@
 
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { extractTokenFromRequest, safeCompare } from './plugins/official/auth-guard/index.js';
-import registerAuthGuard from './plugins/official/auth-guard/index.js';
-import { createServer } from './core/http-server.js';
-import { ctx } from './core/server-context.js';
-import { RateLimiter } from './core/rate-limiter.js';
+import { extractTokenFromRequest, safeCompare } from '../plugins/official/auth-guard/index.js';
+import registerAuthGuard from '../plugins/official/auth-guard/index.js';
+import { createServer } from '../core/http-server.js';
+import { ctx } from '../core/server-context.js';
+import { RateLimiter } from '../core/rate-limiter.js';
 
 let passed = 0;
 function ok(name) { passed++; console.log('  ✅ ' + name); }

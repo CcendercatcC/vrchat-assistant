@@ -3,12 +3,12 @@
  * 验证 vrchat-api-reference.md 中的每个 API 端点
  * 速率控制：每次调用间隔 2.5 秒（约 24 次/分钟，低于 30次/分钟限制）
  */
-import { VrchatApiClient } from './vrchat-api.js';
+import { VrchatApiClient } from '../vrchat-api.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-const COOKIE_FILE = fileURLToPath(new URL('./auth_cookie.txt', import.meta.url));
-const CRED_FILE = fileURLToPath(new URL('./credentials.json', import.meta.url));
+const COOKIE_FILE = fileURLToPath(new URL('../data/auth_cookie.txt', import.meta.url));
+const CRED_FILE = fileURLToPath(new URL('../credentials.json', import.meta.url));
 
 // ── 测试结果跟踪 ──
 const results = [];

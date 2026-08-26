@@ -3,12 +3,12 @@
  * 快速测试，30 秒
  */
 import WebSocket from 'ws';
-import { VrchatApiClient } from './vrchat-api.js';
+import { VrchatApiClient } from '../vrchat-api.js';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-const COOKIE_FILE = fileURLToPath(new URL('./auth_cookie.txt', import.meta.url));
-const CRED_FILE = fileURLToPath(new URL('./credentials.json', import.meta.url));
+const COOKIE_FILE = fileURLToPath(new URL('../data/auth_cookie.txt', import.meta.url));
+const CRED_FILE = fileURLToPath(new URL('../credentials.json', import.meta.url));
 
 async function main() {
   console.log('═══ VRChat WebSocket 直连测试 ═══\n');

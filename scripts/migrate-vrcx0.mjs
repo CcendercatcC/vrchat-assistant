@@ -6,7 +6,7 @@
  * 使用:
  *   自动模式:  node migrate-vrcx0.mjs                                   （按平台自动探测数据库路径 + userId）
  *   手动模式:  node migrate-vrcx0.mjs <VRCX数据库路径> <userId>
- *   自定义目标: node migrate-vrcx0.mjs --db <目标数据库路径>             （默认: ./vrc-monitor.sqlite3）
+ *   自定义目标: node migrate-vrcx0.mjs --db <目标数据库路径>             （默认: ./data/vrc-monitor.sqlite3）
  *   跳过检测:  node migrate-vrcx0.mjs --force                            （服务运行时强制迁移，风险自负）
  *
  * 数据库自动探测（跨平台）:
@@ -30,7 +30,7 @@ import { existsSync, rmSync } from 'node:fs';
 import net from 'node:net';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
-import { candidateVrcxDbPaths, findVrcxDb } from './core/vrcx-db-paths.js';
+import { candidateVrcxDbPaths, findVrcxDb } from '../core/vrcx-db-paths.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -73,10 +73,10 @@ function cleanupStaleWal(dbPath) {
   }
 }
 
-// ── 目标数据库路径（--db 可覆盖，默认项目根 vrc-monitor.sqlite3）──
+// ── 目标数据库路径（--db 可覆盖，默认项目根 data/vrc-monitor.sqlite3）──
 const _args0 = parseArgs(process.argv);
-const MONITOR_DB = _args0.db ? path.resolve(_args0.db) : path.join(__dirname, 'vrc-monitor.sqlite3');
-const DDL_PATH = path.join(__dirname, 'core', 'init-db.sql');
+const MONITOR_DB = _args0.db ? path.resolve(_args0.db) : path.join(__dirname, '..', 'data', 'vrc-monitor.sqlite3');
+const DDL_PATH = path.join(__dirname, '..', 'core', 'init-db.sql');
 
 // ── 数据库路径解析（优先级：命令行参数 > 按平台自动探测，见 core/vrcx-db-paths.js）──
 function resolve_vrcx0_db(positional) {

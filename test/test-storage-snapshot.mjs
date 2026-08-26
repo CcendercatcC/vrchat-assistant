@@ -21,7 +21,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const { Storage } = await import(pathToFileURL(path.join(__dirname, 'core', 'storage.js')).href);
+const { Storage } = await import(pathToFileURL(path.join(__dirname, '..', 'core', 'storage.js')).href);
 
 const GOLDEN = path.join(__dirname, 'storage-snapshot.json');
 const ARG_GENERATE = process.argv.includes('--generate');

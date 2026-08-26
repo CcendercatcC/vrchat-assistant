@@ -138,7 +138,7 @@ VRChat 世界**可以改名**，`world_cache` 里的旧名会一直赖着（cach
 **排查流程（用户否认世界名时）**：不要争论，直接 API 验证：
 
 ```bash
-COOKIE=$(tr -d '\r\n' < <项目目录>/auth_cookie.txt)
+COOKIE=$(tr -d '\r\n' < <项目目录>/data/auth_cookie.txt)
 curl -s -m 15 "https://api.vrchat.cloud/api/1/worlds/<worldId>" \
   -H "Cookie: auth=$COOKIE" \
   -H "User-Agent: <你的UA>"   # ⚠️ 必须带 UA，否则 WAF 403

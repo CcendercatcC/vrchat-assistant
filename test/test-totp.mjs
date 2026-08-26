@@ -4,7 +4,7 @@
  * 无凭据、纯算法验证（符合 DEVELOPMENT.md §6：CI 只能覆盖无凭据也能验证的部分）。
  * 运行: node test-totp.mjs
  */
-import { parseTotpSecret, base32Decode, generateTotp, getTotpCodes } from './core/totp.js';
+import { parseTotpSecret, base32Decode, generateTotp, getTotpCodes } from '../core/totp.js';
 
 let pass = 0;
 let fail = 0;

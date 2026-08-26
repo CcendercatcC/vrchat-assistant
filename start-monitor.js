@@ -63,15 +63,15 @@ try {
 const rawPort = parseInt(process.env.VRC_MONITOR_PORT || '8799', 10);
 const PORT = Number.isNaN(rawPort) || rawPort <= 0 || rawPort > 65535 ? 8799 : rawPort;
 const HOST = process.env.VRC_MONITOR_HOST || '127.0.0.1';
-const COOKIE_FILE = process.env.VRC_MONITOR_COOKIE_FILE || path.join(__dirname, 'auth_cookie.txt');
+const COOKIE_FILE = process.env.VRC_MONITOR_COOKIE_FILE || path.join(__dirname, 'data', 'auth_cookie.txt');
 const CRED_FILE = process.env.VRC_MONITOR_CRED_FILE || path.join(__dirname, 'credentials.json');
 const NOTIFY_FILE = path.join(__dirname, 'notify-config.json');
 const DB_PATH = process.env.VRC_MONITOR_DB_PATH
   ? path.resolve(process.env.VRC_MONITOR_DB_PATH)
-  : path.join(__dirname, 'vrc-monitor.sqlite3');
+  : path.join(__dirname, 'data', 'vrc-monitor.sqlite3');
 const BACKUP_DIR = process.env.VRC_MONITOR_BACKUP_DIR
   ? path.resolve(process.env.VRC_MONITOR_BACKUP_DIR)
-  : path.join(__dirname, 'backups');
+  : path.join(__dirname, 'data', 'backups');
 const BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 每 24h 自动备份
 
 Object.assign(ctx.paths, { __dirname, PORT, HOST, COOKIE_FILE, CRED_FILE, DB_PATH, BACKUP_DIR, BACKUP_INTERVAL_MS });

@@ -124,7 +124,7 @@ PR-2 起，系统分为四层：**底座层 → 服务层 → 插件层 → 工�
 | `backup.js` | 数据库在线备份。beter-sqlite3 `db.backup()` API，WAL 模式无需停机。保留最近 2 份 | `backupDatabase()` 函数 |
 | `server-context.js` | 共享上下文。可变 `ctx` 对象持有核心运行状态（storage/api/rateLimiter/wsManager 等）。**核心工具使用；插件不触碰，走 `api.*`** | `ctx` / `log` / `parseLocation` / watchlist 缓存管理 |
 | `http-server.js` | HTTP 服务器 + SSE 端点。McpSession 管理、`/health` + `/mcp` 请求路由 | `createServer` / `sendSSE` / `sendError` |
-| `otp-fetcher.js` | OTP 邮箱抓取。调用 `fetch-otp.py` 从邮箱 IMAP 抓验证码 | `fetchOtpFromEmail` |
+| `otp-fetcher.js` | OTP 邮箱抓取。调用 `scripts/fetch-otp.py` 从邮箱 IMAP 抓验证码 | `fetchOtpFromEmail` |
 | `totp.js` | RFC 6238 TOTP 生成（纯 Node crypto 零依赖） | `parseTotpSecret` / `generateTotp` / `getTotpCodes` |
 | `notifier.js` | 登录状态通知中心。needsTotp/otpFailed/reauthFailed/recovered 事件通知、去抖聚合、通道可插拔注册 | `notifier` 实例 |
 | `notify-channels.js` | 跨平台通知通道：desktop（notify-send/osascript/PowerShell toast）+ webhook（POST JSON） | `buildChannels` |
@@ -197,7 +197,7 @@ start-monitor.js
 | `better-sqlite3` | SQLite 原生绑定 | WAL 模式，崩溃安全，支持并发读 |
 | `ws` | WebSocket 客户端 | 连接 VRChat pipeline |
 | `https-proxy-agent` | HTTPS 代理 | WS 直连失败后回退代理 |
-| `fetch-otp.py` | 邮箱 IMAP OTP 抓取 | Python 脚本，由 Node `execFileSync` 调用 |
+| `scripts/fetch-otp.py` | 邮箱 IMAP OTP 抓取 | Python 脚本，由 Node `execFileSync` 调用 |
 
 ## 外部集成
 

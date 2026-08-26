@@ -11,14 +11,14 @@
 > ⚠️ **在开始配置步骤 1 之前，Agent 必须先向用户核实以下问题：**
 
 1. **是否安装/使用过 VRCX？**
-   - VRCX 是一款流行的 VRChat 第三方工具，会在本地保存好友活动历史、世界缓存、好友备注等数据（SQLite 数据库）。本服务的 `migrate-vrcx0.mjs` 脚本可从 VRCX 数据库一键导入这些历史数据。
+   - VRCX 是一款流行的 VRChat 第三方工具，会在本地保存好友活动历史、世界缓存、好友备注等数据（SQLite 数据库）。本服务的 `scripts/migrate-vrcx0.mjs` 脚本可从 VRCX 数据库一键导入这些历史数据。
    - 若用户**使用过 VRCX**，继续追问第 2 个问题。
    - 若用户**从未使用过 VRCX**，可跳过数据导入，直接进入「配置步骤」。
 
 2. **是否需要将 VRCX 中的历史数据导入到本系统？**
    - 导入内容包括：好友列表与信任等级、好友备注/昵称、世界缓存、位置变更历史、上下线记录、Avatar 变更、状态/Bio 变更等（详见下表）。
    - 导入是**可选**的——不导入也能正常使用本服务，只是查询历史活动记录时没有迁移前的旧数据。
-   - 若用户**需要导入**，在完成「配置步骤」1-3（服务能正常启动）后，运行 `node migrate-vrcx0.mjs` 导入数据（脚本会自动探测 VRCX 数据库路径和 userId）。
+   - 若用户**需要导入**，在完成「配置步骤」1-3（服务能正常启动）后，运行 `node scripts/migrate-vrcx0.mjs` 导入数据（脚本会自动探测 VRCX 数据库路径和 userId）。
    - **迁移引擎（v1.1.0 起）**：改用 **better-sqlite3**（与主服务同引擎，WAL 模式），已移除旧版 sql.js 整文件重写（该方式曾导致 `SQLITE_CORRUPT`，2026-08-12 实测踩坑后由 PR #10 防呆 + PR #12 根因修复）。服务运行中迁移不再损坏数据库，但仍**建议迁移前停止服务**（避免与服务的实时写入交错）。脚本内置 127.0.0.1:8799 端口检测：检测到服务运行时会给出警告，需加 `--force` 确认后继续（风险自负）。
    - **✅ 幂等说明（v1.2.0 起，PR #14 已修复）**：迁移记录带 `vrcxId` 标记 + events 表 JSON 表达式唯一索引 + `INSERT OR IGNORE`，**重复执行自动跳过已迁移记录**（只补新增，不重复插入）。旧版脚本（无 vrcxId）产生的迁移数据会被检测并提示，需 `--force` 才会重插（防误全量重插）。迁移完成后 `node start-monitor.js` 启动服务。
    - 若用户**不需要导入**，直接进入「配置步骤」。
@@ -46,7 +46,7 @@
 > -  **Linux**：`~/.config/VRCX/VRCX.sqlite3`（原生 Electron 版）；若通过 Wine 运行 Windows 版：`~/.wine/drive_c/users/<user>/AppData/Roaming/VRCX/VRCX.sqlite3`（自定义 Wine 前缀可用 `WINEPREFIX` 环境变量指定）
 > -  **macOS**：`~/Library/Application Support/VRCX/VRCX.sqlite3`
 >
-> 若自动探测失败，Agent 可让用户提供数据库路径手动指定：`node migrate-vrcx0.mjs <VRCX数据库路径> <userId>`。
+> 若自动探测失败，Agent 可让用户提供数据库路径手动指定：`node scripts/migrate-vrcx0.mjs <VRCX数据库路径> <userId>`。
 
 ## 获取代码（Fork & Clone）
 
@@ -89,10 +89,10 @@
 
 - `VRC_MONITOR_DIR`：指向本仓库目录（克隆后服务所在目录）。若 agent 在仓库目录内运行，服务可自动探测，无需手动设置。
 - `VRC_MONITOR_NODE`：指向 Node.js 可执行文件路径。若不设置，自动从 PATH 查找 `node`。
-- `VRC_MONITOR_DB_PATH`：SQLite 数据库文件路径（默认 `<仓库>/vrc-monitor.sqlite3`）。可将数据库迁移到任意位置（如独立数据盘），配合常驻服务使用。
-- `VRC_MONITOR_BACKUP_DIR`：自动备份目录（默认 `<仓库>/backups`）。
+- `VRC_MONITOR_DB_PATH`：SQLite 数据库文件路径（默认 `<仓库>/data/vrc-monitor.sqlite3`）。可将数据库迁移到任意位置（如独立数据盘），配合常驻服务使用。
+- `VRC_MONITOR_BACKUP_DIR`：自动备份目录（默认 `<仓库>/data/backups`）。
 - `VRC_MONITOR_LOG_DIR`：常驻服务脚本的日志 / 修复记录目录（默认 `<仓库>/service-logs`，仅 `service-windows/` 脚本使用；Linux systemd 方案日志走 journald，无需设置）。
-- `VRC_MONITOR_PYTHON`：执行 fetch-otp.py 的 Python 解释器路径（默认 PATH 中的 `python`）。以计划任务 / systemd / 容器等方式运行且 PATH 中无 python 时必须设置，否则 OTP 自动登录失败会陷入重试循环（每次循环 VRChat 都会重新发送验证码邮件）。**路径含空格无需自带引号**（如 `C:\Program Files\Python311\python.exe`），脚本执行时会自动加引号。
+- `VRC_MONITOR_PYTHON`：执行 scripts/fetch-otp.py 的 Python 解释器路径（默认 PATH 中的 `python`）。以计划任务 / systemd / 容器等方式运行且 PATH 中无 python 时必须设置，否则 OTP 自动登录失败会陷入重试循环（每次循环 VRChat 都会重新发送验证码邮件）。**路径含空格无需自带引号**（如 `C:\Program Files\Python311\python.exe`），脚本执行时会自动加引号。
 - `VRC_MONITOR_SAFE_MODE`：**安全模式开关**（默认关闭）。设为 `true` 时，服务启动后自动移除全部破坏性 MCP 工具（删除好友 `remove_friend`、删除相册照片 `remove_print`、删除画廊图片 `remove_gallery_image`、移除好友收藏 `unfavorite_friend`、移除世界收藏 `unfavorite_world`、退出群组 `leave_group`、拒绝好友请求 `decline_friend_request`、隐藏通知 `hide_notification`、移出待逛列表 `remove_from_backlog`、移出关注名单 `remove_from_watchlist`、移除 X 博主 `x_remove_creator` 等）：`tools/list` 不再暴露这些工具，`tools/call` 直接拦截报错，防止 Agent 误删数据。可在仓库根 `.env` 中配置（推荐，已被 .gitignore 排除）。
 
 ### 3. 启动服务
@@ -204,7 +204,7 @@ cp -r skills/review-workflow "$HERMES_HOME/skills/"
 | 重启服务 | Hermes 工具 `vrc_restart` |
 | 常驻服务（Windows：开机自启 + 崩溃自愈 + 每日修复报告） | `service-windows\setup-windows.cmd`（详见 `service-windows/README.md`） |
 | 常驻服务（Linux：systemd 用户服务，开机自启 + 崩溃自愈 + journal 日志） | `bash service-linux/setup-linux.sh`（详见 `service-linux/README.md`） |
-| 迁移 VRCX 数据 | `node migrate-vrcx0.mjs`（better-sqlite3 引擎，运行中迁移安全但仍建议先停服务；检测到服务运行会要求 `--force`；**可重复执行**——v1.2.0 起幂等，自动跳过已迁移记录，旧数据需 `--force` 重插，见 PR #14）；完成后 `node start-monitor.js` |
+| 迁移 VRCX 数据 | `node scripts/migrate-vrcx0.mjs`（better-sqlite3 引擎，运行中迁移安全但仍建议先停服务；检测到服务运行会要求 `--force`；**可重复执行**——v1.2.0 起幂等，自动跳过已迁移记录，旧数据需 `--force` 重插，见 PR #14）；完成后 `node start-monitor.js` |
 
 ## X 博主世界推荐追踪
 

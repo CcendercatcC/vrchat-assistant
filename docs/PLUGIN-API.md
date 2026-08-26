@@ -193,7 +193,7 @@ const digest = await api.consume("query_digest", wrld_xxx);
 
 1. 禁止 `import` 任何 `core/` 路径、`start-monitor.js`；禁止动态 `import()` 非插件自身文件；
 2. 禁止读取含 `KEY`/`SECRET`/`TOKEN`/`PASSWORD`/`COOKIE`/`AUTH`（忽略大小写）的**环境变量**（含 `VRC_MONITOR_MASTER_KEY`）与仓库根目录任何此类配置文件；允许读取 `VRC_MONITOR_*` 公共配置（排除上述敏感项）；
-3. 禁止读写数据库文件本体（`vrc-monitor.sqlite3*`）；一切持久化走 `api.db`；
+3. 禁止读写数据库文件本体（`data/vrc-monitor.sqlite3*`）；一切持久化走 `api.db`；
 4. 禁止访问凭据加密存储、核心 `secure_secrets`（或等价）表、以及任何主密钥解密接口；
 5. 禁止 `child_process`（如确需，先开 issue 讨论——OTP 场景是核心能力不是插件能力）；
 6. 禁止 `process.exit` / 未捕获的顶层副作用：插件代码必须在 `register()` 内执行，import 时不得有副作用（热加载依赖此保证）。

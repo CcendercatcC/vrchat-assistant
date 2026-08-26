@@ -55,9 +55,9 @@
 
 ## 🧰 補助ツール（ローカル・任意）
 
-- `open-world.mjs`：ルームを作成し**実行中の VRChat クライアント**内で開く（名前付きパイプ直接送信、失敗時は API 招待にサイレントフォールバック）— `node open-world.mjs <ワールドIDまたは名前>`
-- `prepare_image.py`：アップロード前の画像処理（絵文字の正方形化 / Prints 16:9 / Gallery 4:3）
-- `migrate-vrcx0.mjs`：VRCX からの履歴データをワンクリック移行 — `node migrate-vrcx0.mjs`
+- `scripts/open-world.mjs`：ルームを作成し**実行中の VRChat クライアント**内で開く（名前付きパイプ直接送信、失敗時は API 招待にサイレントフォールバック）— `node scripts/open-world.mjs <ワールドIDまたは名前>`
+- `scripts/prepare_image.py`：アップロード前の画像処理（絵文字の正方形化 / Prints 16:9 / Gallery 4:3）
+- `scripts/migrate-vrcx0.mjs`：VRCX からの履歴データをワンクリック移行 — `node scripts/migrate-vrcx0.mjs`
 
 ## 🛠 トラブルシューティング
 

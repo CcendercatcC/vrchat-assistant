@@ -1,5 +1,5 @@
 // 测试 Playwright 浏览器抓取后的 tweet 组装逻辑（纯函数，离线可过）
-import { buildTweetFromBrowserItem, extractWorldsFromTweetText, extractWorldIdsFromLinks } from './core/fetch-x-worlds.js';
+import { buildTweetFromBrowserItem, extractWorldsFromTweetText, extractWorldIdsFromLinks } from '../core/fetch-x-worlds.js';
 
 let pass = 0, fail = 0;
 function assert(label, cond) {
