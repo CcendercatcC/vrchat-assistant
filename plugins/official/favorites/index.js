@@ -14,18 +14,20 @@ export default function register(api) {
     return { userId: matches[0].id, displayName: matches[0].displayName };
   }
 
-  async function fetchAllFavoriteWorlds() {
+  // 一次性分页拉全收藏世界（含完整详情）。/worlds/favorites 返回顺序即收藏时间倒序（最新在前），
+  // 且一次请求即含 name/favorites/visits/popularity/occupants/capacity/tags 等全部字段，
+  // 无需再逐个 /worlds/{id} 查详情（原实现首次调用需 15-20 分钟，现为秒级）。
+  async function fetchAllFavoriteWorldsFull() {
     const all = [];
     let offset = 0;
     while (true) {
-      const data = await api.vrchat.fetch(`/favorites?type=world&n=${PAGE}&offset=${offset}`);
+      const data = await api.vrchat.fetch(`/worlds/favorites?n=${PAGE}&offset=${offset}`);
       if (!Array.isArray(data) || data.length === 0) break;
-      for (const f of data) {
+      for (const w of data) {
         all.push({
-          favoriteId: f.favoriteId || '',
-          worldId: f.favoriteId || f.worldId || '',
-          favoriteGroupName: f.favoriteGroupName || '',
-          createdAt: f.createdAt || '',
+          worldId: w.id || w.favoriteId || '',
+          favoriteGroupName: w.favoriteGroup || '',
+          world: w,
         });
       }
       offset += PAGE;
@@ -33,57 +35,6 @@ export default function register(api) {
       if (offset >= 3000) break;
     }
     return all;
-  }
-
-  async function fetchWorldDetails(ids) {
-    const map = new Map();
-    const missing = [];
-    for (const id of ids) {
-      try {
-        let cached = await api.consume('storage.getWorldName', id);
-        if (cached) {
-          map.set(id, {
-            id,
-            name: cached.name || '',
-            authorName: cached.author_name || '',
-            description: (cached.description || '').slice(0, 500),
-            imageUrl: cached.image_url || '',
-            favorites: cached.favorites || 0,
-            visits: typeof cached.visits === 'number' ? cached.visits : null,
-            popularity: typeof cached.popularity === 'number' ? cached.popularity : null,
-            capacity: cached.capacity || 0,
-            tags: (() => { try { const p = JSON.parse(cached.tags || '[]'); return Array.isArray(p) ? p : []; } catch { return []; } })(),
-            cached: true,
-          });
-        } else {
-          missing.push(id);
-        }
-      } catch { missing.push(id); }
-    }
-
-    for (const id of missing) {
-      try {
-        const w = await api.vrchat.fetch(`/worlds/${encodeURIComponent(id)}`);
-        if (w) {
-          map.set(id, { ...w, cached: false });
-          try {
-            await api.consume('storage.upsertWorld', {
-              worldId: id,
-              name: w.name || '',
-              authorId: w.authorId || '',
-              authorName: w.authorName || '',
-              description: (w.description || '').slice(0, 500),
-              imageUrl: w.imageUrl || '',
-              releaseStatus: w.releaseStatus || 'public',
-              capacity: w.capacity || 0,
-              favorites: w.favorites || 0,
-              tags: Array.isArray(w.tags) ? w.tags : [],
-            });
-          } catch { /* 缓存失败不影响 */ }
-        }
-      } catch { /* 单条失败跳过 */ }
-    }
-    return map;
   }
 
   const CATEGORY_RULES = [
@@ -146,22 +97,21 @@ export default function register(api) {
 
   async function handleGetMyFavoriteWorlds({ limit = 500, sortBy = 'favorites' } = {}) {
     try {
-      const favs = await fetchAllFavoriteWorlds();
+      const favs = await fetchAllFavoriteWorldsFull();
       if (favs.length === 0) {
         return { ok: true, total: 0, categories: [], worlds: [], message: '没有收藏的世界' };
       }
-      api.log(`[favorite-worlds] 收藏世界 ${favs.length} 个，开始批量查详情`);
+      api.log(`[favorite-worlds] 收藏世界 ${favs.length} 个（/worlds/favorites 一次拉全）`);
 
       const ids = favs.map(f => f.worldId).filter(Boolean);
-      const detailMap = await fetchWorldDetails(ids);
 
       let zhMap = new Map();
       try {
         zhMap = await api.consume('storage.getZhTranslations', ids);
       } catch { /* 表不存在则跳过 */ }
 
-      const worlds = favs.map(f => {
-        const w = detailMap.get(f.worldId) || {};
+const worlds = favs.map(f => {
+        const w = f.world || {};
         return {
           worldId: f.worldId,
           worldName: w.name || '(未知)',
@@ -176,7 +126,7 @@ export default function register(api) {
           tags: Array.isArray(w.tags) ? w.tags : [],
           category: classify(w),
           favoriteGroup: f.favoriteGroupName || '',
-          cached: w.cached === true,
+          cached: false,
         };
       });
 
@@ -363,7 +313,7 @@ export default function register(api) {
 
   api.registerTool({
     name: 'get_my_favorite_worlds',
-    description: '[查询·收藏] 拉取当前账号收藏的全部世界，按标签分类（🎮游戏/👻恐怖/🎵音乐体验/🌄风景观光/🧍Avatar模型/🍻社交聚会/😴休闲睡觉/📷拍照/其他），返回世界名/作者/收藏/浏览/简介/分类。注意：首次调用（无缓存预热）需逐个查询详情，400 收藏约 15-20 分钟；缓存命中后秒回（cached 字段区分）。',
+    description: '[查询·收藏] 拉取当前账号收藏的全部世界，按标签分类（🎮游戏/👻恐怖/🎵音乐体验/🌄风景观光/🧍Avatar模型/🍻社交聚会/😴休闲睡觉/📷拍照/其他），返回世界名/作者/收藏/浏览/简介/分类。数据经 GET /worlds/favorites 分页一次拉全（含实时 occupants），秒级返回，无需逐个查详情。',
     inputSchema: {
       type: 'object',
       properties: {
