@@ -22,6 +22,7 @@ import { EventPipeline } from './core/event-pipeline.js';
 import { FriendStateManager } from './core/friend-state.js';
 import { createServer } from './core/http-server.js';
 import { PluginLoader } from './core/plugin-loader.js';
+import { migrateLegacyData } from './core/migrate-legacy-data.js';
 import { fetchOtpFromEmail } from './core/otp-fetcher.js';
 import {
   getCreators, addCreator, removeCreator,
@@ -277,6 +278,9 @@ async function main() {
   } else {
     log('\n🔓 安全模式未启用（VRC_MONITOR_SAFE_MODE 未设置或非 true）');
   }
+
+  // 0c. 旧数据迁移（issue #103）：根目录旧文件 → data/
+  migrateLegacyData(__dirname, path.join(__dirname, 'data'));
 
   // 1. 初始化数据库
   log('📦 初始化数据库...');

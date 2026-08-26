@@ -161,7 +161,7 @@ PR 由 AI Agent 编写提交（人类只提出需求、不直接编码）。以�
 
 ## 6. 测试与 CI
 
-- **现状（含 PR-3 起）**：已接入 GitHub Actions（`.github/workflows/ci.yml`），对 Node 22 × Ubuntu/Windows 跑**无凭据冒烟**：`node test/test-registry.mjs`（注册表完整性，工具数、顺序+定义+handler）、`node scripts/dump-tools.mjs`（权威工具清单，行数与 core/tool-order.json 动态对齐）、`python scripts/check-doc-drift.py --json`（文档漂移，`has_drift` 必须为 false）。**CI 里一份真实 VRChat 凭据都没有**，自动化只覆盖「无凭据也能验证」的部分（模块加载、插件加载、DB 初始化、注册表完整、文档一致），涉及真实登录的验证仍需作者人工完成（可用 secrets 里的测试账号，但绝不能泄露到日志）。手动验证脚本：`test/test-apis.mjs`（REST API）、`test/test-websocket.mjs` / `test/test-ws-direct.mjs`（WebSocket）、`scripts/analyze-db.mjs`（数据库分析）。合并以作者实际运行为准，并参考 CI 冒烟结果。
+- **现状（含 PR-3 起）**：已接入 GitHub Actions（`.github/workflows/ci.yml`），对 Node 22 × Ubuntu/Windows 跑**无凭据冒烟**：`node test/test-registry.mjs`（注册表完整性，工具数、顺序+定义+handler）、`node scripts/dump-tools.mjs`（权威工具清单，行数与 core/tool-order.json 动态对齐）、`node test/test-migrate-data.mjs`（issue #103 回归：无 data/ 目录启动不崩 + 迁移引导行为/warn 提示）、`python scripts/check-doc-drift.py --json`（文档漂移，`has_drift` 必须为 false）。**CI 里一份真实 VRChat 凭据都没有**，自动化只覆盖「无凭据也能验证」的部分（模块加载、插件加载、DB 初始化、注册表完整、文档一致），涉及真实登录的验证仍需作者人工完成（可用 secrets 里的测试账号，但绝不能泄露到日志）。手动验证脚本：`test/test-apis.mjs`（REST API）、`test/test-websocket.mjs` / `test/test-ws-direct.mjs`（WebSocket）、`scripts/analyze-db.mjs`（数据库分析）。合并以作者实际运行为准，并参考 CI 冒烟结果。
 - **Agent 义务**：涉及 API / WebSocket / 数据库的功能改动，Agent 必须在 PR 描述写明验证方式；能跑现有脚本就跑一遍（尤其 `test/test-registry.mjs` / `scripts/check-doc-drift.py`），不能跑要说明原因。Agent 提交前必须实际运行验证，不能只做静态分析就声称完成。
 - **CI 里的凭据红线**：workflow 文件及其他自动化路径**严禁**出现任何真实凭据、Cookie、token、密码、IMAP 授权码（`credentials.json` 已被 gitignore 排除）。自动化测试账号如需纳入 CI，一律走 GitHub repo secrets 且绝不回显到日志。
 - 新增测试脚本命名沿用 `test-*.mjs` 风格，方便 CI 统一发现。

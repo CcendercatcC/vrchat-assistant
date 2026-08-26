@@ -4,6 +4,7 @@ name: CI
 #   - test/test-registry.mjs  （注册表完整性：工具数、顺序+定义+handler，无凭据可跑）
 #   - scripts/dump-tools.mjs     （权威工具清单，行数须与 core/tool-order.json 一致——动态推导，不写死）
 #   - test/test-storage-snapshot.mjs（storage 行为等价基线：公共方法「输入→返回」快照，--check 对比 golden）
+#   - test/test-migrate-data.mjs（issue #103 回归：无 data/ 目录启动不崩 + 迁移引导行为/warn 提示）
 #   - scripts/check-doc-drift.py （文档漂移：skill 工具清单/数字残留/版本同步/死引用，has_drift=false）
 #
 # 刻意不接入任何真实凭据：本仓库所有自动化测试只能覆盖「无凭据也能验证」的部分，
@@ -60,6 +61,9 @@ jobs:
 
       - name: Storage behavior-equivalence snapshot (no credentials)
         run: node test/test-storage-snapshot.mjs
+
+      - name: Migrate legacy data regression (issue #103, no credentials)
+        run: node test/test-migrate-data.mjs
 
       - name: Doc drift check (has_drift must be false)
         shell: bash

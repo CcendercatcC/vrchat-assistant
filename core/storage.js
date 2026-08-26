@@ -7,7 +7,7 @@
  * 是原生绑定 + WAL 模式：每次写即时落盘、崩溃安全、支持并发读。
  */
 import Database from 'better-sqlite3';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { backupDatabase } from './backup.js';
@@ -36,6 +36,7 @@ export class Storage {
 
   async init(dbPath) {
     this.dbPath = dbPath;
+    mkdirSync(path.dirname(dbPath), { recursive: true });
     this.db = new Database(dbPath);
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('busy_timeout = 5000');
