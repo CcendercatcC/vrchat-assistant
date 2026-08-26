@@ -166,6 +166,7 @@ export default function register(api) {
           visits: typeof w.visits === 'number' ? w.visits : null,
           popularity: typeof w.popularity === 'number' ? w.popularity : null,
           capacity: w.capacity || 0,
+          occupants: typeof w.occupants === 'number' ? w.occupants : null,
           tags: Array.isArray(w.tags) ? w.tags : [],
           category: classify(w),
           favoriteGroup: f.favoriteGroupName || '',
@@ -368,6 +369,7 @@ export default function register(api) {
       },
       required: ['worldId'],
     },
+    destructive: true,
     handler: async (args) => handleUnfavoriteWorld(args),
   });
 
