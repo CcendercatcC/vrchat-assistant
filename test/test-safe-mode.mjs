@@ -12,11 +12,21 @@
  * 无需 VRChat 凭据 / 网络，可离线运行。退出码 0=全部通过。
  */
 import assert from 'node:assert/strict';
-import { CUSTOM_TOOLS } from '../core/mcp-definitions.js';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 import { DESTRUCTIVE_TOOLS, isSafeModeEnabled, filterTools, assertToolAllowed } from '../core/safe-mode.js';
 import { createServer } from '../core/http-server.js';
+import { getRegistryMap } from '../core/registry.js';
 import { ctx } from '../core/server-context.js';
 import { RateLimiter } from '../core/rate-limiter.js';
+
+// CUSTOM_TOOLS 原数据源 core/mcp-definitions.js 已被 PR-1 重构拆分为 core/tools/*.js（该文件已删除）。
+// 改用权威工具名清单 core/tool-order.json 的 tool_order 构造「含 name 的工具对象数组」：
+// filterTools / 无漂移断言仅依赖 name 属性，语义与原 CUSTOM_TOOLS 一致；tool_order 涵盖核心+插件全部工具。
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const MANIFEST = JSON.parse(readFileSync(path.join(__dirname, '..', 'core', 'tool-order.json'), 'utf-8'));
+const CUSTOM_TOOLS = MANIFEST.tool_order.map((name) => ({ name }));
 
 let passed = 0;
 function ok(name) { passed++; console.log(`  ✅ ${name}`); }
@@ -75,6 +85,9 @@ async function e2e(envValue, label, expectRemoved, port) {
 
   ctx.paths.PORT = port;
   ctx.rateLimiter = new RateLimiter({ minInterval: 1 });
+  // 最小 ctx 桩：e2e 用核心离线的 get_server_status 做「普通工具仍可用」样例，其 handler 读 ctx.storage/serverState。
+  if (!ctx.storage) ctx.storage = { getStats: () => ({ events: 0, friends: 0 }) };
+  if (!ctx.serverState) ctx.serverState = { started: Date.now(), authUser: null, needsTotp: false };
   const server = createServer();
   await new Promise((resolve) => server.listen(port, '127.0.0.1', resolve));
 
@@ -93,7 +106,11 @@ async function e2e(envValue, label, expectRemoved, port) {
     // tools/list
     const listResp = await mcp({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
     const toolNames = new Set(listResp.result.tools.map(t => t.name));
-    for (const t of DESTRUCTIVE_TOOLS) {
+    // 仅对「当前已注册」的破坏性工具断言可见性：DESTRUCTIVE_TOOLS 含插件工具（如 remove_print /
+    // unfavorite_world / move_world_group，属 media/favorites 插件），本测试未加载插件故未注册，
+    // 跳过以免误报；核心已注册的破坏性工具（如 remove_friend）按开关态断言。
+    const registeredDestructive = DESTRUCTIVE_TOOLS.filter(t => getRegistryMap().has(t));
+    for (const t of registeredDestructive) {
       assert.equal(toolNames.has(t), !expectRemoved, `${label}: tools/list 中 ${t} 可见性错误`);
     }
     assert.equal(toolNames.has('get_online_friends'), true, `${label}: 普通工具应始终可见`);
@@ -106,10 +123,10 @@ async function e2e(envValue, label, expectRemoved, port) {
       assert.match(blockedResp.error.message, /安全模式/, `${label}: 错误信息应说明安全模式，实际: ${blockedResp.error.message}`);
       ok(`${label}: tools/call remove_friend 被拦截（error.message 含「安全模式」）`);
 
-      // tools/call 正常工具仍可用
-      const okResp = await mcp({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'get_boop_emojis', arguments: {} } });
-      assert.ok(okResp.result?.content?.[0]?.text, `${label}: get_boop_emojis 应成功`);
-      ok(`${label}: tools/call get_boop_emojis 正常返回`);
+      // tools/call 正常工具仍可用（用核心离线的 get_server_status；get_boop_emojis 原为 media 插件工具，本测试未加载插件故未注册）
+      const okResp = await mcp({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'get_server_status', arguments: {} } });
+      assert.ok(okResp.result?.content?.[0]?.text, `${label}: get_server_status 应成功`);
+      ok(`${label}: tools/call get_server_status 正常返回`);
     }
   } finally {
     await new Promise((r) => server.close(r));
