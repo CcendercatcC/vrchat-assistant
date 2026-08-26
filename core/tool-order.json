@@ -70,6 +70,7 @@
     "record_join_choice",
     "get_join_learning",
     "favorite_world",
+    "unfavorite_world",
     "search_booth_items",
     "get_booth_item",
     "get_booth_history",

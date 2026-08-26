@@ -95,6 +95,49 @@ export default function register(api) {
     }
   }
 
+  async function handleUnfavoriteWorld({ worldId, tag, confirm }) {
+    if (!worldId || typeof worldId !== 'string' || !worldId.startsWith('wrld_')) {
+      throw new Error('worldId is required and must start with wrld_');
+    }
+    if (tag != null && tag !== '' && !FAVORITE_TAGS.includes(tag)) {
+      throw new Error(`tag must be one of ${FAVORITE_TAGS.join('/')} (got "${tag}")`);
+    }
+
+    // 拉全收藏记录，找该世界（可按 tag 过滤）
+    const all = [];
+    let offset = 0;
+    while (true) {
+      const data = await api.vrchat.fetch(`/favorites?type=world&n=${PAGE}&offset=${offset}`);
+      if (!Array.isArray(data) || data.length === 0) break;
+      all.push(...data);
+      offset += PAGE;
+      if (data.length < PAGE) break;
+      if (offset >= 3000) break;
+    }
+    const records = all.filter(f => f.favoriteId === worldId && (!tag || (f.tags || [])[0] === tag));
+    if (records.length === 0) {
+      return { ok: false, worldId, removed: false, error: tag ? `该世界不在收藏分组「${tag}」中` : '该世界不在任何收藏分组中' };
+    }
+
+    if (!confirm) {
+      const groupNames = records.map(r => (r.tags || [])[0]).join(', ');
+      return { worldId, groupName: groupNames, confirmRequired: true, message: `将从收藏分组「${groupNames}」移除该世界，请传 confirm: true 确认执行` };
+    }
+
+    for (const rec of records) {
+      try {
+        await api.vrchat.fetch(`/favorites/${rec.id}`, { method: 'DELETE' });
+      } catch (e) {
+        if (e.status !== 404 && e.status !== 400) throw e;
+      }
+    }
+    try {
+      await api.consume('storage.setWorldFavorited', { worldId, favorited: 0 });
+    } catch { /* 本地标记失败不影响 */ }
+    api.log(`✅ unfavorite_world: ${worldId} (${records.length} 条记录)`);
+    return { ok: true, worldId, removed: true, removedGroups: records.map(r => (r.tags || [])[0]) };
+  }
+
   async function handleGetMyFavoriteWorlds({ limit = 500, sortBy = 'favorites' } = {}) {
     try {
       const favs = await fetchAllFavoriteWorldsFull();
@@ -311,6 +354,21 @@ export default function register(api) {
       required: ['worldId'],
     },
     handler: async (args) => handleFavoriteWorld(args),
+  });
+
+  api.registerTool({
+    name: 'unfavorite_world',
+    description: '[write·收藏] 从收藏分组移除世界（DELETE /favorites/{记录id}，可逆，重新 favorite_world 即可加回）。worldId 必填；tag 可选（省略 = 从全部所在分组移除）。写操作，confirm: true 才执行，否则只返回预览。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        worldId: { type: 'string', description: 'VRChat world id (wrld_...)' },
+        tag: { type: 'string', description: '收藏夹分组 tag（worlds0/worlds1/worlds2/worlds3/worlds4，省略 = 从全部所在分组移除）' },
+        confirm: { type: 'boolean', description: 'Must be true to actually unfavorite. Default false returns preview only.' },
+      },
+      required: ['worldId'],
+    },
+    handler: async (args) => handleUnfavoriteWorld(args),
   });
 
   api.registerTool({

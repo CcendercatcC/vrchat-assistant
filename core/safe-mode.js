@@ -19,6 +19,7 @@ export const DESTRUCTIVE_TOOLS = [
   'remove_print',             // 删除相册照片（不可逆）
   'remove_gallery_image',     // 删除画廊图片（不可逆）
   'unfavorite_friend',        // 从收藏分组移除好友
+  'unfavorite_world',         // 从收藏分组移除世界
   'leave_group',              // 退出群组（移除成员身份）
   'decline_friend_request',   // 拒绝好友请求（清除通知，不可逆）
   'hide_notification',        // 隐藏/清除通知（旧 v1 hide 即删除）
