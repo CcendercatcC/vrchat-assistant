@@ -133,23 +133,6 @@ export default function register(api) {
     return '';
   }
 
-  // ── 通用 HTTP fetch（外部站）──────────────
-  async function httpGet(url, opts = {}) {
-    const controller = new AbortController();
-    const t = setTimeout(() => controller.abort(), opts.timeoutMs || 20000);
-    try {
-      const res = await fetch(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126.0.0.0' },
-        signal: controller.signal,
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}: ${url}`);
-      const ct = res.headers.get('content-type') || '';
-      return ct.includes('json') ? await res.json() : await res.text();
-    } finally {
-      clearTimeout(t);
-    }
-  }
-
   // ════════════ 数据源 1：VRC Search（SSR HTML）════════════
     // 类别 × 时间窗 矩阵抓取。返回 { events[], okCount, failCount }（okCount/failCount 供 sourceBreakdown 区分「源不可达」与「无活动」）。
     async function collectVrcSearch(opts) {
