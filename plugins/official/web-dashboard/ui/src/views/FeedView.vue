@@ -951,7 +951,7 @@ onUnmounted(() => {
 .ed-ellip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ed-id { font-size: 10.5px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ed-link { color: var(--accent-2); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ev-detail :deep(.p-button) { width: 20px; height: 20px; flex: none; }
+.ev-detail :deep(.p-button) { width: 24px; height: 24px; flex: none; }
 
 /* 移动端：卡片化 */
 @media (max-width: 899px) {
