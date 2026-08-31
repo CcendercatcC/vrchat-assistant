@@ -716,6 +716,6 @@ export const tools = [
         }
       }
     },
-    handler: async (args) => ctx.rateLimiter.execute(() => handleGetWeeklyReport(args))
+    handler: async (args) => ctx.rateLimiter.execute(() => handleGetWeeklyReport(args), { taskTimeoutMs: 90000 })
   }
 ];

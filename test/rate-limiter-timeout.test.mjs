@@ -28,7 +28,7 @@ const REPO = path.join(__dirname, '..');
 
 test('rateLimiter taskTimeoutMs：超时任务被 reject，队列不锁死，后续任务照常执行', async () => {
   const { RateLimiter } = await import(pathToFileURL(path.join(REPO, 'core', 'rate-limiter.js')).href);
-  const rl = new RateLimiter({ minInterval: 0, maxQueueSize: 50, taskTimeoutMs: 400 });
+  const rl = new RateLimiter({ minInterval: -1, maxQueueSize: 50, taskTimeoutMs: 400 });
 
   // 模拟“网络挂死”：比 taskTimeoutMs(400) 更久才完成 → 被超时兜底踢掉
   const slow = () => new Promise(r => setTimeout(r, 1200));
@@ -59,6 +59,39 @@ test('rateLimiter 无 taskTimeoutMs 时保持默认开启（不小于 0 且默�
     const val = Number(m[1]);
     assert.ok(val > 0, `默认 taskTimeoutMs 应为正整数（当前 ${val}）`);
   }
+});
+
+test('rateLimiter per-task 超时覆盖：聚合任务可声明更大预算不被默认 30s 误杀', async () => {
+  const { RateLimiter } = await import(pathToFileURL(path.join(REPO, 'core', 'rate-limiter.js')).href);
+  // 实例默认超时极短(200ms)，但本任务显式声明 2000ms → 应能跑完不被默认误杀
+  const rl = new RateLimiter({ minInterval: -1, maxQueueSize: 50, taskTimeoutMs: 200 });
+
+  // 模拟聚合 handler：0.8s 完成，默认 200ms 会误杀，但 per-task 2000ms 足够
+  const agg = () => new Promise(r => setTimeout(r, 800));
+  const v = await rl.execute(agg, { taskTimeoutMs: 2000 }).then(x => x, e => e);
+  assert.equal(v, undefined, 'per-task 大预算的任务应正常完成（不被默认 200ms 误杀）');
+
+  await new Promise(r => setTimeout(r, 100));
+  assert.equal(rl._queue.length, 0, '队列应清空');
+  assert.equal(rl._processing, false, '_processing 应恢复 false');
+});
+
+test('rateLimiter per-task 超时覆盖：taskTimeoutMs=0 关闭该任务超时兜底', async () => {
+  const { RateLimiter } = await import(pathToFileURL(path.join(REPO, 'core', 'rate-limiter.js')).href);
+  const rl = new RateLimiter({ minInterval: -1, maxQueueSize: 50, taskTimeoutMs: 200 });
+
+  // 0.6s 完成 > 实例默认 200ms，但本任务显式关闭超时(0) → 应正常完成
+  const v = await rl.execute(() => new Promise(r => setTimeout(r, 600)), { taskTimeoutMs: 0 }).then(x => x, e => e);
+  assert.equal(v, undefined, '关闭超时的任务应正常完成，不受实例默认 200ms 影响');
+});
+
+test('rateLimiter per-task 超时覆盖：显式更小预算会提前 reject', async () => {
+  const { RateLimiter } = await import(pathToFileURL(path.join(REPO, 'core', 'rate-limiter.js')).href);
+  const rl = new RateLimiter({ minInterval: -1, maxQueueSize: 50, taskTimeoutMs: 5000 });
+  const slow = () => new Promise(r => setTimeout(r, 1500));
+  const err = await rl.execute(slow, { taskTimeoutMs: 300 }).then(v => null, e => e);
+  assert.ok(err, '显式更小预算的任务应被 reject');
+  assert.match(String(err.message), /超时/, `错误信息应含“超时”: ${err.message}`);
 });
 
 test('vrchat-api.js：全部 https.request 均配置 req.setTimeout 超时兜底', () => {

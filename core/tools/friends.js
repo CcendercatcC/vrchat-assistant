@@ -278,7 +278,7 @@ export const tools = [
       "type": "object",
       "properties": {}
     },
-    handler: async (args) => ctx.rateLimiter.execute(() => handleGetOnlineFriends(args))
+    handler: async (args) => ctx.rateLimiter.execute(() => handleGetOnlineFriends(args), { taskTimeoutMs: 90000 })
   },
   {
     "name": "get_friend_info",
