@@ -4,6 +4,7 @@ import { get, post } from '../api.js';
 import { time, date, dateTime, avatarLabel , reltime } from '../utils.js';
 import { openUser } from '../store.js';
 import { toast } from '../toast.js';
+import { confirm } from '../confirm.js';
 
 // 非好友追踪（VRCX-Luo 对齐）：历史非好友 + 手动添加追踪的用户，
 // 服务端每小时拉取资料/头像并记录 bio/status 变化（events 表 friend-update + source=poll）。
@@ -87,7 +88,7 @@ async function addDirectId() {
 
 // ── 移除追踪 ──
 async function removeTracked(x) {
-  if (!window.confirm(`确认移除对「${x.displayName || x.userId}」的追踪？其变化历史保留，但不再自动刷新。`)) return;
+    if (!await confirm({ message: `确认移除对「${x.displayName || x.userId}」的追踪？其变化历史保留，但不再自动刷新。`, header: '移除追踪', acceptLabel: '移除' })) return;
   try {
     const r = await post('/api/dashboard/tracked/remove', { userId: x.userId });
     if (r && r.error) throw new Error(r.error);

@@ -33,9 +33,13 @@ import WorldDialog from './components/WorldDialog.vue';
 import GroupDialog from './components/GroupDialog.vue';
 import InstanceDialog from './components/InstanceDialog.vue';
 import AvatarDialog from './components/AvatarDialog.vue';
+import { useConfirm } from 'primevue/useconfirm';
+import { bindConfirm } from './confirm.js';
 
 const toastInstance = useToast();
 bindToast(toastInstance);
+const confirmInstance = useConfirm();
+bindConfirm(confirmInstance);
 
 const NAV_GROUPS = [
   { g: '核心', items: [
