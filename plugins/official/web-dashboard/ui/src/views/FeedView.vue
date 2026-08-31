@@ -866,6 +866,12 @@ onUnmounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+/* 移动端：简介变更允许换行完整显示（父级 .c-detail 已 wrap），避免长文本横向溢出 */
+@media (max-width: 899px) {
+  .bio-text { white-space: normal; overflow: visible; text-overflow: clip; word-break: break-word; }
 }
 
 /* 通知：消息内容（可点击打开群组） */

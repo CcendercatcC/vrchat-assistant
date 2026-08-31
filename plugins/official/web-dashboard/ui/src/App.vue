@@ -27,6 +27,7 @@ import GroupsView from './views/GroupsView.vue';
 import EventsView from './views/EventsView.vue';
 import PlaceholderView from './views/PlaceholderView.vue';
 import RightBar from './components/RightBar.vue';
+import QuickSearch from './components/QuickSearch.vue';
 import UserDialog from './components/UserDialog.vue';
 import WorldDialog from './components/WorldDialog.vue';
 import GroupDialog from './components/GroupDialog.vue';
@@ -157,29 +158,31 @@ async function refresh() {
       </nav>
 
       <main class="main-viewport">
-        <FeedView v-if="store.view === 'feed'" />
-        <FriendsView v-else-if="store.view === 'friends'" />
-        <FavoritesView v-else-if="store.view === 'favorites'" />
-        <LogsView v-else-if="store.view === 'logs'" />
-        <NotificationsView v-else-if="store.view === 'notifications'" />
-        <SearchView v-else-if="store.view === 'search'" />
-        <WorldsView v-else-if="store.view === 'worlds'" />
-        <XWorldsView v-else-if="store.view === 'xworlds'" />
-        <RecommendView v-else-if="store.view === 'recommend'" />
-        <GroupsView v-else-if="store.view === 'groups'" />
-        <EventsView v-else-if="store.view === 'events'" />
-        <TrackedView v-else-if="store.view === 'tracked'" />
-        <PlayersView v-else-if="store.view === 'players'" />
-        <AvatarsView v-else-if="store.view === 'avatars'" />
-        <PrintsView v-else-if="store.view === 'prints'" />
-        <BoothView v-else-if="store.view === 'booth'" />
-        <AnnouncementsView v-else-if="store.view === 'announcements'" />
-        <ChartsView v-else-if="store.view === 'charts'" />
-        <WeeklyReportView v-else-if="store.view === 'report'" />
-        <ModerationView v-else-if="store.view === 'moderation'" />
-        <ToolsView v-else-if="store.view === 'tools'" />
-        <OpenView v-else-if="store.view === 'open'" />
-        <PlaceholderView v-else :view="store.view" />
+        <Transition name="view-fade" mode="out-in">
+          <FeedView v-if="store.view === 'feed'" key="feed" />
+          <FriendsView v-else-if="store.view === 'friends'" key="friends" />
+          <FavoritesView v-else-if="store.view === 'favorites'" key="favorites" />
+          <LogsView v-else-if="store.view === 'logs'" key="logs" />
+          <NotificationsView v-else-if="store.view === 'notifications'" key="notifications" />
+          <SearchView v-else-if="store.view === 'search'" key="search" />
+          <WorldsView v-else-if="store.view === 'worlds'" key="worlds" />
+          <XWorldsView v-else-if="store.view === 'xworlds'" key="xworlds" />
+          <RecommendView v-else-if="store.view === 'recommend'" key="recommend" />
+          <GroupsView v-else-if="store.view === 'groups'" key="groups" />
+          <EventsView v-else-if="store.view === 'events'" key="events" />
+          <TrackedView v-else-if="store.view === 'tracked'" key="tracked" />
+          <PlayersView v-else-if="store.view === 'players'" key="players" />
+          <AvatarsView v-else-if="store.view === 'avatars'" key="avatars" />
+          <PrintsView v-else-if="store.view === 'prints'" key="prints" />
+          <BoothView v-else-if="store.view === 'booth'" key="booth" />
+          <AnnouncementsView v-else-if="store.view === 'announcements'" key="announcements" />
+          <ChartsView v-else-if="store.view === 'charts'" key="charts" />
+          <WeeklyReportView v-else-if="store.view === 'report'" key="report" />
+          <ModerationView v-else-if="store.view === 'moderation'" key="moderation" />
+          <ToolsView v-else-if="store.view === 'tools'" key="tools" />
+          <OpenView v-else-if="store.view === 'open'" key="open" />
+          <PlaceholderView v-else :view="store.view" key="placeholder" />
+        </Transition>
       </main>
 
       <aside v-if="!store.isMobile" class="rightbar">
@@ -232,6 +235,7 @@ async function refresh() {
     </Drawer>
 
     <!-- 全局弹窗 -->
+    <QuickSearch />
     <UserDialog />
     <WorldDialog />
     <GroupDialog />

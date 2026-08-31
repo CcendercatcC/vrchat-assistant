@@ -26,6 +26,24 @@ export async function post(p, body = {}, timeout = 25000) {
   return r.json();
 }
 
+// 读接口 TTL 缓存（60s）：轮询型/重复加载的视图（动态、好友、概览等）避免重复请求。
+// 写操作（post）后调用 invalidateCache(path) 强制下次刷新。
+const CACHE_TTL = 60_000;
+const cacheMap = new Map();   // path -> { at, data }
+
+export async function getCached(p, timeout = 25000) {
+  const hit = cacheMap.get(p);
+  if (hit && Date.now() - hit.at < CACHE_TTL) return hit.data;
+  const data = await get(p, timeout);
+  cacheMap.set(p, { at: Date.now(), data });
+  return data;
+}
+
+export function invalidateCache(p) {
+  if (p) { cacheMap.delete(p); return; }
+  cacheMap.clear();
+}
+
 export function openSse(onEvent, onStatus) {
   try {
     const es = new EventSource(apiUrl('/api/dashboard/stream'));

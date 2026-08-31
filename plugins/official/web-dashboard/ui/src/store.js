@@ -21,6 +21,7 @@ export const store = reactive({
   isMobile: false,
   navOpen: false,
   friendsOpen: false,   // 移动端右侧好友抽屉（A1：桌面右侧栏在手机上改由抽屉打开）
+  quickSearchOpen: false, // 快速搜索弹窗（Ctrl+K / Cmd+K）
   previewUrl: null,
 
   feedFilter: [],          // 多选类型数组（空 = 所有）
@@ -552,10 +553,40 @@ function trackViewport() {
   window.addEventListener('resize', update);
 }
 
+// 视图快捷键映射：Alt+数字 或 Ctrl+数字 快速切换（数字 = 导航顺序，避开输入框聚焦态）
+const VIEW_HOTKEYS = ['feed', 'friends', 'tracked', 'players', 'notifications', 'search', 'favorites', 'worlds', 'avatars'];
+const isTyping = (t) => {
+  const tag = (t && t.tagName || '').toLowerCase();
+  return tag === 'input' || tag === 'textarea' || tag === 'select' || (t && t.isContentEditable);
+};
+
 function initKeyboard() {
-  // Esc 关闭弹窗（Ctrl+K 快速搜索已按用户要求移除）
+  // Esc 关闭弹窗；Ctrl/Cmd+K 打开快速搜索
   window.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+      e.preventDefault();
+      store.quickSearchOpen = !store.quickSearchOpen;
+      return;
+    }
+    // Alt/Ctrl + 数字 切换视图（输入框中不响应）
+    if (e.altKey && /^[1-9]$/.test(e.key) && !isTyping(e.target)) {
+      e.preventDefault();
+      const v = VIEW_HOTKEYS[Number(e.key) - 1];
+      if (v && store.view !== v) setView(v);
+      return;
+    }
+    // 动态页 "/" 聚焦搜索（输入框中不响应；按两次 Esc 依次关弹窗→取消聚焦）
+    if (e.key === '/' && !isTyping(e.target) && !(e.ctrlKey || e.metaKey || e.altKey)) {
+      const input = document.querySelector('.search-input, .ft-search input');
+      if (input) {
+        e.preventDefault();
+        input.focus();
+        input.select();
+      }
+      return;
+    }
     if (e.key === 'Escape') {
+      if (store.quickSearchOpen) { store.quickSearchOpen = false; return; }
       if (store.userModal) { store.userModal = null; return; }
       if (store.worldModal) { store.worldModal = null; return; }
       if (store.avatarModal) { store.avatarModal = null; return; }

@@ -1,21 +1,17 @@
 <script setup>
-import { ref, watch } from 'vue';
+import { ref, watch, computed } from 'vue';
 import { store, openUser, openWorld } from '../store.js';
 import { get, imgUrl } from '../api.js';
 
-const visible = computedLike(() => store.quickSearchOpen);
+const visible = computed({
+  get: () => store.quickSearchOpen,
+  set: (v) => { store.quickSearchOpen = v; },
+});
 const q = ref('');
 const local = ref([]);
 const remote = ref([]);
 const searching = ref(false);
 let timer = null;
-
-function computedLike(fn) {
-  return {
-    get: fn,
-    set: (v) => { store.quickSearchOpen = v; },
-  };
-}
 
 watch(() => store.quickSearchOpen, (v) => {
   if (v) {

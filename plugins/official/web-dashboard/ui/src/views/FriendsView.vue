@@ -69,7 +69,9 @@ function offlineSince(f) {
 
 <template>
   <div class="friends-view">
-    <div class="view-title">好友位置</div>
+    <div class="fv-head">
+      <h2><i class="pi pi-users"></i> 好友位置</h2>
+    </div>
 
     <div class="fv-toolbar">
       <SelectButton v-model="store.friendsTab" :options="tabOptions" optionLabel="label" optionValue="value" size="small" />
