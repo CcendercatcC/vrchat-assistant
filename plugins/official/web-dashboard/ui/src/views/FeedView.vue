@@ -673,7 +673,16 @@ onUnmounted(() => {
 
 <style scoped>
 .feed-view { padding: 4px; }
-.feed-toolbar { margin-bottom: 12px; }
+.feed-toolbar {
+  margin-bottom: 12px;
+  /* 长列表滚动时筛选工具栏吸顶（相对 .main-viewport 滚动容器），随时切换筛选不用滚回顶部 */
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: linear-gradient(var(--surface) 85%, transparent);
+  padding-top: 4px;
+  padding-bottom: 8px;
+}
 .ft-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .ft-chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; flex: 1 1 320px; min-width: 0; }
 .ft-search {
