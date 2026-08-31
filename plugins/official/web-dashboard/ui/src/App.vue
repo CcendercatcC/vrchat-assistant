@@ -141,6 +141,8 @@ async function refresh() {
           :class="{ 'notify-on': store.notifyEnabled }" @click="onToggleNotify">
           <span v-if="store.notifCount" class="header-bell-dot" :title="store.notifCount + ' 条未读通知'"></span>
         </Button>
+        <Button icon="pi pi-search" text rounded aria-label="快速搜索" title="快速搜索（Ctrl+K）"
+          @click="store.quickSearchOpen = true" />
         <Button icon="pi pi-refresh" text rounded aria-label="刷新" title="刷新"
           :loading="refreshing" @click="refresh" />
       </div>
