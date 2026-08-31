@@ -15,6 +15,7 @@
   --warn: #ff7b42;
   --info: #1778ff;
   --danger: #ff5252;
+  --star: #ffca28;   /* 收藏星标金（VRChat 惯例）——FeedView 星标筛选使用（评审阻断②修复） */
   --radius: 10px;
   --font-mono: ui-monospace, 'JetBrains Mono', SFMono-Regular, Menlo, Consolas, monospace;
   --header-h: 48px;
