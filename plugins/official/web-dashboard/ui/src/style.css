@@ -178,6 +178,17 @@ body {
   padding: 48px 20px;
   font-size: 13px;
 }
+/* 空态统一图标：无显式 empty-icon 时用 ::before 补一个通用图标（跨视图 UI 一致性） */
+.empty:not(:has(.empty-icon))::before {
+  content: '\e961';
+  font-family: 'primeicons';
+  font-size: 26px;
+  display: block;
+  margin: 0 auto 10px;
+  color: var(--text-dim);
+  opacity: 0.5;
+}
+.empty:not(:has(.empty-icon)) small { margin-top: 4px; }
 .empty small { display: block; margin-top: 8px; color: var(--text-dim); opacity: 0.7; }
 .view-title { font-size: 16px; font-weight: 700; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
 /* 动态标题行内嵌动作按钮（移动端日期+星标） */
