@@ -10,6 +10,9 @@ export class RateLimiter {
   constructor(options = {}) {
     this.minInterval = options.minInterval || 2600;  // 毫秒
     this.maxQueueSize = options.maxQueueSize || 50;
+    // 任务级超时兜底：>0 时单个任务超过该时长即 reject，防止死任务锁死队列。
+    // 默认 30000ms；taskTimeoutMs=0 表示关闭该兜底。
+    this.taskTimeoutMs = options.taskTimeoutMs ?? 30000;
     this._lastCallTime = 0;
     this._queue = [];
     this._processing = false;
@@ -51,9 +54,26 @@ export class RateLimiter {
       this._lastCallTime = Date.now();
       this._totalCalls++;
 
+      // 任务级超时兜底：即使 fn 内部死等（网络 socket 挂起、handler 逻辑卡死），
+      // 也会在 taskTimeoutMs 后 reject，防止一个任务占住队头把整条队列锁死。
+      // 若 fn 已自行设置了更短超时/先完成，此处兑现 Promise.race 即可，无副作用。
       try {
-        const result = await item.fn();
-        item.resolve(result);
+        if (this.taskTimeoutMs > 0) {
+          const result = await Promise.race([
+            item.fn(),
+            new Promise((_, rej) => {
+              const t = setTimeout(() => {
+                rej(new Error(`Rate limiter 任务超时 (${this.taskTimeoutMs}ms)`));
+              }, this.taskTimeoutMs);
+              // 若 item.fn 先完成，清掉这个闲置的定时器，避免进程被挂住
+              if (typeof t.unref === 'function') t.unref();
+            }),
+          ]);
+          item.resolve(result);
+        } else {
+          const result = await item.fn();
+          item.resolve(result);
+        }
       } catch (err) {
         item.reject(err);
       }
