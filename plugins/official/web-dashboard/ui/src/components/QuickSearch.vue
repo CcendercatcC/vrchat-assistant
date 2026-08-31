@@ -18,7 +18,14 @@ watch(() => store.quickSearchOpen, (v) => {
     q.value = '';
     local.value = [];
     remote.value = [];
-    setTimeout(() => { const el = document.querySelector('.qs-input input'); if (el) el.focus(); }, 50);
+    // PrimeVue Dialog 打开后会接管焦点，延迟 + 重试确保输入框最终聚焦
+    let tries = 0;
+    const tryFocus = () => {
+      const el = document.querySelector('input.qs-input');
+      if (el) { el.focus(); return; }
+      if (++tries < 5) setTimeout(tryFocus, 120);
+    };
+    setTimeout(tryFocus, 120);
   }
 });
 
