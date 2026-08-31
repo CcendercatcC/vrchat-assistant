@@ -143,5 +143,7 @@ onMounted(load);
 @media (max-width: 899px) {
   .av-search { width: 100%; order: 3; }
   .av-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
+  /* C1 触控目标：模型卡片收藏/选中按钮 26px→34px */
+  .ac-fav { width: 34px; height: 34px; font-size: 15px; }
 }
 </style>
