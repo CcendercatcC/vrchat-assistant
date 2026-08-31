@@ -951,6 +951,8 @@ onUnmounted(() => {
   .ft-row { gap: 8px; }
   /* 筛选 chips 移动端尺寸走全局（style.css @media .chip） */
   .search-input { font-size: 12.5px; }
+  /* C1 触控目标：加载更多按钮移动端加大（30px→36px） */
+  .feed-more :deep(.p-button) { min-height: 36px; padding: 6px 16px; }
   /* 右上角计数三段在手机上收窄（完整值在 title 提示） */
   .feed-count { font-size: 10px; max-width: 56%; }
   /* B1：类型筛选 chips 单行横向滚动，不再全宽换行占半屏 */
