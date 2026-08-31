@@ -139,7 +139,7 @@ async function refresh() {
         <Button :icon="store.notifyEnabled ? 'pi pi-bell' : 'pi pi-bell-slash'" text rounded
           :aria-label="store.notifyEnabled ? '关闭通知提醒' : '开启通知提醒'" :title="store.notifyEnabled ? '通知提醒已开启' : '开启通知提醒（好友请求/邀请时桌面弹窗）'"
           :class="{ 'notify-on': store.notifyEnabled }" @click="onToggleNotify">
-          <span v-if="store.notifCount" class="header-bell-dot" :title="store.notifCount + ' 条未读通知'"></span>
+          <span v-if="store.notifCount" class="header-bell-dot" :title="store.notifCount + ' 条未读通知'">{{ store.notifCount > 99 ? '99+' : store.notifCount }}</span>
         </Button>
         <Button icon="pi pi-search" text rounded aria-label="快速搜索" title="快速搜索（Ctrl+K）"
           @click="store.quickSearchOpen = true" />
@@ -251,7 +251,7 @@ async function refresh() {
 </template>
 
 <style scoped>
-.header-bell-dot { position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--danger); }
+.header-bell-dot { position: absolute; top: 2px; right: 2px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--danger); color: #fff; font-size: 9px; font-weight: 700; line-height: 16px; text-align: center; box-sizing: border-box; }
 .to-top { position: fixed; right: 18px; bottom: 76px; z-index: 50; width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface-3); color: var(--text); cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(0,0,0,0.35); transition: transform 0.12s, border-color 0.12s; }
 .to-top:hover { border-color: var(--accent); transform: translateY(-1px); }
 @media (max-width: 899px) { .to-top { bottom: 70px; right: 12px; width: 34px; height: 34px; } }
