@@ -39,7 +39,7 @@ const shown = computed(() => {
   let list = worlds.value || [];
   if (q.value.trim()) {
     const query = q.value.trim().toLowerCase();
-    list = list.filter(w => (w.name || '').toLowerCase().includes(query));
+    list = list.filter(w => (w.worldName || w.name || '').toLowerCase().includes(query));
   }
   if (onlyNoted.value) list = list.filter(w => w.note);
   if (onlyFav.value) list = list.filter(w => w.favorited);
