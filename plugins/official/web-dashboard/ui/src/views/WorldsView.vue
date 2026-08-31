@@ -129,7 +129,7 @@ onMounted(load);
 .ws-img-empty { display: flex; align-items: center; justify-content: center; color: var(--text-dim); }
 .ws-latest { position: absolute; top: 5px; left: 5px; font-size: 10px; background: color-mix(in srgb, var(--accent) 85%, transparent); color: #fff; border-radius: 8px; padding: 0 7px; line-height: 16px; }
 .ws-info { padding: 7px 9px 9px; }
-.ws-name { font-size: 12.5px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ws-name { font-size: 12.5px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .ws-meta { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 10.5px; color: var(--text-dim); }
 .ws-time small { margin-left: 4px; }
 .ws-noted { color: var(--accent); }
