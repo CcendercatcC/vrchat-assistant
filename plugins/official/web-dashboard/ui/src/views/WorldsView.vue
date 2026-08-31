@@ -90,7 +90,7 @@ onMounted(load);
           <span v-if="i === 0" class="ws-latest">最近</span>
         </div>
         <div class="ws-info">
-          <b class="ws-name" :title="w.name">{{ w.name || w.worldId }}</b>
+          <b class="ws-name" :title="w.worldName || w.name">{{ w.worldName || w.name || w.worldId }}</b>
           <div class="ws-meta">
             <span class="ws-time mono" :title="date(w.lastSeen)">{{ reltime(w.lastSeen) }}<small>{{ date(w.lastSeen) }}</small></span>
             <span v-if="w.visits" class="ws-visits">× {{ w.visits }}</span>
