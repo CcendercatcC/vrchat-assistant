@@ -32,6 +32,7 @@ import UserDialog from './components/UserDialog.vue';
 import WorldDialog from './components/WorldDialog.vue';
 import GroupDialog from './components/GroupDialog.vue';
 import InstanceDialog from './components/InstanceDialog.vue';
+import AvatarDialog from './components/AvatarDialog.vue';
 
 const toastInstance = useToast();
 bindToast(toastInstance);
@@ -242,6 +243,7 @@ async function refresh() {
     <WorldDialog />
     <GroupDialog />
     <InstanceDialog />
+    <AvatarDialog />
     <Dialog v-model:visible="store.previewUrl" header="图片预览" :style="{ width: 'min(720px, 96vw)' }" :dismissable-mask="true">
       <img v-if="store.previewUrl" :src="store.previewUrl" style="width:100%; border-radius:8px" alt="预览" />
     </Dialog>
