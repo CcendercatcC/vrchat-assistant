@@ -390,7 +390,7 @@ onMounted(load);
 .tk-detail { background: var(--surface-2); border: 1px solid var(--border-soft); border-radius: 10px; padding: 10px 12px; margin-left: 34px; }
 .tk-empty { font-size: 12px; color: var(--text-dim); padding: 6px 2px; }
 .tc-filters { display: flex; gap: 5px; margin-bottom: 8px; flex-wrap: wrap; }
-.tc-chip { padding: 2px 10px; font-size: 11px; height: 22px; }
+.tc-chip { padding: 4px 12px; font-size: 12px; height: 32px; }
 .tk-timeline { display: flex; flex-direction: column; gap: 8px; max-height: 360px; overflow-y: auto; }
 .tk-change { display: flex; gap: 10px; }
 .tc-rail { flex: none; width: 74px; display: flex; flex-direction: column; align-items: flex-end; padding-top: 2px; }

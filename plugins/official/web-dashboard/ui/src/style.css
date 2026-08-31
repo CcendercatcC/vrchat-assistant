@@ -305,9 +305,7 @@ body {
 .star-btn.active { background: transparent; border-color: var(--accent); color: var(--accent); }
 .star-on { background: transparent; border-color: var(--accent); color: var(--accent); }
 .star-on .pi { color: var(--accent); }
-@media (max-width: 899px) {
-  .chip { height: 26px; padding: 4px 10px; font-size: 11px; flex: none; }
-}
+
 
 /* 空态：居中、弱化、留白 */
 .empty {
@@ -406,4 +404,9 @@ button { font-family: inherit; }
 .ws-card:hover, .pr-card:hover, .bh-card:hover, .av-card:hover, .world-card:hover, .avatar-card:hover {
   transform: translateY(-1px);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.32);
+}
+
+/* 移动端全局 chips 34px——置于文件末尾确保覆盖主定义（同 specificity 后者胜） */
+@media (max-width: 899px) {
+  .chip { height: 34px; padding: 4px 14px; font-size: 12px; }
 }

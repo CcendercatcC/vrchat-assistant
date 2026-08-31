@@ -161,6 +161,7 @@ onMounted(load);
 
 
 @media (max-width: 899px) {
+  .ga-group { padding: 4px 12px; font-size: 12px; min-height: 32px; }
   .ga-search { width: 100%; order: 3; }
   .ga-detail { margin-left: 0; }
 }
