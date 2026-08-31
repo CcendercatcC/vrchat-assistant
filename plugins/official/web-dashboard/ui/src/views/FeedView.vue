@@ -872,6 +872,8 @@ onUnmounted(() => {
 /* 移动端：简介变更允许换行完整显示（父级 .c-detail 已 wrap），避免长文本横向溢出 */
 @media (max-width: 899px) {
   .bio-text { white-space: normal; overflow: visible; text-overflow: clip; word-break: break-word; }
+  /* C1 触控目标：世界链接行内元素加大点击区域（16px→inline-flex + padding） */
+  .world-link { display: inline-flex; align-items: center; padding: 4px 8px; }
 }
 
 /* 通知：消息内容（可点击打开群组） */
