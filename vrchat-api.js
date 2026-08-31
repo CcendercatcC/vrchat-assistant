@@ -13,10 +13,6 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 
 const API_BASE = 'https://api.vrchat.cloud/api/1';
 
-// 单个 VRChat API 请求的 socket 超时（毫秒）。正常请求 1-3s 返回，
-// 网络抖动/代理失效时若不加超时，挂起的请求会锁死 rateLimiter 队列。
-const REQUEST_TIMEOUT_MS = 15000;
-
 export class VrchatApiClient {
   /** @type {Promise|null} single-flight lock for ensureAuth / ensureAuthWithAutoOtp */
   #authLock = null;
@@ -178,13 +174,6 @@ export class VrchatApiClient {
         });
       });
 
-      // 超时兜底：socket 半通不通（网络抖动/代理失效）时请求可能永挂不返回，
-      // 若不设超时会永远占住 rateLimiter 队头 → 整条队列锁死（get_prints 等工具全部卡超时）。
-      // 超时后 destroy 触发 'error' → reject → 限流器那句 await 抛出、队列继续走。
-      req.setTimeout(REQUEST_TIMEOUT_MS, () => {
-        req.destroy(new Error(`VRChat API 请求超时 (${REQUEST_TIMEOUT_MS}ms): ${method} ${path}`));
-      });
-
       req.on('error', reject);
       if (body) req.write(JSON.stringify(body));
       req.end();
@@ -325,12 +314,6 @@ export class VrchatApiClient {
           }
         });
       });
-
-      // 超时兜底（同 _requestRaw）：防止认证请求耗尽 socket 锁死限流队列
-      req.setTimeout(REQUEST_TIMEOUT_MS, () => {
-        req.destroy(new Error(`VRChat API 认证请求超时 (${REQUEST_TIMEOUT_MS}ms): ${method} ${path}`));
-      });
-
       req.on('error', reject);
       req.end();
     });
@@ -364,10 +347,6 @@ export class VrchatApiClient {
         let data = '';
         res.on('data', (chunk) => data += chunk);
         res.on('end', () => resolve({ status: res.statusCode, data, headers: res.headers }));
-      });
-      // 超时兜底：防止原始请求（2FA/下载等）耗尽 socket 锁死限流队列
-      req.setTimeout(REQUEST_TIMEOUT_MS, () => {
-        req.destroy(new Error(`VRChat API 原始请求超时 (${REQUEST_TIMEOUT_MS}ms): ${method} ${path}`));
       });
       req.on('error', reject);
       if (body) req.write(JSON.stringify(body));
@@ -716,11 +695,6 @@ export class VrchatApiClient {
         });
       });
 
-      // 超时兜底：防止 multipart 上传耗尽 socket 锁死限流队列
-      req.setTimeout(REQUEST_TIMEOUT_MS, () => {
-        req.destroy(new Error(`VRChat API 上传超时 (${REQUEST_TIMEOUT_MS}ms): ${method} ${path}`));
-      });
-
       req.on('error', reject);
       req.write(body);
       req.end();
@@ -792,10 +766,6 @@ export class VrchatApiClient {
       });
 
       req.on('error', reject);
-      // 超时兜底：防止文件下载耗尽 socket 锁死限流队列
-      req.setTimeout(REQUEST_TIMEOUT_MS, () => {
-        req.destroy(new Error(`VRChat 文件下载超时 (${REQUEST_TIMEOUT_MS}ms): ${url}`));
-      });
       req.end();
     });
   }
