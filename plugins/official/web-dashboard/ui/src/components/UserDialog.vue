@@ -442,5 +442,7 @@ const rawJson = computed(() => {
   .ud-status { flex-wrap: wrap; }
   .ud-actions { flex-wrap: wrap; }
   .ev-item { flex-wrap: wrap; row-gap: 2px; }
+  /* C1 触控目标：复制 ID/JSON 按钮移动端加大（30px→36px） */
+  .ud-actions :deep(.p-button), .json-box :deep(.p-button) { min-height: 36px; }
 }
 </style>
