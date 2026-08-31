@@ -201,6 +201,10 @@ body {
 
 /* ── 移动端 ── */
 @media (max-width: 899px) {
+  /* C1 触屏目标加大：chips 与工具栏按钮移动端增高，便于手指点击 */
+  .chip { height: 34px; padding: 4px 14px; font-size: 12px; }
+  .vt-actions .chip { height: 34px; padding: 4px 12px; font-size: 12px; }
+  .vt-actions .chip i { font-size: 12px; }
   /* 页脚多条目（AUTH/WS/SSE/DB/运行时长/安全模式）窄屏换行，避免 overflow 裁剪 */
   .app-footer { flex-wrap: wrap; height: auto; min-height: var(--footer-h); padding-top: 6px; padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px)); gap: 4px 14px; margin-bottom: calc(56px + env(safe-area-inset-bottom, 0px)); }
   :root { --rail-w: 0px; --rightbar-w: 0px; }
