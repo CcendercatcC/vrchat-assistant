@@ -98,6 +98,7 @@ body {
   position: relative;
 }
 .nav-item:hover { background: var(--surface-2); color: var(--text); }
+.nav-item:active { transform: scale(0.98); }
 .nav-item.active { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--text); }
 .nav-item.active::before {
   content: '';
@@ -297,6 +298,7 @@ body {
   line-height: 1;
 }
 .chip:hover { border-color: var(--accent); color: var(--text); }
+.chip:active { transform: scale(0.96); opacity: 0.85; }
 .chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .chip-n { opacity: 0.75; font-size: 10px; margin-left: 3px; }
