@@ -13,6 +13,7 @@ const history = ref(null);
 const loading = ref(false);
 const acting = ref(new Set());
 const kindSel = ref('all');
+const onlyUnseen = ref(false);   // 只看未读
 
 const KINDS = [
   { v: 'all', l: '全部' },
