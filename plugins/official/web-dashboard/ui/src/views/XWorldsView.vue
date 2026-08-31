@@ -148,7 +148,7 @@ onMounted(load);
 .xw-manage { margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px; }
 .xm-add { display: flex; gap: 8px; flex-wrap: wrap; }
 .xm-input { flex: 1 1 200px; }
-.xc-remove { background: none; border: none; color: var(--text-dim); cursor: pointer; padding: 0 2px; font-size: 10px; display: inline-flex; align-items: center; }
+.xc-remove { background: none; border: none; color: var(--text-dim); cursor: pointer; padding: 4px 6px; font-size: 12px; display: inline-flex; align-items: center; min-height: 28px; }
 .xc-remove:hover { color: var(--danger); }
 .xc-remove:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 3px; }
 .xw-creators { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
