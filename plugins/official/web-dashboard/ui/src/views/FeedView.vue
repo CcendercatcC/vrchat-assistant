@@ -313,6 +313,7 @@ watch(() => [store.feedFilter, store.feedSearch, store.feedDateFrom, store.feedD
   clearTimeout(filterTimer);
   filterTimer = setTimeout(() => {
     if (store.feedLoading) return;
+    setView(store.view);   // 筛选变化同步 URL hash（刷新后保持筛选状态）
     resetFeed().then(() => fillFeed());
   }, 300);
 });
