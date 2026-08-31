@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && rm -f dist/primeicons-*.svg && node -e \"const fs=require('fs');const p='dist/index.html';fs.writeFileSync(p,fs.readFileSync(p,'utf8').replace(/\\r\\n/g,'\\n'))\"",
+    "build": "vite build && node -e \"const fs=require('fs');const p='dist/index.html';let s=fs.readFileSync(p,'utf8');s=s.replace(/\\r\\n/g,'\\n');fs.writeFileSync(p,s);for(const f of fs.readdirSync('dist')){if(/^primeicons-.*\\.svg$/.test(f))fs.unlinkSync('dist/'+f)}\"",
     "test": "vitest run"
   },
   "dependencies": {

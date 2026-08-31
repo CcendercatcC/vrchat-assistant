@@ -339,6 +339,7 @@ onMounted(() => {
   }
 });
 onUnmounted(() => {
+  if (filterTimer) clearTimeout(filterTimer); // 筛选防抖定时器卸载清理（评审建议）
   if (observer) observer.disconnect();
   const rootEl = document.querySelector('.main-viewport');
   if (rootEl && onScroll) rootEl.removeEventListener('scroll', onScroll);
