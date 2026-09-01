@@ -880,7 +880,12 @@ export default function register(api) {
     try {
       const now = new Date().toISOString();
       const store = api.db.table('store');
-      const r = store.run(`DELETE FROM store WHERE start_iso < $now`, { $now: now });
+      // 只删"明确已结束"(end_iso<now) 或无结束时间且开始超 24h 的活动，避免误删进行中活动
+      const past = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+      const r = store.run(
+        `DELETE FROM store WHERE (end_iso != '' AND end_iso < $now) OR (end_iso = '' AND start_iso < $past)`,
+        { $now: now, $past: past }
+      );
       api.log(`🗑️ 清理过期活动 ${r.changes} 条`);
     } catch (e) {
       api.log(`清理过期活动失败: ${e.message}`);

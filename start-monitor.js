@@ -499,7 +499,8 @@ function registerCoreServices(loader, ctx) {
     if (!groupId || !String(groupId).startsWith('grp_')) throw new Error('groupId 必填且以 grp_ 开头');
     const cached = ctx.storage.getGroupCached(groupId);
     const TTL = 7 * 24 * 60 * 60 * 1000;
-    if (!force && cached && cached.name && (Date.now() - Date.parse(String(cached.updated_at).replace(' ', 'T') + 'Z')) < TTL) {
+    const _ct = Date.parse(String(cached.updated_at).replace(' ', 'T') + 'Z');
+    if (!force && cached && cached.name && Number.isFinite(_ct) && (Date.now() - _ct) < TTL) {
       return {
         groupId,
         name: cached.name,
