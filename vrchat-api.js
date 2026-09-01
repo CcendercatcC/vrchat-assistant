@@ -368,9 +368,9 @@ export class VrchatApiClient {
         },
       };
       const req = https.request(options, (res) => {
-        let chunks = [];
+        const chunks = [];
         res.on('data', (chunk) => chunks.push(chunk));
-        res.on('end', () => resolve({ status: res.statusCode, data, headers: res.headers }));
+        res.on('end', () => resolve({ status: res.statusCode, data: Buffer.concat(chunks).toString('utf8'), headers: res.headers }));
       });
       // 超时兜底：socket 半通不通（网络抖动/代理失效）时请求可能永挂不返回，
       // 若不设超时会占住 rateLimiter 队头 -> 锁死整条队列；超时 destroy 触发 error -> reject。
