@@ -283,6 +283,7 @@ onMounted(load);
               </span>
               <span v-if="lastChangeAt(x)" class="tk-stat">最近变化 {{ reltime(lastChangeAt(x)) }}</span>
               <span v-if="x.lastRefreshAt" class="tk-stat tk-stat-dim">上次检测 {{ fmtRefresh(x.lastRefreshAt) }}</span>
+              <span v-else class="tk-stat tk-stat-dim">尚未检测</span>
             </small>
           </div>
           <span v-if="lastChangeAt(x)" class="tk-dot" title="有资料变化"></span>

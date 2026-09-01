@@ -3,13 +3,14 @@ export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&a
 
 // 统一时间解析：后端 SQLite 的 datetime('now') 产出无时区 UTC 串 "YYYY-MM-DD HH:MM:SS"，
 // 直接 new Date() 会被当成浏览器本地时间（UTC+8 设备偏移 8 小时，实测 tracked 列表"最近变化 8 小时前"）。
-// 凡无时区标记的 SQLite 格式一律补 'Z' 按 UTC 解析；ISO（带 Z/T/时区偏移）与数字时间戳原样交给 Date。
-const SQLITE_UTC_RE = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(\.\d+)?$/;
+// 凡无时区标记的 SQLite 格式一律补 'Z' 按 UTC 解析；空格+Z 形态（YYYY-MM-DD HH:MM:SSZ）也按 UTC；
+// ISO（带 Z/T/时区偏移）与数字时间戳原样交给 Date。
+const SQLITE_UTC_RE = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(\.\d+)?Z?$/;
 export function parseTs(s) {
   if (s === null || s === undefined || s === '') return new Date(NaN);
   if (typeof s === 'number') return new Date(s);
   const str = String(s);
-  const norm = SQLITE_UTC_RE.test(str) ? str.replace(' ', 'T') + 'Z' : str;
+  const norm = SQLITE_UTC_RE.test(str) ? str.replace(' ', 'T').replace(/Z$/, '') + 'Z' : str;
   return new Date(norm);
 }
 

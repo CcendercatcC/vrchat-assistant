@@ -28,6 +28,7 @@ describe('时间格式', () => {
     expect(parseTs(sqlite).getTime()).toBe(new Date(iso).getTime());
     expect(parseTs('2026-09-01T08:47:50.000Z').getTime()).toBe(new Date(iso).getTime()); // ISO 原样
     expect(parseTs('2026-09-01 08:47:50.123').getTime()).toBe(new Date('2026-09-01T08:47:50.123Z').getTime()); // 小数秒
+    expect(parseTs('2026-09-01 08:47:50Z').getTime()).toBe(new Date(iso).getTime()); // 空格+Z 形态也按 UTC
     expect(Number.isNaN(parseTs('not-a-date').getTime())).toBe(true);
     expect(Number.isNaN(parseTs('').getTime())).toBe(true);
     expect(Number.isNaN(parseTs(null).getTime())).toBe(true);
