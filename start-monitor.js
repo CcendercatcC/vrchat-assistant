@@ -362,7 +362,7 @@ function _recordNonFriendChange(userId, displayName, userObj, av) {
     const recent = lastBio[0] && lastBio[0].created_at;
     if (recent) {
       const dt = (new Date().getTime() - new Date(recent).getTime()) / 1000;
-      if (dt >= 0 && dt < 1800) return;  // 30 分钟内已有 bio 事件，跳过本次(乱码抖动防刷屏)
+      if (dt >= 0 && dt < 7200) return;  // 2 小时内已有 bio 事件，跳过本次(乱码吞字防刷屏)
     }
   }
   if (!lastBio.length || bioChanged) {
