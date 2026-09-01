@@ -21,6 +21,7 @@ export const store = reactive({
   isMobile: false,
   navOpen: false,
   friendsOpen: false,   // 移动端右侧好友抽屉（A1：桌面右侧栏在手机上改由抽屉打开）
+  quickSearchOpen: false, // 快速搜索弹窗（Ctrl+K / Cmd+K）
   previewUrl: null,
 
   feedFilter: [],          // 多选类型数组（空 = 所有）
@@ -386,12 +387,26 @@ export async function loadMoreFeed({ target = 50, countMatch = null } = {}) {
   }
 }
 
+function applyHash(hp) {
+  if (hp.get('view')) store.view = hp.get('view');
+  if (hp.has('filter')) store.feedFilter = hp.get('filter') ? hp.get('filter').split(',').filter(Boolean) : [];
+  if (hp.has('fav')) store.feedOnlyFav = hp.get('fav') === '1';
+}
+
 function initFromHash() {
   const hp = new URLSearchParams(location.hash.replace(/^#/, ''));
-  if (hp.get('view')) store.view = hp.get('view');
-  if (hp.get('filter')) store.feedFilter = hp.get('filter').split(',').filter(Boolean);
-  if (hp.get('fav') === '1') store.feedOnlyFav = true;
+  applyHash(hp);
   setView(store.view);
+}
+
+// 同页 hash 变化（手动改 URL / 浏览器前进后退）同步视图——SPA 标准行为，无需整页重载
+function bindHashChange() {
+  window.addEventListener('hashchange', () => {
+    const hp = new URLSearchParams(location.hash.replace(/^#/, ''));
+    const prev = store.view;
+    applyHash(hp);
+    if (store.view !== prev) setView(store.view);
+  });
 }
 
 // SSE 推的是极简 DTO（无 eventId/头像/富化详情），新事件先即时显示，随后用富化列表合并补齐。
@@ -552,10 +567,40 @@ function trackViewport() {
   window.addEventListener('resize', update);
 }
 
+// 视图快捷键映射：Alt+数字 或 Ctrl+数字 快速切换（数字 = 导航顺序，避开输入框聚焦态）
+const VIEW_HOTKEYS = ['feed', 'friends', 'tracked', 'players', 'notifications', 'search', 'favorites', 'worlds', 'avatars'];
+const isTyping = (t) => {
+  const tag = (t && t.tagName || '').toLowerCase();
+  return tag === 'input' || tag === 'textarea' || tag === 'select' || (t && t.isContentEditable);
+};
+
 function initKeyboard() {
-  // Esc 关闭弹窗（Ctrl+K 快速搜索已按用户要求移除）
+  // Esc 关闭弹窗；Ctrl/Cmd+K 打开快速搜索
   window.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+      e.preventDefault();
+      store.quickSearchOpen = !store.quickSearchOpen;
+      return;
+    }
+    // Alt/Ctrl + 数字 切换视图（输入框中不响应）
+    if (e.altKey && /^[1-9]$/.test(e.key) && !isTyping(e.target)) {
+      e.preventDefault();
+      const v = VIEW_HOTKEYS[Number(e.key) - 1];
+      if (v && store.view !== v) setView(v);
+      return;
+    }
+    // 动态页 "/" 聚焦搜索（输入框中不响应；按两次 Esc 依次关弹窗→取消聚焦）
+    if (e.key === '/' && !isTyping(e.target) && !(e.ctrlKey || e.metaKey || e.altKey)) {
+      const input = document.querySelector('.search-input, .ft-search input');
+      if (input) {
+        e.preventDefault();
+        input.focus();
+        input.select();
+      }
+      return;
+    }
     if (e.key === 'Escape') {
+      if (store.quickSearchOpen) { store.quickSearchOpen = false; return; }
       if (store.userModal) { store.userModal = null; return; }
       if (store.worldModal) { store.worldModal = null; return; }
       if (store.avatarModal) { store.avatarModal = null; return; }
@@ -576,6 +621,7 @@ export function startDashboard() {
   startSse();
   trackViewport();
   initKeyboard();
+  bindHashChange();
   setInterval(() => load(true), 30000);
   // 兜底：每 10s 拉一次最新"我"（me 端点用本地 events 覆盖 status），
   // 确保右侧栏"我自己"状态/位置持续同步，不依赖 SSE/load 链路
