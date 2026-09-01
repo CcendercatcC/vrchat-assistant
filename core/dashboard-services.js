@@ -164,13 +164,17 @@ export function registerDashboardServices(loader, ctx) {
       if (!row) return null;
       let loc = '';
       try { loc = (JSON.parse(row.content_json || '{}').location) || ''; } catch { return null; }
+      // 明确离线/空 → false；其余任何 location 都视为"可能在线"（VRChat 在线时 location 可能是
+      // private/friends/group/local/traveling/wrld_ 等，其中 private/friends/group/local 可为"无 worldId 独立值"，
+      // 见 parseLocInfo 实例段解析）。绝不把在线状态误判为离线去触发重挖。
       if (loc === 'offline' || loc === 'offline:offline' || loc === '') return false;
-      if (loc.startsWith('wrld_') || loc === 'traveling') {
+      // 可确认的在线形式 + 新鲜度护栏 → true；无法确认/陈旧 → null（调用方保守推迟刷新）
+      if (loc.startsWith('wrld_') || loc === 'traveling' || /^(private|friends|group|local)\b/.test(loc)) {
         const at = Date.parse(row.created_at);
         if (!Number.isFinite(at) || Date.now() - at > 60 * 60 * 1000) return null;
         return true;
       }
-      return false;
+      return null;
     } catch { return null; }
   });
   loader.serviceOwners.set('dashboard.isSelfOnline', 'core');
