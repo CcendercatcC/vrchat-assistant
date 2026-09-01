@@ -3,21 +3,23 @@ const TOKEN_KEY = 'vrc_dashboard_token';
 const token = new URLSearchParams(location.search).get('token') || sessionStorage.getItem(TOKEN_KEY) || '';
 if (token) sessionStorage.setItem(TOKEN_KEY, token);
 // 登录页使用：从 URL 读到的 token 立即清理 URL（防泄露在地址栏），值保留在 sessionStorage
-if (new URLSearchParams(location.search).get('token')) {
-  history.replaceState(null, '', location.pathname + location.hash);
-}
+try {
+  if (new URLSearchParams(location.search).get('token') && typeof history !== 'undefined') {
+    history.replaceState(null, '', location.pathname + location.hash);
+  }
+} catch { /* 测试环境无 history 时跳过 URL 清理 */ }
 
 export const hasToken = () => !!getToken();
 export function getToken() { return sessionStorage.getItem(TOKEN_KEY) || ''; }
 export function setToken(t) { sessionStorage.setItem(TOKEN_KEY, t); }
 export function clearToken() {
-  sessionStorage.removeItem(TOKEN_KEY);
-  window.dispatchEvent(new CustomEvent('vrc-auth-401'));
+  try { sessionStorage.removeItem(TOKEN_KEY); } catch {}
+  try { window.dispatchEvent(new CustomEvent('vrc-auth-401')); } catch {}
 }
 // 401 → 清 token 并通知 App 显示登录页（会话过期/服务重启后 token 失效）
 function handle401() {
-  sessionStorage.removeItem(TOKEN_KEY);
-  window.dispatchEvent(new CustomEvent('vrc-auth-401'));
+  try { sessionStorage.removeItem(TOKEN_KEY); } catch {}
+  try { window.dispatchEvent(new CustomEvent('vrc-auth-401')); } catch {}
 }
 
 export const apiUrl = (p) => (getToken() ? `${p}${p.includes('?') ? '&' : '?'}token=${encodeURIComponent(getToken())}` : p);
