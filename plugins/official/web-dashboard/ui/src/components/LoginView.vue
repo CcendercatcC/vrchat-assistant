@@ -13,8 +13,11 @@ async function submit() {
   loading.value = true;
   error.value = '';
   try {
-    // 用 /health 验证令牌：带 token 请求，authenticated === true 即有效
-    const r = await fetch('/health?token=' + encodeURIComponent(t), { signal: AbortSignal.timeout(20000) });
+    // 用 /health 验证令牌：Authorization: Bearer 传递，避免令牌出现在 URL（日志/历史残留风险）
+    const r = await fetch('/health', {
+      headers: { 'Authorization': 'Bearer ' + t },
+      signal: AbortSignal.timeout(20000),
+    });
     const d = await r.json().catch(() => ({}));
     if (r.ok && d.auth && d.auth.authenticated) {
       setToken(t);
