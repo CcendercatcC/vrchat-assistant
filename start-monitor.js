@@ -353,15 +353,16 @@ function _recordNonFriendChange(userId, displayName, userObj, av) {
   // bio 刷屏防护：①unicode NFC 归一化比较（emoji/组合字符在不同刷新返回的字节不稳定，
   // 归一化后相等视为无变化）；②时间窗去重——同用户 5 分钟内已记录过 bio 事件则跳过
   // （VRChat 编辑 bio 时逐字保存，逐次抓取内容不同会高频产生事件）。
-  // 过滤 U+FFFD 替换字符(VRChat API 对 bio 内特殊 emoji 解析不稳定,有时返回乱码替换符)——
-  // 乱码与正常字符交替出现会让每次刷新都误判 bio 变化,先剔除再 NFC 归一化比较
-  const norm = (x) => String(x || '').replace(/\uFFFD/g, '').normalize('NFC');
+  // bio 刷屏彻底方案:过滤 U+FFFD 后剥离标点只比核心文字(乱码会随机吞字符,标点差异全忽略)——
+  // 例: '最好的' vs '最好'+U+FFFD 剥离后都归一, emoji/冒号/空格差异不误判
+  const norm = (x) => String(x || '').replace(/\uFFFD/g, '').normalize('NFC').replace(/[^\p{L}\p{N}]/gu, '');
+
   const bioChanged = norm(prevBio) !== norm(curBio);
   if (bioChanged) {
     const recent = lastBio[0] && lastBio[0].created_at;
     if (recent) {
       const dt = (new Date().getTime() - new Date(recent).getTime()) / 1000;
-      if (dt >= 0 && dt < 300) return;  // 5 分钟内已有 bio 事件，跳过本次
+      if (dt >= 0 && dt < 1800) return;  // 30 分钟内已有 bio 事件，跳过本次(乱码抖动防刷屏)
     }
   }
   if (!lastBio.length || bioChanged) {
