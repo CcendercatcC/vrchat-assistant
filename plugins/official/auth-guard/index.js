@@ -65,9 +65,14 @@ export default function register(api) {
 
   // ── 1. 提供全局 http.authenticate 服务 ──
   api.provide('http.authenticate', (req) => {
+    // 页面入口豁免：/dashboard 是单文件 HTML（无敏感数据，数据全靠前端 JS 调 API 加载），
+    // 无 token 也放行让前端显示登录页（LoginView）；API 路径(/api//health/mcp)仍严格鉴权。
     // 图片代理路由豁免：浏览器 <img> 无法带 Authorization header，且只服务白名单公图
     try {
       const pathname = new URL(req.url || '', 'http://localhost').pathname;
+      if (req.method === 'GET' && (pathname === '/dashboard' || pathname === '/dashboard/')) {
+        return { ok: true, enabled: true, page: true };
+      }
       if (pathname === '/api/dashboard/image-proxy') {
         return { ok: true, enabled: true };
       }

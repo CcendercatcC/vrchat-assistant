@@ -1,8 +1,26 @@
 // API 封装：token 注入 + fetch/SSE（移植自旧 core.js）
-const token = new URLSearchParams(location.search).get('token') || sessionStorage.getItem('vrc_dashboard_token') || '';
-if (token) sessionStorage.setItem('vrc_dashboard_token', token);
+const TOKEN_KEY = 'vrc_dashboard_token';
+const token = new URLSearchParams(location.search).get('token') || sessionStorage.getItem(TOKEN_KEY) || '';
+if (token) sessionStorage.setItem(TOKEN_KEY, token);
+// 登录页使用：从 URL 读到的 token 立即清理 URL（防泄露在地址栏），值保留在 sessionStorage
+if (new URLSearchParams(location.search).get('token')) {
+  history.replaceState(null, '', location.pathname + location.hash);
+}
 
-export const apiUrl = (p) => (token ? `${p}${p.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}` : p);
+export const hasToken = () => !!getToken();
+export function getToken() { return sessionStorage.getItem(TOKEN_KEY) || ''; }
+export function setToken(t) { sessionStorage.setItem(TOKEN_KEY, t); }
+export function clearToken() {
+  sessionStorage.removeItem(TOKEN_KEY);
+  window.dispatchEvent(new CustomEvent('vrc-auth-401'));
+}
+// 401 → 清 token 并通知 App 显示登录页（会话过期/服务重启后 token 失效）
+function handle401() {
+  sessionStorage.removeItem(TOKEN_KEY);
+  window.dispatchEvent(new CustomEvent('vrc-auth-401'));
+}
+
+export const apiUrl = (p) => (getToken() ? `${p}${p.includes('?') ? '&' : '?'}token=${encodeURIComponent(getToken())}` : p);
 
 // 统一错误信息：401 = 会话过期/服务未就绪（容器重启后 TOTP 自动登录自愈，稍等刷新即可）
 const errMsg = (r) => (r.status === 401
@@ -11,7 +29,7 @@ const errMsg = (r) => (r.status === 401
 
 export async function get(p, timeout = 25000) {
   const r = await fetch(apiUrl(p), { signal: AbortSignal.timeout(timeout) });
-  if (!r.ok) throw new Error(errMsg(r));
+  if (!r.ok) { if (r.status === 401) handle401(); throw new Error(errMsg(r)); }
   return r.json();
 }
 

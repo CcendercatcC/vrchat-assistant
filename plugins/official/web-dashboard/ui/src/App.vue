@@ -33,6 +33,8 @@ import WorldDialog from './components/WorldDialog.vue';
 import GroupDialog from './components/GroupDialog.vue';
 import InstanceDialog from './components/InstanceDialog.vue';
 import AvatarDialog from './components/AvatarDialog.vue';
+import LoginView from './components/LoginView.vue';
+import { hasToken, clearToken } from './api.js';
 import { useConfirm } from 'primevue/useconfirm';
 import { bindConfirm } from './confirm.js';
 
@@ -88,6 +90,13 @@ function scrollTopSmooth() {
   if (el) el.scrollTo({ top: 0, behavior: 'smooth' });
 }
 onMounted(() => document.addEventListener('scroll', onAnyScroll, true));
+
+// ── 登录页控制 ──
+const loginView = ref(!hasToken());
+function onAuth401() { loginView.value = true; }
+onMounted(() => window.addEventListener('vrc-auth-401', onAuth401));
+onUnmounted(() => window.removeEventListener('vrc-auth-401', onAuth401));
+function doLogout() { clearToken(); location.reload(); }
 onUnmounted(() => document.removeEventListener('scroll', onAnyScroll, true));
 
 const mobileTabs = [
@@ -134,7 +143,8 @@ async function refresh() {
 </script>
 
 <template>
-  <div class="app-shell">
+  <LoginView v-if="loginView" />
+  <div v-else class="app-shell">
     <header class="app-header">
       <Button v-if="store.isMobile" icon="pi pi-bars" text rounded @click="store.navOpen = true" aria-label="打开菜单" />
       <span class="brand">VRChat Assistant</span>
@@ -150,6 +160,7 @@ async function refresh() {
           @click="store.quickSearchOpen = true" />
         <Button icon="pi pi-refresh" text rounded aria-label="刷新" title="刷新"
           :loading="refreshing" @click="refresh" />
+        <Button icon="pi pi-sign-out" text rounded aria-label="登出" title="登出（清除令牌）" @click="doLogout" />
       </div>
     </header>
 
