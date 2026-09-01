@@ -104,7 +104,11 @@ test('dashboard.trackedChanges 返回 avatar 变化形状（前后缩略图字�
   const r = services.get('dashboard.trackedChanges')({ userId: UID, limit: 20 });
   const av = r.changes.find((c) => c.type === 'avatar');
   assert.ok(av);
-  assert.ok(av.avatarImageUrl.includes('/image/'), '头像应缩略图化');
+  // #122 抽出 img-util 后 avatarThumb 经 imgProxy 改写为 /api/dashboard/image-proxy?url=...，
+  // url 参数内的 /image/ 被百分比编码(%2Fimage%2F)，字面量 includes('/image/') 不再成立；
+  // 正确断言：已是代理 URL 且解码后含 /image/（证明确实缩略图化）
+  assert.ok(av.avatarImageUrl.startsWith('/api/dashboard/image-proxy?url='), '头像应走本地图片代理');
+  assert.ok(decodeURIComponent(av.avatarImageUrl).includes('/image/'), '头像应缩略图化');
   assert.ok(av.previousAvatarImageUrl);
 });
 
