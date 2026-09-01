@@ -353,7 +353,9 @@ function _recordNonFriendChange(userId, displayName, userObj, av) {
   // bio 刷屏防护：①unicode NFC 归一化比较（emoji/组合字符在不同刷新返回的字节不稳定，
   // 归一化后相等视为无变化）；②时间窗去重——同用户 5 分钟内已记录过 bio 事件则跳过
   // （VRChat 编辑 bio 时逐字保存，逐次抓取内容不同会高频产生事件）。
-  const norm = (x) => String(x || '').normalize('NFC');
+  // 过滤 U+FFFD 替换字符(VRChat API 对 bio 内特殊 emoji 解析不稳定,有时返回乱码替换符)——
+  // 乱码与正常字符交替出现会让每次刷新都误判 bio 变化,先剔除再 NFC 归一化比较
+  const norm = (x) => String(x || '').replace(/\uFFFD/g, '').normalize('NFC');
   const bioChanged = norm(prevBio) !== norm(curBio);
   if (bioChanged) {
     const recent = lastBio[0] && lastBio[0].created_at;
