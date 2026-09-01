@@ -172,10 +172,13 @@ function fmtRefresh(s) {
   return time(s) + ' ' + date(s);
 }
 
+// 最近一次真实资料变更时间（非检测/刷新时间）：展开时用已加载的变化时间线最新一条；
+// 折叠时用后端 trackedNonFriends 返回的 lastChangeAt（events 表 friend-update/source=poll 的 MAX）。
+// 不回退到 lastRefreshAt——那是"上次检测"时间，语义不同（用户 2026-09-01 修正）。
 const lastChangeAt = (x) => {
   const cs = changesMap.value[x.userId];
   if (cs && cs.length && cs[0].createdAt) return cs[0].createdAt;
-  return x.lastRefreshAt || '';
+  return x.lastChangeAt || '';
 };
 
 const CHANGE_LABEL = { bio: '简介变更', status: '状态变更', avatar: '头像更新', user_icon: '头像图标更新', pronouns: '代词更新', displayName: '改名' };
@@ -279,7 +282,7 @@ onMounted(load);
                 <span v-if="x.status" class="tk-status" :class="{ on: isOnline(x.status) }">{{ statusText(x.status) }}</span>
               </span>
               <span v-if="lastChangeAt(x)" class="tk-stat">最近变化 {{ reltime(lastChangeAt(x)) }}</span>
-              <span v-else class="tk-stat tk-stat-dim">最近刷新 {{ fmtRefresh(x.lastRefreshAt) }}</span>
+              <span v-if="x.lastRefreshAt" class="tk-stat tk-stat-dim">上次检测 {{ fmtRefresh(x.lastRefreshAt) }}</span>
             </small>
           </div>
           <span v-if="lastChangeAt(x)" class="tk-dot" title="有资料变化"></span>
