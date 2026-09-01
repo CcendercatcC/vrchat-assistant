@@ -166,9 +166,10 @@ export class VrchatApiClient {
       }
 
       const req = https.request(options, (res) => {
-        let data = '';
-        res.on('data', (chunk) => data += chunk);
+        let chunks = [];
+        res.on('data', (chunk) => chunks.push(chunk));
         res.on('end', () => {
+          const data = Buffer.concat(chunks).toString('utf8');
           try {
             const parsed = JSON.parse(data);
             resolve({ status: res.statusCode, data: parsed, headers: res.headers });
@@ -316,9 +317,10 @@ export class VrchatApiClient {
         },
       };
       const req = https.request(options, (res) => {
-        let data = '';
-        res.on('data', (chunk) => data += chunk);
+        let chunks = [];
+        res.on('data', (chunk) => chunks.push(chunk));
         res.on('end', () => {
+          const data = Buffer.concat(chunks).toString('utf8');
           try {
             const parsed = JSON.parse(data);
             resolve({ status: res.statusCode, data: parsed, headers: res.headers });
@@ -366,8 +368,8 @@ export class VrchatApiClient {
         },
       };
       const req = https.request(options, (res) => {
-        let data = '';
-        res.on('data', (chunk) => data += chunk);
+        let chunks = [];
+        res.on('data', (chunk) => chunks.push(chunk));
         res.on('end', () => resolve({ status: res.statusCode, data, headers: res.headers }));
       });
       // 超时兜底：socket 半通不通（网络抖动/代理失效）时请求可能永挂不返回，
@@ -714,9 +716,10 @@ export class VrchatApiClient {
       };
 
       const req = https.request(options, (res) => {
-        let data = '';
-        res.on('data', (chunk) => data += chunk);
+        let chunks = [];
+        res.on('data', (chunk) => chunks.push(chunk));
         res.on('end', () => {
+          const data = Buffer.concat(chunks).toString('utf8');
           try {
             const parsed = JSON.parse(data);
             resolve({ status: res.statusCode, data: parsed, headers: res.headers });
