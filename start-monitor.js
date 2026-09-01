@@ -492,6 +492,56 @@ function registerCoreServices(loader, ctx) {
     loader.serviceOwners.set(name, 'core');
   }
 
+  // 群组信息解析服务（issue #118：缓存优先 + API 回填，供 events 插件等 consume）。
+  // 复用 core/domains/cache-store.js 的 getGroupCached/upsertGroupCache（TTL 7 天，与周报一致），
+  // 命中缓存零限流 API；未命中才经 rateLimiter 拉 /groups/{id} 并回填 group_cache。
+  loader.services.set('groups.resolve', async ({ groupId, force = false } = {}) => {
+    if (!groupId || !String(groupId).startsWith('grp_')) throw new Error('groupId 必填且以 grp_ 开头');
+    const cached = ctx.storage.getGroupCached(groupId);
+    const TTL = 7 * 24 * 60 * 60 * 1000;
+    const _ct = Date.parse(String(cached.updated_at).replace(' ', 'T') + 'Z');
+    if (!force && cached && cached.name && Number.isFinite(_ct) && (Date.now() - _ct) < TTL) {
+      return {
+        groupId,
+        name: cached.name,
+        description: cached.description || '',
+        memberCount: cached.member_count || 0,
+        iconUrl: cached.icon_url || '',
+        source: 'cache',
+      };
+    }
+    const r = await ctx.rateLimiter.execute(() => ctx.api._request('GET', `/groups/${encodeURIComponent(groupId)}`));
+    if (r.status === 200 && r.data) {
+      const d = r.data;
+      ctx.storage.upsertGroupCache({
+        groupId,
+        name: d.name || '',
+        description: d.description || '',
+        memberCount: d.memberCount || 0,
+      });
+      return {
+        groupId,
+        name: d.name || '',
+        description: d.description || '',
+        memberCount: d.memberCount || 0,
+        iconUrl: d.iconUrl || '',
+        source: 'api',
+      };
+    }
+    throw new Error(`groups.resolve 失败: ${r.status}`);
+  });
+  loader.serviceOwners.set('groups.resolve', 'core');
+
+  // 群组缓存写服务（issue #118）：供插件把搜索/采集得到的群组信息回填 group_cache，
+  // 让后续 groups.resolve 命中缓存。仅写 name/description/member_count（group_cache 无
+  // icon_url 列，icon 暂不入缓存；活动自带 icon_url 不受影响）。
+  loader.services.set('groups.cache', ({ groupId, name, description, memberCount } = {}) => {
+    if (!groupId || !String(groupId).startsWith('grp_')) throw new Error('groupId 必填且以 grp_ 开头');
+    ctx.storage.upsertGroupCache({ groupId, name: name || '', description: description || '', memberCount: memberCount || 0 });
+    return { ok: true };
+  });
+  loader.serviceOwners.set('groups.cache', 'core');
+
   // 认证与网络配置服务（供 auth-guard 插件查询，owner='core'）
   loader.services.set('core.authConfig', () => ({
     token: process.env.VRC_MONITOR_AUTH_TOKEN || process.env.VRC_MONITOR_API_KEY || null,
