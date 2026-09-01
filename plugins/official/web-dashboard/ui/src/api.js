@@ -94,5 +94,5 @@ export function imgUrl(url) {
   } catch {
     return url;
   }
-  return `/api/dashboard/image-proxy?url=${encodeURIComponent(url)}&token=${encodeURIComponent(token)}`;
+  return `/api/dashboard/image-proxy?url=${encodeURIComponent(url)}&token=${encodeURIComponent(getToken())}`;
 }

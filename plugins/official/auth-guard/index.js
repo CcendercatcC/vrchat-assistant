@@ -71,9 +71,9 @@ export default function register(api) {
     try {
       const pathname = new URL(req.url || '', 'http://localhost').pathname;
       if (req.method === 'GET' && (pathname === '/dashboard' || pathname.startsWith('/dashboard/'))) {
-        return { ok: true, enabled: true, page: true };
+        return { ok: true, enabled: true };
       }
-      if (pathname === '/api/dashboard/image-proxy') {
+      if (req.method === 'GET' && pathname === '/api/dashboard/image-proxy') {
         return { ok: true, enabled: true };
       }
     } catch {}
