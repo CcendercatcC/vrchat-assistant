@@ -148,6 +148,33 @@ export function registerDashboardServices(loader, ctx) {
   });
   loader.serviceOwners.set('dashboard.latestSelfStatus', 'core');
 
+  // 自己是否在线（issue #118 每日离线刷新的在线感知；events 插件经 api.consume 判定，
+  // 插件契约禁止直读核心 events 表）。返回 true（明确在线）/ false（明确离线）/
+  // null（无法判定——无 selfId/无 user-location 记录/异常）。
+  // 护栏：WS 断链期间收不到 offline 推送，最近一条在线记录超过 1 小时无新事件时
+  // 视为"可能仍在线"返回 null，由调用方保守推迟刷新（宁可晚刷不在可能在线时刷）。
+  loader.services.set('dashboard.isSelfOnline', () => {
+    try {
+      const selfId = getSelfUserId(ctx.storage);
+      if (!selfId) return null;
+      const row = ctx.storage.query(
+        `SELECT content_json, created_at FROM events WHERE type='user-location' AND user_id = $self ORDER BY created_at DESC LIMIT 1`,
+        { $self: selfId }
+      )[0];
+      if (!row) return null;
+      let loc = '';
+      try { loc = (JSON.parse(row.content_json || '{}').location) || ''; } catch { return null; }
+      if (loc === 'offline' || loc === 'offline:offline' || loc === '') return false;
+      if (loc.startsWith('wrld_') || loc === 'traveling') {
+        const at = Date.parse(row.created_at);
+        if (!Number.isFinite(at) || Date.now() - at > 60 * 60 * 1000) return null;
+        return true;
+      }
+      return false;
+    } catch { return null; }
+  });
+  loader.serviceOwners.set('dashboard.isSelfOnline', 'core');
+
   // 动态数据时间范围（最早/最新事件日期）：日历筛选的可选范围（VRCX 对齐）
   loader.services.set('dashboard.eventsRange', () => {
     try {
