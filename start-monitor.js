@@ -355,14 +355,16 @@ function _recordNonFriendChange(userId, displayName, userObj, av) {
   // （VRChat 编辑 bio 时逐字保存，逐次抓取内容不同会高频产生事件）。
   // bio 刷屏彻底方案:过滤 U+FFFD 后剥离标点只比核心文字(乱码会随机吞字符,标点差异全忽略)——
   // 例: '最好的' vs '最好'+U+FFFD 剥离后都归一, emoji/冒号/空格差异不误判
-  const norm = (x) => String(x || '').replace(/\uFFFD/g, '').normalize('NFC').replace(/[^\p{L}\p{N}]/gu, '');
+  // 根源修复(Buffer chunk 解码)后乱码不再产生,此处只需 NFC 归一化(规范等价) + 防御性滤 U+FFFD,
+  // 不做核心文字剥离——真实微小变化(标点/emoji 增减)也要记录
+  const norm = (x) => String(x || '').replace(/\uFFFD/g, '').normalize('NFC');
 
   const bioChanged = norm(prevBio) !== norm(curBio);
   if (bioChanged) {
     const recent = lastBio[0] && lastBio[0].created_at;
     if (recent) {
       const dt = (new Date().getTime() - new Date(recent).getTime()) / 1000;
-      if (dt >= 0 && dt < 7200) return;  // 2 小时内已有 bio 事件，跳过本次(乱码吞字防刷屏)
+      if (dt >= 0 && dt < 300) return;  // 5 分钟内已有 bio 事件，跳过本次(仅防 VRChat 编辑中逐字保存连发)
     }
   }
   if (!lastBio.length || bioChanged) {
