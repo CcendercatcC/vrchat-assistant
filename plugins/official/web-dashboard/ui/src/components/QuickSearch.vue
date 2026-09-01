@@ -24,14 +24,6 @@ watch(() => store.quickSearchOpen, (v) => {
     q.value = '';
     local.value = [];
     remote.value = [];
-
-
-
-
-
-
-
-
   }
 });
 

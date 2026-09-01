@@ -42,7 +42,7 @@ export async function post(p, body = {}, timeout = 25000) {
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(timeout),
   });
-  if (!r.ok) throw new Error(errMsg(r));
+  if (!r.ok) { if (r.status === 401) handle401(); throw new Error(errMsg(r)); }
   return r.json();
 }
 
