@@ -9,17 +9,24 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.join(__dirname, '..');
 
 // 敏感词单一来源：redactSecrets 文本正则与 meta 键名判定共用，避免两处漂移。
-// code/totp/otp/pin 为 TOTP 验证码（MCP submit_totp 参数）；verification[_-]?code 为通用校验码。
+// 词根型敏感词（允许被 `_`/`-`/驼峰 前缀或后缀包裹，如 access_token / refreshToken）：
 const SENSITIVE_WORDS = [
   'authToken', 'authorization', 'set-cookie', 'apiKey', 'api_key', 'authcode',
   'password', 'passwd', 'cookie', 'secret', 'smtp', 'imap', 'pwd', 'token', 'auth',
 ];
-// 元数据键名判定（含大小写/下划线变体）；code 类校验码单独纳入
+// TOTP 校验码等**仅精确整键**才视为敏感（避免 statusCode / errorCode / country_code 这类业务字段误伤）：
+const SENSITIVE_EXACT = ['code', 'totp', 'otp', 'pin', 'verification_code', 'verification-code'];
+
+// 键名判定：与文本正则同语义——词根前后为 非字母数字 边界（允许 `_`/`-`/`^`/`$`），
+// 并接受驼峰切换点（小写→大写，如 accessToken 的 `access|Token`）。
+// 因此 access_token / refresh_token / accessToken / refreshToken 命中；
+// 而 tokenizer / tokens / token_use 因词根后紧跟字母数字 或 键形不符 而不误伤。
 const SENSITIVE_KEY_RE = new RegExp(
-  `^(?:${SENSITIVE_WORDS.join('|')}|code|totp|otp|pin|verification[_-]?code)$`,
+  `(^|[^A-Za-z0-9]|(?<=[a-z])(?=[A-Z]))(?:${SENSITIVE_WORDS.join('|')})(?![A-Za-z0-9])`,
   'i'
 );
-const isSensitiveKey = (key) => SENSITIVE_KEY_RE.test(String(key));
+const isSensitiveKey = (key) =>
+  SENSITIVE_KEY_RE.test(String(key)) || SENSITIVE_EXACT.includes(String(key));
 
 // 递归脱敏值：对 meta 值做深遍历——敏感 key 命中 → 整值 [REDACTED]；
 // 字符串 → redactSecrets；数组 → 逐元素；普通对象 → 逐键递归。防嵌套对象里藏凭据落盘。
@@ -181,24 +188,25 @@ export function redactSecrets(text) {
   // 敏感键值对：键可被引号包裹（JSON），分隔符 = 或 :，值可为
   //   - 双引号串   "secret"
   //   - 单引号串   'secret'
-  //   - Bearer token (空格分隔: Bearer eyJ...)          ← 修复：不再被 `[^\s;]+` 在空格处截断而残留 token
+  //   - Bearer token (空格分隔: Bearer eyJ...)
   //   - 裸值       secret123
-  // 替换回调保留原引号风格，保证 JSON 行结构不被破坏。
-  // 敏感词列表 = 单一来源 SENSITIVE_WORDS + code 类校验码。加 \b 边界。
-  const words = [...SENSITIVE_WORDS, 'code', 'totp', 'otp', 'pin'];
-  const key =
-    '["\']?(?<![A-Za-z0-9])(?:' + words.join('|') + ')(?![A-Za-z0-9])["\']?';
+  // 敏感词列表 = 单一来源 SENSITIVE_WORDS + code 类校验码。
+  // 边界与 isSensitiveKey 同语义：前缀接受 非字母数字 或 驼峰切换点（`_`/`-`/`access|Token`），
+  // 后缀拒绝紧跟字母数字（防 tokenizer/tokens）。
+  // code/totp/otp/pin 校验码**不做驼峰开放**（否则 statusCode/errorCode 误伤），仅接受严格键形前缀。
+  // 开放词根：支持驼峰/下划线/连字符前缀（access_token / refreshToken 命中）
+  const openWords = SENSITIVE_WORDS;
+  const openKey =
+    '["\']?(?:^|[^A-Za-z0-9]|(?<=[a-z])(?=[A-Z]))(?:' + openWords.join('|') + ')(?![A-Za-z0-9])["\']?';
+  // 校验码：严格键形（前缀不接受驼峰切换点，防 statusCode/errorCode 误伤）
+  const exactKey =
+    '["\']?(?:^|[^A-Za-z0-9])(?:code|totp|otp|pin)(?![A-Za-z0-9])["\']?';
+  // 值捕获：双引号串/单引号串/Bearer token/裸值（引号保留 + 值整段吞没）
+  const val = `(?:\\"([^\\"]*)\\"|\\'([^\\']*)\\'|(Bearer\\s+[^\\s,;]+)|([^\\s,;]+))`;
+  // 键名+分隔符整体作 prefix 捕获，替换后保留 `key=`/`key:` 形式
   out = out.replace(
-    new RegExp(
-      `(${key}\\s*[:=]\\s*)(?:"([^"]*)"|\'([^\']*)\'|(Bearer\\s+[^\\s,;]+)|([^\\s,;]+))`,
-      'gi'
-    ),
-    (m, prefix, dq, sq, bearer, bare) => {
-      if (dq !== undefined) return `${prefix}"[REDACTED]"`;
-      if (sq !== undefined) return `${prefix}'[REDACTED]'`;
-      if (bearer !== undefined) return `${prefix}Bearer [REDACTED]`;
-      return `${prefix}[REDACTED]`;
-    }
+    new RegExp(`((?:${openKey}|${exactKey})\\s*[:=]\\s*)${val}`, 'gi'),
+    (m, prefix, dq, sq, bearer, bare) => redactReplacer(prefix, dq, sq, bearer, bare)
   );
 
   // 中文键「授权码」：\b 对 CJK 无效，单独用宽松值兜底
@@ -208,6 +216,14 @@ export function redactSecrets(text) {
   out = out.replace(/[\w.+-]+@[\w-]+\.[\w.]+/g, '[REDACTED]');
 
   return out;
+}
+
+// 敏感值替换回调：保留原引号风格（双引号/单引号/Bearer 前缀），其余置 [REDACTED]
+function redactReplacer(prefix, dq, sq, bearer, bare) {
+  if (dq !== undefined) return `${prefix}"[REDACTED]"`;
+  if (sq !== undefined) return `${prefix}'[REDACTED]'`;
+  if (bearer !== undefined) return `${prefix}Bearer [REDACTED]`;
+  return `${prefix}[REDACTED]`;
 }
 
 function formatText(ts, levelName, name, msg) {

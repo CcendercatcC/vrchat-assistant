@@ -159,6 +159,33 @@ test('脱敏：access_token/refresh_token 下划线键命中，tokens/tokenizer 
   assert.ok(keep.includes('abc') && keep.includes('v2'), 'tokens/tokenizer 非凭据后缀不得误伤');
 });
 
+// ===== R2 评审回归：词根键在 json meta 落盘路径必须脱敏（此前只测文本形态漏了落盘）=====
+test('脱敏：access_token/refresh_token/accessToken/refreshToken 在 json meta 落盘脱敏', () => {
+  const d = path.join(dir, 'metatok');
+  initLogger({ dir: d, format: 'json' });
+  getLogger('api').info('oauth refresh', {
+    access_token: 'LEAK1', refresh_token: 'LEAK2',
+    accessToken: 'LEAK3', refreshToken: 'LEAK4',
+    statusCode: 200, userId: 'u1', country_code: 'CN',
+  });
+  const raw = readFileSync(path.join(d, 'monitor.log'), 'utf8');
+  const obj = JSON.parse(raw);
+  assert.equal(obj.access_token, '[REDACTED]', 'access_token 应脱敏');
+  assert.equal(obj.refresh_token, '[REDACTED]', 'refresh_token 应脱敏');
+  assert.equal(obj.accessToken, '[REDACTED]', 'accessToken 应脱敏');
+  assert.equal(obj.refreshToken, '[REDACTED]', 'refreshToken 应脱敏');
+  assert.equal(obj.statusCode, 200, 'statusCode 业务字段不误伤');
+  assert.equal(obj.country_code, 'CN', 'country_code 业务字段不误伤');
+  assert.ok(!raw.includes('LEAK'), '零泄漏');
+});
+
+test('脱敏：文本形态 code/totp 键命中，statusCode/errorCode 不误伤', () => {
+  assert.ok(!redactSecrets('{"code":"112233"}').includes('112233'), 'JSON code 键值应脱敏');
+  assert.ok(!redactSecrets('totp=112233').includes('112233'), 'totp= 应脱敏');
+  assert.ok(redactSecrets('statusCode=200').includes('200'), 'statusCode 文本不误伤');
+  assert.ok(redactSecrets('errorCode=404').includes('404'), 'errorCode 文本不误伤');
+});
+
 test('脱敏：中文键「授权码」宽松值也替换', () => {
   const out = redactSecrets('imap_auth授权码: A1B2C3D4E5F6G7H8');
   assert.ok(!out.includes('A1B2C3D4E5F6G7H8'), '授权码值不得泄漏');
