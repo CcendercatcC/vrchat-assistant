@@ -10,7 +10,7 @@
  * 纯搬移重构：服务名、owner、实现逐字节一致，无行为变更。
  */
 import { isSafeModeEnabled } from './safe-mode.js';
-import { imgProxy, avatarThumb, avatarOf } from './img-util.js';
+import { imgProxy, avatarThumb, avatarOf, avatarFileId } from './img-util.js';
 
 // 自己 userId 的权威推导：user-location/user-update 事件只会是自己的（事件管线保证），
 // 种子导入/列表展示用它排除自己（/auth/user 在启动早期可能失败或缓存未就绪）
@@ -460,9 +460,11 @@ export function registerDashboardServices(loader, ctx) {
       ];
       for (const j of jobs) {
         if (!j.url) continue;
-        const fm = String(j.url).match(/\/file\/(file_[a-f0-9-]+)/);
-        if (!fm) continue;
-        const fileId = fm[1];
+        // j.url 已过 imgProxy 代理（/api/dashboard/image-proxy?url=<encodeURIComponent(原URL)>），
+        // 原 URL 里的 /file/ 被编码成 %2Ffile%2F，直接 match 必然失败（#122 引入 img-util 后回归，
+        // 导致模型名全部显示"未知模型"）。avatarFileId 会先还原代理 URL 再提取 fileId。
+        const fileId = avatarFileId(j.url);
+        if (!fileId) continue;
         if (anCache.has(fileId)) { ev[j.key] = anCache.get(fileId); continue; }
         if (seen.has(fileId)) continue;
         seen.add(fileId);
