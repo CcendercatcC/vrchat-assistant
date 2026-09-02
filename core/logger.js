@@ -9,18 +9,22 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.join(__dirname, '..');
 
 // 敏感词单一来源：redactSecrets 文本正则与 meta 键名判定共用，避免两处漂移。
-// 词根型敏感词（允许被 `_`/`-`/驼峰 前缀或后缀包裹，如 access_token / refreshToken）：
+// 开放词根：允许被 `_`/`-`/驼峰 前缀包裹（access_token / refreshToken / grant_code），
+// 内含具体 OAuth/凭证变体，避免泛化 code/secrets 误伤 country_code/errorCode。
 const SENSITIVE_WORDS = [
-  'authToken', 'authorization', 'set-cookie', 'apiKey', 'api_key', 'authcode',
-  'password', 'passwd', 'cookie', 'secret', 'smtp', 'imap', 'pwd', 'token', 'auth',
+  'authToken', 'authorization', 'authorization_code', 'set-cookie', 'apiKey',
+  'api_key', 'authcode', 'password', 'passwd', 'cookie', 'secret',
+  'client_secret', 'api_secret', 'smtp', 'imap', 'pwd', 'token',
+  'access_token', 'refresh_token', 'id_token', 'session_token', 'login_token',
+  'grant_code', 'verification_code', 'auth', 'credential',
 ];
-// TOTP 校验码等**仅精确整键**才视为敏感（避免 statusCode / errorCode / country_code 这类业务字段误伤）：
-const SENSITIVE_EXACT = ['code', 'totp', 'otp', 'pin', 'verification_code', 'verification-code'];
+// TOTP 校验码等**仅精确整键**才视为敏感（状态类字段 code/level 不误伤）。
+const SENSITIVE_EXACT = ['code', 'totp', 'otp', 'pin'];
 
 // 键名判定：与文本正则同语义——词根前后为 非字母数字 边界（允许 `_`/`-`/`^`/`$`），
 // 并接受驼峰切换点（小写→大写，如 accessToken 的 `access|Token`）。
-// 因此 access_token / refresh_token / accessToken / refreshToken 命中；
-// 而 tokenizer / tokens / token_use 因词根后紧跟字母数字 或 键形不符 而不误伤。
+// 因此 access_token / refresh_token / accessToken / refreshToken / grant_code 命中；
+// 而 tokenizer / tokens / country_code / statusCode / errorCode 不误伤。
 const SENSITIVE_KEY_RE = new RegExp(
   `(^|[^A-Za-z0-9]|(?<=[a-z])(?=[A-Z]))(?:${SENSITIVE_WORDS.join('|')})(?![A-Za-z0-9])`,
   'i'

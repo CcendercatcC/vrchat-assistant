@@ -182,6 +182,8 @@ test('脱敏：access_token/refresh_token/accessToken/refreshToken 在 json meta
 test('脱敏：文本形态 code/totp 键命中，statusCode/errorCode 不误伤', () => {
   assert.ok(!redactSecrets('{"code":"112233"}').includes('112233'), 'JSON code 键值应脱敏');
   assert.ok(!redactSecrets('totp=112233').includes('112233'), 'totp= 应脱敏');
+  assert.ok(!redactSecrets('grant_code=abc').includes('abc'), 'grant_code 应脱敏');
+  assert.ok(!redactSecrets('authorization_code=xyz').includes('xyz'), 'authorization_code 应脱敏');
   assert.ok(redactSecrets('statusCode=200').includes('200'), 'statusCode 文本不误伤');
   assert.ok(redactSecrets('errorCode=404').includes('404'), 'errorCode 文本不误伤');
 });
