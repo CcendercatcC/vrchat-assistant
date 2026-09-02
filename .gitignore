@@ -21,6 +21,8 @@ node_modules/
 __pycache__/
 *.pyc
 service-logs/
+# ── 日志模块产物（默认 LOG_DIR 落项目内 logs/）──
+logs/
 # ── Hermes 插件本地文件 ──
 .hermes/
 workspace/
