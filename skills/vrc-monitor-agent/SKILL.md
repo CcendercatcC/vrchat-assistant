@@ -203,3 +203,6 @@ curl -s http://127.0.0.1:8799/health
 ```
 
 正常：`auth.authenticated=true`、`ws.status=connected`。服务没起时：项目目录下 `node start-monitor.js` 后台启动（10-15s 完成登录+WS 连接）。改代码后必须重启才生效（进程常驻，不热加载）。
+
+- **日志**：服务日志统一走 `core/logger.js`，默认写 stdout + `<VRC_MONITOR_LOGGER_DIR>/monitor.log`（默认 `<VRC_MONITOR_DIR>/logs`）。排障优先看该文件；agent 用 `VRC_MONITOR_LOGGER_FORMAT=json` 启动后 `jq` 解析结构化行（键 ts/level/name/msg/pid）。级别用 `VRC_MONITOR_LOGGER_LEVEL` 控制（默认 info，调 debug 可看 MCP 协议往返）。MCP ping/keepalive 噪音可用 `VRC_MONITOR_LOGGER_SUPPRESS=ping,keepalive` 或 `VRC_MONITOR_LOGGER_LEVEL=warn` 过滤。
+- 若想定位「哪个组件打的日志」：JSONL 的 `name` 字段（如 `mcp`/`ws`/`api`/`storage`）；text 格式形如 `[ws]`。
