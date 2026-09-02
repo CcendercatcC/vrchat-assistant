@@ -590,6 +590,13 @@ onUnmounted(() => {
             <span class="dim">群组成员信息更新<span v-if="x.notiGroupName">：{{ x.notiGroupName }}</span></span>
           </template>
 
+          <!-- 群组角色更新：群名（可打开） + 角色名 -->
+          <template v-else-if="typeOf(x) === 'groupRoleUpdated'">
+            <span class="dim">群组角色更新</span>
+            <span v-if="x.notiGroupName" class="world-link" @click="openGroup(x.groupId || x.notiGroupId)" role="button" tabindex="0" @keydown.enter="openGroup(x.groupId || x.notiGroupId)">{{ x.notiGroupName }}</span>
+            <span v-if="x.roleName" class="dim">（角色：{{ x.roleName }}）</span>
+          </template>
+
           <!-- 未知事件 -->
           <template v-else-if="typeOf(x) === 'unknown'">
             <span class="dim">未识别的 VRChat 事件（无可解析内容）</span>
@@ -651,6 +658,11 @@ onUnmounted(() => {
             <b class="ed-ellip">{{ x.statusDescription || statusText(x.status) }}</b></div>
           <div v-if="isNoti(x) && x.senderUsername" class="ed-cell"><span>发送者</span><b class="ed-ellip">{{ x.senderUsername }}</b></div>
           <div v-if="x.summary && !['location', 'status'].includes(typeOf(x))" class="ed-cell"><span>摘要</span><b class="ed-ellip">{{ x.summary }}</b></div>
+          <div v-if="typeOf(x) === 'groupRoleUpdated' && (x.roleName || (x.rolePermissions && x.rolePermissions.length))" class="ed-cell">
+            <span>角色权限</span>
+            <b v-if="x.roleName" class="ed-ellip">{{ x.roleName }}</b>
+            <span v-if="x.rolePermissions && x.rolePermissions.length" class="ed-perms">{{ x.rolePermissions.join(' / ') }}</span>
+          </div>
           <div class="ed-cell ed-actions">
             <Button size="small" text icon="pi pi-copy" label="复制JSON" :title="'复制完整事件 JSON（排查/分享）'" @click="copyText(JSON.stringify(x, null, 2))" />
             <Button size="small" text icon="pi pi-filter" label="只看此人" :title="'筛选出 ' + (x.displayName || '') + ' 的全部事件'" @click="filterByUser(x)" />
@@ -950,6 +962,7 @@ onUnmounted(() => {
 .ed-cell > b { font-weight: 600; min-width: 0; }
 .ed-ellip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ed-id { font-size: 10.5px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ed-perms { font-size: 10.5px; color: var(--text-dim); line-height: 1.6; overflow-wrap: anywhere; }
 .ed-link { color: var(--accent-2); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ev-detail :deep(.p-button) { width: 24px; height: 24px; flex: none; }
 

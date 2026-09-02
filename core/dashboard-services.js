@@ -314,9 +314,11 @@ export function registerDashboardServices(loader, ctx) {
       const location = content.location || '';
       const locInfo = parseLocInfo(location);
       const prev = (row.type === 'friend-location' || row.type === 'user-location') ? previousLocationOf(row.user_id, row.id) : null;
-      // 群组名解析（缓存优先）：group-joined/group-member-updated 只有 groupId；
+      // 群组名解析（缓存优先）：group-joined/group-member-updated 平铺 groupId；
+      // group-role-updated 的 content 是嵌套 {role:{groupId,name,permissions}} → 回退 role.groupId（字段错位 T4）
       // 未命中的丢后台限流拉 /groups/{id} 回填 group_cache，下次请求即有群名
-      const gName = content.groupId ? (((ctx.storage.getGroupCached(content.groupId) || {}).name) || '') : '';
+      const gidForGName = content.groupId || (content.role && content.role.groupId) || '';
+      const gName = gidForGName ? (((ctx.storage.getGroupCached(gidForGName) || {}).name) || '') : '';
       // 通知更新事件（notification-v2-update/notification-update）只有 {id, updates}：
       // content.id 指向被更新的原通知（user_id），关联回原通知取群组信息与内容
       let src = content;
@@ -347,7 +349,10 @@ export function registerDashboardServices(loader, ctx) {
         notiTitle: src.title || '',
         notiGroupName: ((src.data && src.data.groupName) || gName || (src.title ? String(src.title).split(':')[0].trim() : '') || ''),
         notiGroupId: ((src.data && src.data.groupId) || ''),
-        groupId: content.groupId || '',
+        groupId: content.groupId || (content.role && content.role.groupId) || '',
+        // group-role-updated 角色详情（content.role 嵌套；字段错位 T4）供前端详单
+        roleName: (content.role && content.role.name) || '',
+        rolePermissions: Array.isArray(content.role && content.role.permissions) ? content.role.permissions : [],
         contentActionType: content.actionType || '',
         reconcile: !!content.reconcile,
         lastSeenAt: content.lastSeen || '',
@@ -374,7 +379,7 @@ export function registerDashboardServices(loader, ctx) {
           : row.type === 'content-refresh' ? ('内容库：' + (content.actionType === 'add' ? '获得' : content.actionType === 'delete' ? '移除' : content.actionType || '更新') + ({ prop: '道具', bundle: '捆绑包', accessory: '配件', shared: '共享物品' }[content.itemType] || content.itemType || '物品'))
           : row.type === 'group-joined' ? ('加入群组' + (gName ? '：' + gName : ''))
           : row.type === 'group-member-updated' ? ('群组成员信息更新' + (gName ? '：' + gName : ''))
-          : row.type === 'group-role-updated' ? ('群组角色更新' + (gName ? '：' + gName : ''))
+          : row.type === 'group-role-updated' ? ('群组角色更新' + (gName ? '：' + gName : '') + ((content.role && content.role.name) ? '（角色：' + content.role.name + '）' : ''))
           : row.type === 'hide-notification' ? ('通知已隐藏' + (notificationTypeLabel(content) ? '：' + notificationTypeLabel(content) : ''))
           : row.type === 'see-notification' ? ('通知已读' + (notificationTypeLabel(content) ? '：' + notificationTypeLabel(content) : ''))
           : row.type === 'unknown' ? '未知事件'
