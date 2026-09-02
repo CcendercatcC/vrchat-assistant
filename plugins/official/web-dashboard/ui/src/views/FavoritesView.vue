@@ -14,12 +14,14 @@ const removing = ref(new Set());
 // 收藏夹 tag → 友好名（worlds0=收藏夹1, worlds1=收藏夹2 ...）
 function favName(tag) {
   // VRC+ 专属夹实际 tag 为 vrcPlusWorlds1-2（大写 W），/i 才能匹配
+  // VRChat 收藏夹 tag 从 1 开始编号（实测 favorite/groups 返回 worlds1/2/3...，无 worlds0），
+  // 故直接用编号显示，不再 +1（修复收藏夹显示成 2/3/4 的偏移 bug）
   const m = String(tag || '').match(/^(?:vrcplus)?worlds(\d+)$/i);
-  if (m) return (/^vrc/i.test(String(tag)) ? 'VRC+ ' : '') + `收藏夹 ${Number(m[1]) + 1}`;
+  if (m) return (/^vrc/i.test(String(tag)) ? 'VRC+ ' : '') + `收藏夹 ${Number(m[1])}`;
   const a = String(tag || '').match(/^avatars(\d+)$/);
-  if (a) return `模型夹 ${Number(a[1]) + 1}`;
+  if (a) return `模型夹 ${Number(a[1])}`;
   const f = String(tag || '').match(/^friends(\d+)$/);
-  if (f) return `好友夹 ${Number(f[1]) + 1}`;
+  if (f) return `好友夹 ${Number(f[1])}`;
   return tag || '未分类';
 }
 
@@ -50,13 +52,20 @@ function reload() {
 }
 onMounted(load);
 
+// 收藏夹按 tag 编号排序（worlds1 < worlds2 < ...；未分类/无编号最后），
+// 不依赖 /worlds/favorites 的返回顺序（收藏时间倒序会导致分组顺序乱）
+function sortGroups(entries) {
+  const num = (k) => { const m = String(k || '').match(/(\d+)$/); return m ? Number(m[1]) : Number.MAX_SAFE_INTEGER; };
+  return [...entries].sort((a, b) => (num(a[0]) - num(b[0])) || String(a[0]).localeCompare(String(b[0])));
+}
+
 const worldGroups = computed(() => {
   const g = {};
   for (const w of worlds.value || []) {
     const k = w.favoriteGroup || '未分类';
     (g[k] = g[k] || []).push(w);
   }
-  return Object.entries(g);
+  return sortGroups(Object.entries(g));
 });
 const avatarGroups = computed(() => {
   const g = {};
@@ -64,16 +73,16 @@ const avatarGroups = computed(() => {
     const k = a.group || '未分类';
     (g[k] = g[k] || []).push(a);
   }
-  return Object.entries(g);
+  return sortGroups(Object.entries(g));
 });
-// 好友收藏按夹分组（/favorites?type=friend 记录的 tags[0] = friends0-2）
+// 好友收藏按夹分组（/favorites?type=friend 记录的 tags[0] = friends1/2...）
 const friendGroups = computed(() => {
   const g = {};
   for (const f of friends.value || []) {
     const k = (Array.isArray(f.tags) && f.tags[0]) || '未分类';
     (g[k] = g[k] || []).push(f);
   }
-  return Object.entries(g);
+  return sortGroups(Object.entries(g));
 });
 
 // 收藏夹切换：'all' 全部堆叠 / 具体 tag 只看该夹；刷新后夹消失自动回退全部
