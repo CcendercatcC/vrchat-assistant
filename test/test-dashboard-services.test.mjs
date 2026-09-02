@@ -19,6 +19,7 @@ const REPO = path.join(__dirname, '..');
 const { ctx } = await import(pathToFileURL(path.join(REPO, 'core', 'server-context.js')).href);
 const { Storage } = await import(pathToFileURL(path.join(REPO, 'core', 'storage.js')).href);
 const { registerDashboardServices } = await import(pathToFileURL(path.join(REPO, 'core', 'dashboard-services.js')).href);
+const { avatarFileId } = await import(pathToFileURL(path.join(REPO, 'core', 'img-util.js')).href);
 
 // ── 临时 DB + 运行时准备 ──
 const tmpDb = path.join(__dirname, 'test-dash-services.sqlite3');
@@ -250,6 +251,17 @@ test('dashboard.groupAnnouncementsAll 汇总跨群组公告', () => {
   const ts = r.announcements.map((a) => a.createdAt);
   const sorted = [...ts].sort().reverse();
   assert.deepEqual(ts, sorted, '公告按时间降序');
+});
+
+test('avatarFileId 从代理/原始 URL 提取 file id（#122 imgProxy 回归）', () => {
+  const raw = 'https://api.vrchat.cloud/api/1/file/file_de43c23b-8efa-4f4c-acb0-8c0c2dad9817/1/file';
+  const proxied = '/api/dashboard/image-proxy?url=' + encodeURIComponent(raw);
+  // 代理 URL 里的 /file/ 被编码成 %2Ffile%2F，直接正则失配；avatarFileId 先还原再匹配
+  assert.equal(avatarFileId(proxied), 'file_de43c23b-8efa-4f4c-acb0-8c0c2dad9817');
+  assert.equal(avatarFileId(raw), 'file_de43c23b-8efa-4f4c-acb0-8c0c2dad9817');
+  assert.equal(avatarFileId(''), null);
+  assert.equal(avatarFileId(null), null);
+  assert.equal(avatarFileId('https://example.com/no-file-here'), null);
 });
 
 // ── 清理 ──

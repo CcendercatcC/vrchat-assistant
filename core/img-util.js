@@ -25,6 +25,20 @@ export const avatarThumb = (u) => {
   return imgProxy(thumbUrl);
 };
 
+// 从（可能已 imgProxy 代理改写的）URL 提取 VRChat file id（file_xxx）。
+// 背景：imgProxy 把原始 URL encodeURIComponent 进 /api/dashboard/image-proxy?url=...，
+// 其中 /file/ 被编码成 %2Ffile%2F，直接正则匹配会失败（#122 引入 img-util 后曾导致
+// 模型名解析全部失配，dashboard 显示"未知模型"）。此处先还原代理 URL 再匹配。
+// 接受原始 URL 或代理 URL，均返回 file id；无法提取返回 null。
+export const avatarFileId = (u) => {
+  if (!u) return null;
+  let s = String(u);
+  const pm = s.match(/^\/api\/dashboard\/image-proxy\?url=(.+)$/);
+  if (pm) { try { s = decodeURIComponent(pm[1]); } catch { /* 保持原样 */ } }
+  const fm = s.match(/\/file\/(file_[a-f0-9-]+)/);
+  return fm ? fm[1] : null;
+};
+
 // 用户头像展示统一入口：优先用户资料里设置的图标头像(user_icon)，兜底当前模型外观缩略图(currentAvatar)。
 // 背景：currentAvatarImageUrl 语义是"穿戴的3D模型外观"，常为默认机器人图而非用户真实头像，
 //       user_icon 是用户主动设置的头像（XM1023 显示机器人而非金发女仆头像 bug 的根因，2026-09-01）。
