@@ -179,6 +179,25 @@ test('脱敏：access_token/refresh_token/accessToken/refreshToken 在 json meta
   assert.ok(!raw.includes('LEAK'), '零泄漏');
 });
 
+test('脱敏：IMAP/OTP 授权码变体在 json meta 落盘脱敏且与文本一致（psenY R3）', () => {
+  const d = path.join(dir, 'metaimap');
+  initLogger({ dir: d, format: 'json' });
+  getLogger('api').info('cfg', {
+    imap_auth_code: 'xyz123', smtp_auth_code: 'abc456',
+    otp_code: '123456', totp_code: '654321', country_code: 'CN',
+  });
+  const raw = readFileSync(path.join(d, 'monitor.log'), 'utf8');
+  const obj = JSON.parse(raw);
+  assert.equal(obj.imap_auth_code, '[REDACTED]', 'imap_auth_code meta 应脱敏');
+  assert.equal(obj.smtp_auth_code, '[REDACTED]', 'smtp_auth_code meta 应脱敏');
+  assert.equal(obj.otp_code, '[REDACTED]', 'otp_code meta 应脱敏');
+  assert.equal(obj.totp_code, '[REDACTED]', 'totp_code meta 应脱敏');
+  assert.equal(obj.country_code, 'CN', 'country_code meta 保留');
+  assert.ok(!raw.includes('xyz123') && !raw.includes('123456'), '零泄漏');
+  // 与文本一致性：同一键文本也脱敏
+  assert.ok(!redactSecrets('imap_auth_code: xyz123').includes('xyz123'), '文本与一致');
+});
+
 test('脱敏：文本形态 code/totp 键命中，statusCode/errorCode 不误伤', () => {
   assert.ok(!redactSecrets('{"code":"112233"}').includes('112233'), 'JSON code 键值应脱敏');
   assert.ok(!redactSecrets('totp=112233').includes('112233'), 'totp= 应脱敏');
@@ -186,6 +205,10 @@ test('脱敏：文本形态 code/totp 键命中，statusCode/errorCode 不误伤
   assert.ok(!redactSecrets('authorization_code=xyz').includes('xyz'), 'authorization_code 应脱敏');
   assert.ok(redactSecrets('statusCode=200').includes('200'), 'statusCode 文本不误伤');
   assert.ok(redactSecrets('errorCode=404').includes('404'), 'errorCode 文本不误伤');
+  // R3(b) 回归：IMAP/OTP 授权码变体文本不泄漏（psenY 抓的正向泄漏）
+  assert.ok(!redactSecrets('imap_auth_code: xyz123').includes('xyz123'), 'imap_auth_code 文本应脱敏');
+  assert.ok(!redactSecrets('totp_code: 654321').includes('654321'), 'totp_code 文本应脱敏');
+  assert.ok(!redactSecrets('otp_code: 123456').includes('123456'), 'otp_code 文本应脱敏');
   // R3 回归：*_code 业务字段在下划线场景不得误伤（此前只测驼峰 statusCode/errorCode，漏了下划线）
   assert.ok(redactSecrets('country_code=CN').includes('CN'), 'country_code 文本不误伤');
   assert.ok(redactSecrets('invite_code=INV123').includes('INV123'), 'invite_code 文本不误伤');

@@ -11,12 +11,15 @@ const REPO_ROOT = path.join(__dirname, '..');
 // 敏感词单一来源：redactSecrets 文本正则与 meta 键名判定共用，避免两处漂移。
 // 开放词根：允许被 `_`/`-`/驼峰 前缀包裹（access_token / refreshToken / grant_code），
 // 内含具体 OAuth/凭证变体，避免泛化 code/secrets 误伤 country_code/errorCode。
+// IMAP/OTP 授权码变体（credentials.json 真实字段）必须完整入表，
+// 否则文本 openKey 只匹配「词根紧跟分隔符」会在 imap_auth_code 处漏脱（仅 meta 开边界命中）。
 const SENSITIVE_WORDS = [
   'authToken', 'authorization', 'authorization_code', 'set-cookie', 'apiKey',
   'api_key', 'authcode', 'password', 'passwd', 'cookie', 'secret',
   'client_secret', 'api_secret', 'smtp', 'imap', 'pwd', 'token',
   'access_token', 'refresh_token', 'id_token', 'session_token', 'login_token',
   'grant_code', 'verification_code', 'auth', 'credential',
+  'imap_auth_code', 'smtp_auth_code', 'auth_code', 'otp_code', 'totp_code',
 ];
 // TOTP 校验码等**仅精确整键**才视为敏感（状态类字段 code/level 不误伤）。
 const SENSITIVE_EXACT = ['code', 'totp', 'otp', 'pin'];
