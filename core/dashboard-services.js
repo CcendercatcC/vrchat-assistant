@@ -667,10 +667,13 @@ export function registerDashboardServices(loader, ctx) {
   loader.services.set('dashboard.trackedNonFriends', ({ limit = 200 } = {}) => {
     try {
       const rows = ctx.storage.query(
-        `SELECT user_id AS userId, display_name AS displayName, avatar_image_url AS avatarUrl,
-                status, status_description AS statusDescription, location,
-                added_at AS addedAt, last_refresh_at AS lastRefreshAt
-         FROM tracked_non_friends WHERE removed_at = '' ORDER BY last_refresh_at DESC, added_at DESC LIMIT $limit`,
+        `SELECT t.user_id AS userId, t.display_name AS displayName, t.avatar_image_url AS avatarUrl,
+                t.status, t.status_description AS statusDescription, t.location,
+                t.added_at AS addedAt, t.last_refresh_at AS lastRefreshAt,
+                (SELECT e.created_at FROM events e
+                  WHERE e.user_id = t.user_id AND e.type = 'friend-update' AND e.source = 'poll'
+                  ORDER BY e.id DESC LIMIT 1) AS lastChangeAt
+         FROM tracked_non_friends t WHERE t.removed_at = '' ORDER BY t.last_refresh_at DESC, t.added_at DESC LIMIT $limit`,
         { $limit: Math.min(Math.max(Number(limit) || 200, 1), 500) });
       const selfId = getSelfUserId(ctx.storage);
       return { tracked: rows.filter((r) => r.userId !== selfId).map((r) => ({ ...r, avatarUrl: avatarThumb(r.avatarUrl) || '' })) };

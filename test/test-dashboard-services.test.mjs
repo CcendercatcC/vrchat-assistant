@@ -69,6 +69,18 @@ test('dashboard.trackedNonFriends 返回 tracked 列表形状', () => {
   assert.ok(r.tracked.some((x) => x.userId === UID && x.displayName === '测试用户'));
 });
 
+test('trackedNonFriends.lastChangeAt 与 trackedChanges 最新变化一致（真实变更时间，非检测时间）', () => {
+  const list = services.get('dashboard.trackedNonFriends')({ limit: 10 }).tracked;
+  const x = list.find((i) => i.userId === UID);
+  assert.ok(x, '应能找到测试用户');
+  const cs = services.get('dashboard.trackedChanges')({ userId: UID, limit: 5 }).changes;
+  assert.ok(cs.length >= 2, '应有变化记录');
+  // lastChangeAt 应等于变化时间线最新一条 createdAt（ISO 带 Z）
+  assert.equal(x.lastChangeAt, cs[0].createdAt);
+  // lastRefreshAt 是检测时间(SQLite 无时区 UTC 串),与 lastChangeAt 语义不同
+  assert.ok(x.lastRefreshAt && x.lastRefreshAt !== x.lastChangeAt);
+});
+
 test('dashboard.trackedChanges 返回 bio/status 变化（含前后值）', () => {
   const r = services.get('dashboard.trackedChanges')({ userId: UID, limit: 10 });
   assert.ok(Array.isArray(r.changes));
@@ -92,7 +104,11 @@ test('dashboard.trackedChanges 返回 avatar 变化形状（前后缩略图字�
   const r = services.get('dashboard.trackedChanges')({ userId: UID, limit: 20 });
   const av = r.changes.find((c) => c.type === 'avatar');
   assert.ok(av);
-  assert.ok(av.avatarImageUrl.includes('/image/'), '头像应缩略图化');
+  // #122 抽出 img-util 后 avatarThumb 经 imgProxy 改写为 /api/dashboard/image-proxy?url=...，
+  // url 参数内的 /image/ 被百分比编码(%2Fimage%2F)，字面量 includes('/image/') 不再成立；
+  // 正确断言：已是代理 URL 且解码后含 /image/（证明确实缩略图化）
+  assert.ok(av.avatarImageUrl.startsWith('/api/dashboard/image-proxy?url='), '头像应走本地图片代理');
+  assert.ok(decodeURIComponent(av.avatarImageUrl).includes('/image/'), '头像应缩略图化');
   assert.ok(av.previousAvatarImageUrl);
 });
 
