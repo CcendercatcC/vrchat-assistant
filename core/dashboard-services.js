@@ -366,7 +366,7 @@ export function registerDashboardServices(loader, ctx) {
           return '';
         })(),
         avatarImageUrl: imgProxy(content.avatarImageUrl || user.currentAvatarImageUrl || ''),
-        avatarThumbnailUrl: imgProxy(content.avatarThumbnailUrl || user.currentAvatarThumbnailImageUrl || ''),
+        avatarThumbnailUrl: imgProxy(content.avatarThumbnailUrl || user.currentAvatarThumbnailImageUrl || (content.avatarImageUrl ? avatarThumb(content.avatarImageUrl) : '')),
         avatarTags: Array.isArray(content.avatarTags) ? content.avatarTags : (Array.isArray(user.currentAvatarTags) ? user.currentAvatarTags : []),
         previousAvatarImageUrl: imgProxy(content.previousAvatarImageUrl || ''),
         bio: content.bio || user.bio || '',
