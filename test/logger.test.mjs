@@ -192,9 +192,46 @@ test('无副作用：未显式 initLogger 时 write() 依赖惰性初始化而�
   // —— 与仓库 logs 状态解耦。真正「import 不建目录」已在外部独立验证脚本确认。
   const d = path.join(dir, 'lazy');
   rmSync(d, { recursive: true, force: true });
-  // 这里不复位全局 state.dir，只确认模块级无自动 init 行为：
-  // 若仍残留模块级 initLogger() 副作用，则 REPO/logs 会在任何 import 链被创建。
   assert.ok(path.isAbsolute(REPO), 'REPO 为绝对路径');
   assert.equal(typeof redactSecrets, 'function', '导出可用');
+});
+
+// ===== psenY review 回归：嵌套对象/数组必须递归脱敏 =====
+test('脱敏：meta 嵌套对象里的 authorization/token 递归落盘脱敏', () => {
+  const d = path.join(dir, 'nested');
+  initLogger({ dir: d, format: 'json' });
+  getLogger('api').info('req', {
+    headers: { authorization: 'Bearer abcdef123', 'x-empty': '' },
+    body: { token: 'sec456' },
+    arr: [{ cookie: 'vrc_789' }],
+    count: 3,
+  });
+  const raw = readFileSync(path.join(d, 'monitor.log'), 'utf8');
+  const obj = JSON.parse(raw);
+  assert.equal(obj.headers.authorization, '[REDACTED]', '嵌套 headers.authorization 应脱敏');
+  assert.equal(obj.body.token, '[REDACTED]', '嵌套 body.token 应脱敏');
+  assert.equal(obj.arr[0].cookie, '[REDACTED]', '数组内 cookie 应脱敏');
+  assert.equal(obj.count, 3, '普通数字保留');
+  assert.ok(!raw.includes('abcdef123') && !raw.includes('sec456') && !raw.includes('vrc_789'), '零泄漏');
+});
+
+// ===== psenY review 回归：code/TOTP 验证码键名必须脱敏 =====
+test('脱敏：code/totp 短校验码键名也命中', () => {
+  const out = redactSecrets('{"code":"112233"}');
+  assert.ok(!out.includes('112233'), 'JSON code 键值应脱敏');
+  const out2 = redactSecrets('totp=112233');
+  assert.ok(!out2.includes('112233'), 'totp= 值应脱敏');
+});
+
+// ===== psenY review 回归：env 变量名与文档一致（LOGGER_* 前缀）=====
+test('env 变量名统一为 VRC_MONITOR_LOGGER_*（对齐 README/AGENTS）', () => {
+  const d = path.join(dir, 'envname');
+  process.env.VRC_MONITOR_LOGGER_LEVEL = 'debug';
+  process.env.VRC_MONITOR_LOGGER_FORMAT = 'json';
+  const s = initLogger({ dir: d });
+  assert.equal(s.level, LEVELS.debug, 'VRC_MONITOR_LOGGER_LEVEL 应生效');
+  assert.equal(s.format, 'json', 'VRC_MONITOR_LOGGER_FORMAT 应生效');
+  delete process.env.VRC_MONITOR_LOGGER_LEVEL;
+  delete process.env.VRC_MONITOR_LOGGER_FORMAT;
 });
 

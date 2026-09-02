@@ -8,9 +8,33 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.join(__dirname, '..');
 
-// 敏感键名单：meta 对象里命中即整值脱敏（含大小写/蛇形/驼峰变体）
-const SENSITIVE_KEY_RE = /^(?:auth(?:token|orization|code)?|authorization|cookie|set-cookie|password|passwd|pwd|secret|token|apikey|api_key|smtp|imap|authcode|授权码)$/i;
+// 敏感词单一来源：redactSecrets 文本正则与 meta 键名判定共用，避免两处漂移。
+// code/totp/otp/pin 为 TOTP 验证码（MCP submit_totp 参数）；verification[_-]?code 为通用校验码。
+const SENSITIVE_WORDS = [
+  'authToken', 'authorization', 'set-cookie', 'apiKey', 'api_key', 'authcode',
+  'password', 'passwd', 'cookie', 'secret', 'smtp', 'imap', 'pwd', 'token', 'auth',
+];
+// 元数据键名判定（含大小写/下划线变体）；code 类校验码单独纳入
+const SENSITIVE_KEY_RE = new RegExp(
+  `^(?:${SENSITIVE_WORDS.join('|')}|code|totp|otp|pin|verification[_-]?code)$`,
+  'i'
+);
 const isSensitiveKey = (key) => SENSITIVE_KEY_RE.test(String(key));
+
+// 递归脱敏值：对 meta 值做深遍历——敏感 key 命中 → 整值 [REDACTED]；
+// 字符串 → redactSecrets；数组 → 逐元素；普通对象 → 逐键递归。防嵌套对象里藏凭据落盘。
+function redactValue(value) {
+  if (typeof value === 'string') return redactSecrets(value);
+  if (Array.isArray(value)) return value.map(redactValue);
+  if (value && typeof value === 'object') {
+    const out = {};
+    for (const [k, v] of Object.entries(value)) {
+      out[k] = isSensitiveKey(k) ? '[REDACTED]' : redactValue(v);
+    }
+    return out;
+  }
+  return value;
+}
 
 export const LEVELS = { debug: 10, info: 20, warn: 30, error: 40, silent: 99 };
 
@@ -76,23 +100,23 @@ function buildConfig(options) {
   };
 
   const dir = options && 'dir' in options ? options.dir : resolveDir();
-  const formatRaw = envOrOpt('VRC_MONITOR_LOG_FORMAT', 'format');
-  const colorRaw = envOrOpt('VRC_MONITOR_LOG_COLOR', 'color');
+  const formatRaw = envOrOpt('VRC_MONITOR_LOGGER_FORMAT', 'format');
+  const colorRaw = envOrOpt('VRC_MONITOR_LOGGER_COLOR', 'color');
 
   return {
-    level: parseLevel(options?.level ?? process.env.VRC_MONITOR_LOG_LEVEL),
+    level: parseLevel(options?.level ?? process.env.VRC_MONITOR_LOGGER_LEVEL),
     dir,
     format: formatRaw === 'json' ? 'json' : 'text',
     maxSize: parseIntDefault(
-      envOrOpt('VRC_MONITOR_LOG_MAX_SIZE', 'maxSize'),
+      envOrOpt('VRC_MONITOR_LOGGER_MAX_SIZE', 'maxSize'),
       10 * 1024 * 1024
     ),
     maxFiles: parseIntDefault(
-      envOrOpt('VRC_MONITOR_LOG_MAX_FILES', 'maxFiles'),
+      envOrOpt('VRC_MONITOR_LOGGER_MAX_FILES', 'maxFiles'),
       5
     ),
     console: parseBool(
-      envOrOpt('VRC_MONITOR_LOG_CONSOLE', 'console'),
+      envOrOpt('VRC_MONITOR_LOGGER_CONSOLE', 'console'),
       true
     ),
     color:
@@ -100,7 +124,7 @@ function buildConfig(options) {
         ? 'auto'
         : parseBool(colorRaw, false),
     suppress: parseSuppress(
-      envOrOpt('VRC_MONITOR_LOG_SUPPRESS', 'suppress')
+      envOrOpt('VRC_MONITOR_LOGGER_SUPPRESS', 'suppress')
     ),
   };
 }
@@ -160,12 +184,10 @@ export function redactSecrets(text) {
   //   - Bearer token (空格分隔: Bearer eyJ...)          ← 修复：不再被 `[^\s;]+` 在空格处截断而残留 token
   //   - 裸值       secret123
   // 替换回调保留原引号风格，保证 JSON 行结构不被破坏。
-  // 键名边界：前后不允许紧邻字母数字（lookbehind/lookahead），但允许 `_` 或 `-` 紧邻，
-  // 故 access_token / access-token / refresh_token 这类下划线/连字符键也能命中；
-  // 而 tokenizer / tokens 因 lookahead 拒绝字母数字紧邻而不误伤。
-  // （token_use 之类由主正则的 `\s*[:=]` 分隔符约束天然排除，不会误配。）
+  // 敏感词列表 = 单一来源 SENSITIVE_WORDS + code 类校验码。加 \b 边界。
+  const words = [...SENSITIVE_WORDS, 'code', 'totp', 'otp', 'pin'];
   const key =
-    '["\']?(?<![A-Za-z0-9])(?:authToken|authorization|set-cookie|apiKey|api_key|authcode|password|passwd|cookie|secret|smtp|imap|pwd|token|auth)(?![A-Za-z0-9])["\']?';
+    '["\']?(?<![A-Za-z0-9])(?:' + words.join('|') + ')(?![A-Za-z0-9])["\']?';
   out = out.replace(
     new RegExp(
       `(${key}\\s*[:=]\\s*)(?:"([^"]*)"|\'([^\']*)\'|(Bearer\\s+[^\\s,;]+)|([^\\s,;]+))`,
@@ -336,18 +358,9 @@ function write(levelName, name, msg, meta) {
 
   let line;
   if (state.format === 'json') {
-    const safeMeta = {};
-    if (meta && typeof meta === 'object') {
-      for (const [key, value] of Object.entries(meta)) {
-        // 键名命中敏感名单 → 整值脱敏（无论类型；修复 `{authToken:'xxx'}` 纯值泄漏）；
-        // 否则值字符串再跑一次 text 脱敏，防止嵌套文本残留
-        safeMeta[key] = isSensitiveKey(key)
-          ? '[REDACTED]'
-          : typeof value === 'string'
-            ? redactSecrets(value)
-            : value;
-      }
-    }
+    // 递归脱敏 meta：敏感 key 命中的整值、嵌套对象/数组里的字符串都过脱敏。
+    // 修复 psenY review 指出的「嵌套对象 authorization/token 原样落盘」。
+    const safeMeta = redactValue(meta);
     line = formatJson(ts, levelName, name, redactedMsg, safeMeta);
   } else {
     line = formatText(ts, levelName, name, redactedMsg);
