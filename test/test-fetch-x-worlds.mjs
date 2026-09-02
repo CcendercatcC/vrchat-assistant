@@ -40,7 +40,7 @@ console.log('\n=== 2. t.co 短链解包函数单元测试（纯本地） ===');
 const tcoText = '世界推荐 https://t.co/abc123XYZ 好美，还有 https://t.co/abc123XYZ 与 https://t.co/def456UVW';
 const tcoLinks = extractTcoLinks(tcoText);
 assert('extractTcoLinks 提取 2 个去重短链', tcoLinks.length === 2);
-assert('extractTcoLinks 内容正确', tcoLinks.includes('https://t.co/abc123XYZ') && tcoLinks.includes('https://t.co/def456UVW'));
+assert('extractTcoLinks 内容正确', tcoLinks.some(u => u === 'https://t.co/abc123XYZ') && tcoLinks.some(u => u === 'https://t.co/def456UVW'));
 
 // 空文本 / 无短链
 assert('extractTcoLinks 空文本返回空数组', extractTcoLinks('').length === 0);
