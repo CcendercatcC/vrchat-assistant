@@ -295,6 +295,34 @@ test('dashboard.events avatar 事件缺缩略图时从 avatarImageUrl 推导', a
   assert.ok(decodedThumb.includes(fid), '缩略图应含同一 file id，实际: ' + ev.avatarThumbnailUrl);
 });
 
+// 审核建议补充：WS 推送**带** avatarThumbnailUrl 时，返回的也必须是 imgProxy 代理形式
+// （否则正常事件直连 CDN 裸 URL，国内加载失败/变慢，恰好复现"图不显示"）
+test('dashboard.events avatar 事件带缩略图时仍走 imgProxy 代理', async () => {
+  const PUID = 'usr_test-0000-0000-0000-0000000000c1';
+  const rawThumb = 'https://api.vrchat.cloud/api/1/image/file_cccccccc-0000-0000-0000-000000000000/1/256';
+  ctx.storage.insertEvent({
+    type: 'friend-update', userId: PUID, displayName: '代理用户',
+    contentJson: {
+      userId: PUID, displayName: '代理用户', type: 'avatar',
+      avatarName: '带图模型',
+      avatarImageUrl: 'https://api.vrchat.cloud/api/1/file/file_cccccccc-0000-0000-0000-000000000000/1/file',
+      avatarThumbnailUrl: rawThumb,
+    },
+    worldId: '', worldName: '', createdAt: new Date().toISOString(), source: 'ws',
+  });
+  const r = await services.get('dashboard.events')({ limit: 50, offset: 0 });
+  const ev = r.events.find((e) => e.userId === PUID);
+  assert.ok(ev, '应能查到 avatar 事件');
+  // 必须带 imgProxy 前缀（走本地图片代理），不允许裸 CDN URL
+  assert.ok(
+    ev.avatarThumbnailUrl.startsWith('/api/dashboard/image-proxy?url='),
+    '带缩略图事件也应走 imgProxy 代理，实际: ' + ev.avatarThumbnailUrl
+  );
+  // 解码后仍是原缩略图
+  const decoded = decodeURIComponent(ev.avatarThumbnailUrl.split('?url=')[1]);
+  assert.equal(decoded, rawThumb, '解码后应为原始缩略图 URL');
+});
+
 // ── 清理 ──
 after(() => {
   for (const f of [tmpDb, tmpDb + '-wal', tmpDb + '-shm']) { try { rmSync(f, { force: true }); } catch {} }
