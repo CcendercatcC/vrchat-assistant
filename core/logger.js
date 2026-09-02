@@ -260,7 +260,8 @@ function doRotate() {
   if (!state.fileEnabled || !fs.existsSync(state.filePath)) return;
 
   const now = new Date();
-  const ts = now.toISOString().replace(/[-:T]/g, '').replace(/\.\d{3}Z$/, '');
+  // UTC 时间戳 → YYYYMMDD-HHMMSS（去 ISO 连字符/冒号，T 转 -），与 plan 命名约定对齐
+  const ts = now.toISOString().replace(/-/g, '').replace(/:/g, '').replace('T', '-').replace(/\.\d{3}Z$/, '');
   const rotatedName = `monitor-${ts}-${state.pid}.log`;
   const rotatedPath = path.join(state.dir, rotatedName);
 
