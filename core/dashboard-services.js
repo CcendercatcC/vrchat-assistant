@@ -452,8 +452,10 @@ export function registerDashboardServices(loader, ctx) {
     const needName = result.filter((e) => e.updateType === 'avatar');
     const pending = [];
     const seen = new Set();
-    // 收集需要解析的模型名：新模型（avatarName）+ 旧模型（previousAvatarName），按 fileId 去重
-    for (const ev of needName.slice(0, 10)) {
+    // 收集需要解析的模型名：新模型（avatarName）+ 旧模型（previousAvatarName），按 fileId 去重。
+    // 扫描全部 avatar 事件（不只 slice(0,10)）：正则匹配是纯内存操作，pending 上限 6 已限流；
+    // 若只扫最新 10 条，回归期间积累的历史 avatar 事件永远轮不到补名（实测 14 条一直"未知模型"）。
+    for (const ev of needName) {
       const jobs = [
         { url: ev.avatarImageUrl, key: 'avatarName' },
         { url: ev.previousAvatarImageUrl, key: 'previousAvatarName' },
