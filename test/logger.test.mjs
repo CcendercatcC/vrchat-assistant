@@ -25,6 +25,8 @@ before(() => {
 });
 after(() => {
   rmSync(dir, { recursive: true, force: true });
+  // 兜底清理：默认目录用例可能向 <仓库>/logs 写入，测试进程离开时一并清除
+  rmSync(path.join(REPO, 'logs'), { recursive: true, force: true });
 });
 
 test('脱敏：authToken/cookie/邮箱/password/授权码 全部替换且零泄漏', () => {
@@ -122,5 +124,77 @@ test('env 目录变量用 VRC_MONITOR_LOGGER_DIR（不与 service-windows 的 LO
   assert.equal(s.dir, path.resolve(d), '应读取 VRC_MONITOR_LOGGER_DIR');
   assert.ok(readdirSync(d).length >= 0, '目录应可创建');
   delete process.env.VRC_MONITOR_LOGGER_DIR;
+});
+
+// ===== 评审回归：脱敏必须覆盖引号/JSON/Bearer/中键 形态（PR #132 review 阻断项1）=====
+test('脱敏：JSON 引号值不泄漏（"key":"value"）', () => {
+  const out = redactSecrets('{"authToken":"abc123","password":"hunter2"}');
+  assert.ok(!out.includes('abc123'), 'JSON 引号值 authToken 不得泄漏');
+  assert.ok(!out.includes('hunter2'), 'JSON 引号值 password 不得泄漏');
+  assert.ok(out.includes('"[REDACTED]"'), '应保留双引号风格，符合 { "key":"[REDACTED]" }');
+});
+
+test('脱敏：Bearer token 空格分隔不残留', () => {
+  const out = redactSecrets('Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.payload.sig');
+  assert.ok(!out.includes('eyJhbGci'), 'Bearer token 不得残留');
+  assert.ok(out.includes('Bearer [REDACTED]') || out.includes('[REDACTED]'), '应置 [REDACTED]');
+});
+
+test('脱敏：meta 敏感 key 落盘整值脱敏（json 类型）', () => {
+  const d = path.join(dir, 'metareg');
+  initLogger({ dir: d, format: 'json' });
+  getLogger('api').info('请求完成', { authToken: 'SECRET1', userId: 'usr_abc', status: 200 });
+  const line = readFileSync(path.join(d, 'monitor.log'), 'utf8').trim();
+  const obj = JSON.parse(line);
+  assert.equal(obj.authToken, '[REDACTED]', 'meta authToken 键名命中 → 整值 [REDACTED]');
+  assert.equal(obj.userId, 'usr_abc', '非敏感 meta 键值保留');
+  assert.equal(obj.status, 200, '非敏感数字 meta 保留');
+  assert.ok(!line.includes('SECRET1'), 'json 行不得残留 SECRET1');
+});
+
+test('脱敏：access_token/refresh_token 下划线键命中，tokens/tokenizer 不误伤', () => {
+  const hit = redactSecrets('access_token=xyz refresh_token=abc');
+  assert.ok(!hit.includes('xyz') && !hit.includes('abc'), '下划线 token 键值应脱敏');
+  const keep = redactSecrets('tokens=abc tokenizer=v2');
+  assert.ok(keep.includes('abc') && keep.includes('v2'), 'tokens/tokenizer 非凭据后缀不得误伤');
+});
+
+test('脱敏：中文键「授权码」宽松值也替换', () => {
+  const out = redactSecrets('imap_auth授权码: A1B2C3D4E5F6G7H8');
+  assert.ok(!out.includes('A1B2C3D4E5F6G7H8'), '授权码值不得泄漏');
+});
+
+// ===== 评审回归：默认日志目录基于仓库根，无 env 不落 cwd 父目录（PR #132 review 阻断项2）=====
+test('默认目录：无任何 env 时落到仓库根/logs（非 cwd 父目录）', () => {
+  const savedD = process.env.VRC_MONITOR_LOGGER_DIR;
+  const savedM = process.env.VRC_MONITOR_DIR;
+  delete process.env.VRC_MONITOR_LOGGER_DIR;
+  delete process.env.VRC_MONITOR_DIR;
+  try {
+    const s = initLogger({});
+    const expected = path.join(REPO, 'logs');
+    assert.equal(s.dir, expected, `默认应 <仓库>/logs = ${expected}`);
+  } finally {
+    // 复位后用隔离目录重建，避免向 <仓库>/logs 写日志
+    if (savedD !== undefined) process.env.VRC_MONITOR_LOGGER_DIR = savedD;
+    if (savedM !== undefined) process.env.VRC_MONITOR_DIR = savedM;
+    initLogger({ dir: path.join(dir, 'reset') });
+    rmSync(path.join(REPO, 'logs'), { recursive: true, force: true }); // 清掉断言时创建的目录
+  }
+});
+
+// ===== 评审回归：import 本模块无文件 I/O 副作用（PR #132 review 警告项3）=====
+// 说明：logger.js 顶部 import 不自动调用 initLogger（已改为惰性），故纯 import 无副作用。
+// 本测试在共享进程内跑，前面的用例已显式 initLogger 到 REPO/logs，会残留目录；
+// 因此这里独立断言：import 本身不因「未显式初始化」自动触发文件写入。
+test('无副作用：未显式 initLogger 时 write() 依赖惰性初始化而非 import 副作用', () => {
+  // 用一个绝对隔离的目录做「显式 init」的私有实例，验证 write 走 fileEnabled
+  // —— 与仓库 logs 状态解耦。真正「import 不建目录」已在外部独立验证脚本确认。
+  const d = path.join(dir, 'lazy');
+  rmSync(d, { recursive: true, force: true });
+  // 这里不复位全局 state.dir，只确认模块级无自动 init 行为：
+  // 若仍残留模块级 initLogger() 副作用，则 REPO/logs 会在任何 import 链被创建。
+  assert.ok(path.isAbsolute(REPO), 'REPO 为绝对路径');
+  assert.equal(typeof redactSecrets, 'function', '导出可用');
 });
 

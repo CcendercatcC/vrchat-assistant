@@ -1,6 +1,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
+import { fileURLToPath } from 'node:url';
+
+// 仓库根 = 本模块(core/logger.js)上溯一层。默认日志目录基于它稳定定位，
+// 不随 process.cwd() 漂移（Hermes 插件 Popen / systemd 只设 WorkingDirectory 不注入 env 的场景）。
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.join(__dirname, '..');
+
+// 敏感键名单：meta 对象里命中即整值脱敏（含大小写/蛇形/驼峰变体）
+const SENSITIVE_KEY_RE = /^(?:auth(?:token|orization|code)?|authorization|cookie|set-cookie|password|passwd|pwd|secret|token|apikey|api_key|smtp|imap|authcode|授权码)$/i;
+const isSensitiveKey = (key) => SENSITIVE_KEY_RE.test(String(key));
 
 export const LEVELS = { debug: 10, info: 20, warn: 30, error: 40, silent: 99 };
 
@@ -27,7 +37,8 @@ function resolveDir() {
   if (process.env.VRC_MONITOR_DIR) {
     return path.join(process.env.VRC_MONITOR_DIR, 'logs');
   }
-  return path.join(path.dirname(process.cwd()), 'logs');
+  // 兜底：基于仓库根，而非 cwd。保证无 env 时默认日志落在 <仓库>/logs（与文档一致）
+  return path.join(REPO_ROOT, 'logs');
 }
 
 function parseLevel(value) {
@@ -97,6 +108,7 @@ function buildConfig(options) {
 export function initLogger(options = {}) {
   const cfg = buildConfig(options);
 
+  lazyInit = true; // 显式初始化标记：后续 write() 不再触发惰性兜底
   state.level = cfg.level;
   state.dir = cfg.dir;
   state.format = cfg.format;
@@ -142,24 +154,35 @@ export function redactSecrets(text) {
 
   let out = text;
 
+  // 敏感键值对：键可被引号包裹（JSON），分隔符 = 或 :，值可为
+  //   - 双引号串   "secret"
+  //   - 单引号串   'secret'
+  //   - Bearer token (空格分隔: Bearer eyJ...)          ← 修复：不再被 `[^\s;]+` 在空格处截断而残留 token
+  //   - 裸值       secret123
+  // 替换回调保留原引号风格，保证 JSON 行结构不被破坏。
+  // 键名边界：前后不允许紧邻字母数字（lookbehind/lookahead），但允许 `_` 或 `-` 紧邻，
+  // 故 access_token / access-token / refresh_token 这类下划线/连字符键也能命中；
+  // 而 tokenizer / tokens 因 lookahead 拒绝字母数字紧邻而不误伤。
+  // （token_use 之类由主正则的 `\s*[:=]` 分隔符约束天然排除，不会误配。）
+  const key =
+    '["\']?(?<![A-Za-z0-9])(?:authToken|authorization|set-cookie|apiKey|api_key|authcode|password|passwd|cookie|secret|smtp|imap|pwd|token|auth)(?![A-Za-z0-9])["\']?';
   out = out.replace(
-    /((?:authToken|authorization|cookie|set-cookie))(\s*[:=]\s*)([^\s,;"']+)/gi,
-    '$1$2[REDACTED]'
+    new RegExp(
+      `(${key}\\s*[:=]\\s*)(?:"([^"]*)"|\'([^\']*)\'|(Bearer\\s+[^\\s,;]+)|([^\\s,;]+))`,
+      'gi'
+    ),
+    (m, prefix, dq, sq, bearer, bare) => {
+      if (dq !== undefined) return `${prefix}"[REDACTED]"`;
+      if (sq !== undefined) return `${prefix}'[REDACTED]'`;
+      if (bearer !== undefined) return `${prefix}Bearer [REDACTED]`;
+      return `${prefix}[REDACTED]`;
+    }
   );
 
-  out = out.replace(
-    /((?:password|passwd|pwd|secret|token))(\s*[:=]\s*)([^\s,;"']+)/gi,
-    '$1$2[REDACTED]'
-  );
+  // 中文键「授权码」：\b 对 CJK 无效，单独用宽松值兜底
+  out = out.replace(/((?:授权码)\s*[:=:：]\s*)(\S+)/gi, '$1[REDACTED]');
 
-  out = out.replace(
-    /((?:smtp|imap|授权码|authcode))(\s*[:=:：]\s*)(\S+)/gi,
-    '$1$2[REDACTED]'
-  );
-
-  out = out.replace(/(auth=)([^\s,;"']+)/gi, '$1[REDACTED]');
-  out = out.replace(/(apiKey=)([^\s,;"']+)/gi, '$1[REDACTED]');
-
+  // 兜底：邮箱
   out = out.replace(/[\w.+-]+@[\w-]+\.[\w.]+/g, '[REDACTED]');
 
   return out;
@@ -300,6 +323,8 @@ function checkRotation(line) {
 function write(levelName, name, msg, meta) {
   if (state.closed) return;
 
+  ensureInitialized();
+
   const rawMsg = typeof msg === 'string' ? msg : String(msg);
   if (shouldSuppress(rawMsg)) return;
 
@@ -314,7 +339,13 @@ function write(levelName, name, msg, meta) {
     const safeMeta = {};
     if (meta && typeof meta === 'object') {
       for (const [key, value] of Object.entries(meta)) {
-        safeMeta[key] = typeof value === 'string' ? redactSecrets(value) : value;
+        // 键名命中敏感名单 → 整值脱敏（无论类型；修复 `{authToken:'xxx'}` 纯值泄漏）；
+        // 否则值字符串再跑一次 text 脱敏，防止嵌套文本残留
+        safeMeta[key] = isSensitiveKey(key)
+          ? '[REDACTED]'
+          : typeof value === 'string'
+            ? redactSecrets(value)
+            : value;
       }
     }
     line = formatJson(ts, levelName, name, redactedMsg, safeMeta);
@@ -377,4 +408,18 @@ export function closeLogger() {
   state.console = false;
 }
 
-initLogger();
+// 惰性初始化：import 本模块不触发任何文件 I/O（避免副作用扩散到任何 import 链）。
+// 首次真正 write() 且尚未显式 initLogger 时，以默认配置初始化一次。
+let lazyInit = false;
+function ensureInitialized() {
+  if (lazyInit) return;
+  lazyInit = true;
+  // 仅当尚未初始化（filePath 为空）时用默认配置兜底；已显式 init 过则跳过
+  if (!state.filePath) {
+    try {
+      initLogger();
+    } catch {
+      // 初始化失败也不阻断日志路径（console 仍可用）
+    }
+  }
+}
