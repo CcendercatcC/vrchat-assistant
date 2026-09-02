@@ -114,3 +114,13 @@ test('getLevelName：数字转人类可读级别名', () => {
   assert.equal(getLevelName(LEVELS.error), 'error');
   assert.equal(getLevelName(10), 'debug');
 });
+
+test('env 目录变量用 VRC_MONITOR_LOGGER_DIR（不与 service-windows 的 LOG_DIR 撞名）', () => {
+  const d = path.join(dir, 'envdir');
+  process.env.VRC_MONITOR_LOGGER_DIR = d;
+  const s = initLogger({}); // 无显式 dir → 走 resolveDir() 读 env
+  assert.equal(s.dir, path.resolve(d), '应读取 VRC_MONITOR_LOGGER_DIR');
+  assert.ok(readdirSync(d).length >= 0, '目录应可创建');
+  delete process.env.VRC_MONITOR_LOGGER_DIR;
+});
+

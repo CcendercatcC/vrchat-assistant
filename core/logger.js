@@ -20,8 +20,9 @@ const state = {
 };
 
 function resolveDir() {
-  if (process.env.VRC_MONITOR_LOG_DIR) {
-    return path.resolve(process.env.VRC_MONITOR_LOG_DIR);
+  // 日志模块专属变量名（VRC_MONITOR_LOGGER_DIR），不与 AGENTS.md 里 service-windows 用的 VRC_MONITOR_LOG_DIR 撞名
+  if (process.env.VRC_MONITOR_LOGGER_DIR) {
+    return path.resolve(process.env.VRC_MONITOR_LOGGER_DIR);
   }
   if (process.env.VRC_MONITOR_DIR) {
     return path.join(process.env.VRC_MONITOR_DIR, 'logs');
