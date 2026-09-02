@@ -263,6 +263,37 @@ test('avatarFileId 从代理/原始 URL 提取 file id（#122 imgProxy 回归）
   assert.equal(avatarFileId(null), null);
   assert.equal(avatarFileId('https://example.com/no-file-here'), null);
 });
+// ── avatar 缩略图推导：WS 推送的 avatar 事件有时只带 avatarImageUrl（原图）不带
+// avatarThumbnailUrl（缩略图）→ 后端应从 avatarImageUrl 推导缩略图（/file → /image/1/256），
+// 否则前端只显示模型名不显示模型图（用户反馈）
+test('dashboard.events avatar 事件缺缩略图时从 avatarImageUrl 推导', async () => {
+  const AUID = 'usr_test-0000-0000-0000-0000000000b1';
+  const fid = 'file_aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+  const avatarUrl = 'https://api.vrchat.cloud/api/1/file/' + fid + '/1/file';
+  ctx.storage.insertEvent({
+    type: 'friend-update', userId: AUID, displayName: '缩略图用户',
+    contentJson: {
+      userId: AUID, displayName: '缩略图用户', type: 'avatar',
+      avatarName: '测试模型',
+      avatarImageUrl: avatarUrl,
+      previousAvatarImageUrl: 'https://api.vrchat.cloud/api/1/file/file_bbbbbbbb-0000-0000-0000-000000000000/1/file',
+    },
+    worldId: '', worldName: '', createdAt: new Date().toISOString(), source: 'ws',
+  });
+  const r = await services.get('dashboard.events')({ limit: 50, offset: 0 });
+  const ev = r.events.find((e) => e.userId === AUID);
+  assert.ok(ev, '应能查到 avatar 事件');
+  assert.equal(ev.updateType, 'avatar');
+  assert.equal(ev.avatarName, '测试模型', '模型名应保留');
+  assert.ok(ev.avatarThumbnailUrl, 'avatarThumbnailUrl 不应为空');
+  // 缩略图经 imgProxy 代理（URL 被编码），decodeURIComponent 还原后应是推导的 image/{fid}/1/256
+  const decodedThumb = decodeURIComponent(ev.avatarThumbnailUrl);
+  assert.ok(
+    decodedThumb.includes('/image/') && decodedThumb.includes('/1/256'),
+    '缩略图应为推导的 image/{fid}/1/256，实际: ' + ev.avatarThumbnailUrl
+  );
+  assert.ok(decodedThumb.includes(fid), '缩略图应含同一 file id，实际: ' + ev.avatarThumbnailUrl);
+});
 
 // ── 清理 ──
 after(() => {
