@@ -112,7 +112,9 @@ export function openUser(u) {
     const found = store.friends.find((f) => f.userId === u);
     // 自己不在 friends 表（不是自己的好友）→ 回退到 store.me，保留头像/状态等字段
     const self = (store.me && store.me.userId === u) ? store.me : null;
-    store.userModal = found || self || { userId: u, displayName: u, isOnline: false };
+    // 找不到（离线/字母靠后的好友不在 store.friends 缓存）→ 不造裸对象，
+    // 仅保留 userId，UserDialog 用 /user-profile 的 localFriend/user.isFriend 判定好友关系（issue #127）
+    store.userModal = found || self || { userId: u };
   } else {
     store.userModal = u;
   }
@@ -280,7 +282,7 @@ export async function load(quiet = false) {
   try {
     const settled = await Promise.allSettled([
       get('/api/dashboard/overview'),
-      get('/api/dashboard/friends?limit=100'),
+      get('/api/dashboard/friends?limit=1000'),  // issue #127：好友全量进 store，避免截断误判非好友
       get(`/api/dashboard/events?limit=50&dateFrom=${encodeURIComponent(store.feedDateFrom || '')}&dateTo=${encodeURIComponent(store.feedDateTo || '')}`),
       get('/api/dashboard/events-range'),
     ]);
@@ -466,7 +468,7 @@ function refreshFriends() {
   clearTimeout(friendsRefreshTimer);
   const run = async () => {
     try {
-      const f = await get('/api/dashboard/friends?limit=100');
+      const f = await get('/api/dashboard/friends?limit=1000');  // issue #127
       if (f && Array.isArray(f.friends)) {
         // 按 userId 合并，保留现有顺序，更新已存在的、追加新的
         const m = new Map(store.friends.map((x) => [x.userId, x]));
