@@ -356,6 +356,15 @@ export function setLevel(level) {
   state.level = parseLevel(level);
 }
 
+// 把级别数字转回人类可读名（供 ctx.paths.LOG_LEVEL 展示 / MCP 工具用）
+export function getLevelName(level) {
+  const n = parseLevel(level);
+  for (const [name, val] of Object.entries(LEVELS)) {
+    if (val === n) return name;
+  }
+  return 'info';
+}
+
 export function rotate() {
   doRotate();
 }
