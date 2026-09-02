@@ -198,13 +198,16 @@ export function redactSecrets(text) {
   // 边界与 isSensitiveKey 同语义：前缀接受 非字母数字 或 驼峰切换点（`_`/`-`/`access|Token`），
   // 后缀拒绝紧跟字母数字（防 tokenizer/tokens）。
   // code/totp/otp/pin 校验码**不做驼峰开放**（否则 statusCode/errorCode 误伤），仅接受严格键形前缀。
-  // 开放词根：支持驼峰/下划线/连字符前缀（access_token / refreshToken 命中）
+  // 开放词根：支持驼峰/下划线/连字符前缀（access_token / refreshToken / grant_code 命中）
   const openWords = SENSITIVE_WORDS;
   const openKey =
     '["\']?(?:^|[^A-Za-z0-9]|(?<=[a-z])(?=[A-Z]))(?:' + openWords.join('|') + ')(?![A-Za-z0-9])["\']?';
-  // 校验码：严格键形（前缀不接受驼峰切换点，防 statusCode/errorCode 误伤）
+  // 校验码：仅「严格整键」才脱敏（前缀不接受 下划线/连字符/驼峰，防 *_code 业务字段误伤）。
+  // 因此 country_code / invite_code / room_code / postal_code / group_code 不命中；
+  // 而裸 code / totp / otp / pin（前面是 =、:、空格、^、引号）命中；
+  // grant_code / authorization_code 等凭证变体由上方 openWords 完整词匹配。
   const exactKey =
-    '["\']?(?:^|[^A-Za-z0-9])(?:code|totp|otp|pin)(?![A-Za-z0-9])["\']?';
+    '["\']?(?:^|[^A-Za-z0-9_-])(?:code|totp|otp|pin)(?![A-Za-z0-9])["\']?';
   // 值捕获：双引号串/单引号串/Bearer token/裸值（引号保留 + 值整段吞没）
   const val = `(?:\\"([^\\"]*)\\"|\\'([^\\']*)\\'|(Bearer\\s+[^\\s,;]+)|([^\\s,;]+))`;
   // 键名+分隔符整体作 prefix 捕获，替换后保留 `key=`/`key:` 形式

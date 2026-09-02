@@ -186,6 +186,10 @@ test('脱敏：文本形态 code/totp 键命中，statusCode/errorCode 不误伤
   assert.ok(!redactSecrets('authorization_code=xyz').includes('xyz'), 'authorization_code 应脱敏');
   assert.ok(redactSecrets('statusCode=200').includes('200'), 'statusCode 文本不误伤');
   assert.ok(redactSecrets('errorCode=404').includes('404'), 'errorCode 文本不误伤');
+  // R3 回归：*_code 业务字段在下划线场景不得误伤（此前只测驼峰 statusCode/errorCode，漏了下划线）
+  assert.ok(redactSecrets('country_code=CN').includes('CN'), 'country_code 文本不误伤');
+  assert.ok(redactSecrets('invite_code=INV123').includes('INV123'), 'invite_code 文本不误伤');
+  assert.ok(redactSecrets('room_code=R').includes('R'), 'room_code 文本不误伤');
 });
 
 test('脱敏：中文键「授权码」宽松值也替换', () => {
