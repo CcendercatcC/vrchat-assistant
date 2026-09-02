@@ -12,12 +12,18 @@ const loading = ref(false);
 const removing = ref(new Set());
 
 // 收藏夹 tag → 友好名（worlds0=收藏夹1, worlds1=收藏夹2 ...）
+// 收藏分组列表（/favorites?type=groups 拉取，按 tag 数值序），用于收藏夹编号：
+// 用「实际分组列表顺序」而非 tag 尾号，兼容有/无 worlds0 两种账号（issue 审核反馈）
+let groupsList = [];
 function favName(tag) {
-  // VRC+ 专属夹实际 tag 为 vrcPlusWorlds1-2（大写 W），/i 才能匹配
-  // VRChat 收藏夹 tag 从 1 开始编号（实测 favorite/groups 返回 worlds1/2/3...，无 worlds0），
-  // 故直接用编号显示，不再 +1（修复收藏夹显示成 2/3/4 的偏移 bug）
-  const m = String(tag || '').match(/^(?:vrcplus)?worlds(\d+)$/i);
-  if (m) return (/^vrc/i.test(String(tag)) ? 'VRC+ ' : '') + `收藏夹 ${Number(m[1])}`;
+  // 世界夹 / VRC+ 夹：按分组列表顺序编号（第 i 个普通世界夹 → 收藏夹 i+1）
+  const worldGroupsOrdered = groupsList.filter((g) => g.type === 'world').sort((a, b) => tagNum(a.tag) - tagNum(b.tag));
+  const vrcOrdered = groupsList.filter((g) => g.type === 'vrcPlusWorld').sort((a, b) => tagNum(a.tag) - tagNum(b.tag));
+  const wIdx = worldGroupsOrdered.findIndex((g) => g.tag === tag);
+  if (wIdx >= 0) return `收藏夹 ${wIdx + 1}`;
+  const vIdx = vrcOrdered.findIndex((g) => g.tag === tag);
+  if (vIdx >= 0) return `VRC+ 收藏夹 ${vIdx + 1}`;
+  // 模型夹 / 好友夹：VRChat tag 从 1 开始（avatars1/2...、friends1/2...）
   const a = String(tag || '').match(/^avatars(\d+)$/);
   if (a) return `模型夹 ${Number(a[1])}`;
   const f = String(tag || '').match(/^friends(\d+)$/);
@@ -25,9 +31,20 @@ function favName(tag) {
   return tag || '未分类';
 }
 
+// 提取 tag 尾号（worlds3 → 3；无编号 → MAX，排序放最后）
+function tagNum(tag) {
+  const m = String(tag || '').match(/(\d+)$/);
+  return m ? Number(m[1]) : Number.MAX_SAFE_INTEGER;
+}
+
 async function load() {
   loading.value = true;
   try {
+    // 收藏分组列表（实际分组顺序），用于收藏夹编号（兼容有/无 worlds0 账号）
+    try {
+      const g = await get('/api/dashboard/favorites?type=groups');
+      groupsList = (g && Array.isArray(g.groups)) ? g.groups : [];
+    } catch { groupsList = []; }
     if (!worlds.value) {
       const w = await get('/api/dashboard/favorites?type=worlds&limit=200');
       worlds.value = (w && w.worlds) || [];
