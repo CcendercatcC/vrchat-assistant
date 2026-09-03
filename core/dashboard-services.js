@@ -36,6 +36,9 @@ function notificationTypeLabel(content) {
     moderationWarning: '警告',
     message: '消息',
     group: '群组',
+    boop: '戳一戳',
+    'twitchdrop.fulfilled': 'Twitch 掉宝到账',
+    'group.event.created': '群活动创建',
   }[t];
   return label || '';
 }
@@ -322,10 +325,18 @@ export function registerDashboardServices(loader, ctx) {
       // 通知更新事件（notification-v2-update/notification-update）只有 {id, updates}：
       // content.id 指向被更新的原通知（user_id），关联回原通知取群组信息与内容
       let src = content;
-      if ((row.type === 'notification-v2-update' || row.type === 'notification-update') && content.id) {
+      // 反查原通知：notification-v2-update/notification-update 用 content.id（通知 ID）；
+      // see/hide-notification 的 content 是裸通知 ID 字符串（历史遗留），也反查 user_id=通知ID 的原通知，
+      // 取类型/发送者/标题，让摘要显示详细信息而非固定标签。
+      const notiId = (row.type === 'notification-v2-update' || row.type === 'notification-update')
+        ? (content && content.id)
+        : ((row.type === 'see-notification' || row.type === 'hide-notification') && typeof content === 'string')
+          ? content
+          : '';
+      if (notiId) {
         try {
-          // 排除 update 事件自身（同 user_id，id 更大排前面）
-          const rc = ctx.storage.query(`SELECT content_json AS c FROM events WHERE user_id = $id AND type NOT IN ('notification-v2-update','notification-update') ORDER BY id DESC LIMIT 1`, { $id: content.id });
+          // 排除 update/see/hide 事件自身（同 user_id，id 更大排前面）
+          const rc = ctx.storage.query(`SELECT content_json AS c FROM events WHERE user_id = $id AND type NOT IN ('notification-v2-update','notification-update','see-notification','hide-notification') ORDER BY id DESC LIMIT 1`, { $id: notiId });
           if (rc[0]) { try { const rcj = JSON.parse(rc[0].c || '{}'); if (rcj && rcj.type) src = rcj; } catch { /* ignore */ } }
         } catch { /* ignore */ }
       }
@@ -342,8 +353,8 @@ export function registerDashboardServices(loader, ctx) {
         groupName: ((content.groupName) || ''),
         // 通知事件字段（notification v1 / notification-v2）：好友申请/邀请/私信/群组消息；
         // 更新类事件（notification*-update）从关联的原通知（src）取群组信息与内容
-        senderUserId: content.senderUserId || '',
-        senderUsername: content.senderUsername || '',
+        senderUserId: src.senderUserId || content.senderUserId || '',
+        senderUsername: src.senderUsername || content.senderUsername || '',
         notiImageUrl: imgProxy(src.imageUrl || ''),
         notiMessage: src.message || '',
         notiTitle: src.title || '',
@@ -380,8 +391,8 @@ export function registerDashboardServices(loader, ctx) {
           : row.type === 'group-joined' ? ('加入群组' + (gName ? '：' + gName : ''))
           : row.type === 'group-member-updated' ? ('群组成员信息更新' + (gName ? '：' + gName : ''))
           : row.type === 'group-role-updated' ? ('群组角色更新' + (gName ? '：' + gName : '') + ((content.role && content.role.name) ? '（角色：' + content.role.name + '）' : ''))
-          : row.type === 'hide-notification' ? ('通知已隐藏' + (notificationTypeLabel(content) ? '：' + notificationTypeLabel(content) : ''))
-          : row.type === 'see-notification' ? ('通知已读' + (notificationTypeLabel(content) ? '：' + notificationTypeLabel(content) : ''))
+          : row.type === 'hide-notification' ? ('通知已隐藏' + ((notificationTypeLabel(src) || notificationTypeLabel(content)) ? '：' + (notificationTypeLabel(src) || notificationTypeLabel(content)) + (src.senderUsername ? '（' + src.senderUsername + '）' : '') : ''))
+          : row.type === 'see-notification' ? ('通知已读' + ((notificationTypeLabel(src) || notificationTypeLabel(content)) ? '：' + (notificationTypeLabel(src) || notificationTypeLabel(content)) + (src.senderUsername ? '（' + src.senderUsername + '）' : '') : ''))
           : row.type === 'unknown' ? '未知事件'
           : '未分类事件: ' + row.type,
         // 对齐 VRCX Feed detail：各类型的具体字段
@@ -553,6 +564,14 @@ export function registerDashboardServices(loader, ctx) {
     return rowsFiltered.map((row) => {
       let content = {};
       try { content = JSON.parse(row.content_json || '{}'); } catch { /* malformed historical payload */ }
+      // see/hide-notification 反查原通知（content 是裸通知 ID，user_id=通知ID 存于原 notification 事件）
+      let notiSrc = content;
+      if ((row.type === 'see-notification' || row.type === 'hide-notification') && typeof content === 'string') {
+        try {
+          const rc = ctx.storage.query(`SELECT content_json AS c FROM events WHERE user_id = $id AND type IN ('notification','notification-v2') ORDER BY id DESC LIMIT 1`, { $id: content });
+          if (rc[0]) { try { const rcj = JSON.parse(rc[0].c || '{}'); if (rcj && rcj.type) notiSrc = rcj; } catch { /* ignore */ } }
+        } catch { /* ignore */ }
+      }
       const world = content.world || {};
       return {
         eventId: row.id,
@@ -563,7 +582,7 @@ export function registerDashboardServices(loader, ctx) {
         worldId: row.world_id || content.worldId || world.id || '',
         worldName: row.world_name || world.name || '',
         avatarUrl: avatarOf(friend?.userIcon, friend?.avatarUrl),
-        summary: row.type === 'friend-location' ? '位置变化' : row.type === 'friend-online' ? '上线' : row.type === 'friend-offline' ? '离线' : row.type === 'friend-active' ? '状态变化' : row.type === 'friend-update' ? ({ avatar: '更换模型', status: '状态变化', bio: '简介变化', user_icon: '更新头像图标', pronouns: '更新代词', displayName: '改名' }[content.type] || '资料变化') : row.type === 'notification' || row.type === 'notification-v2' ? (content.message || content.title || '通知') : row.type === 'notification-v2-update' || row.type === 'notification-update' ? (content.updates && content.updates.seen ? '通知已读' : '通知状态更新') : row.type === 'user-update' ? ({ status: '状态变化', bio: '简介变化', avatar: '更换模型', user_icon: '更新头像图标', pronouns: '更新代词', displayName: '改名' }[content.type] || '资料变化') : row.type === 'user-location' ? '我的位置变化' : row.type === 'friend-add' ? '新增好友' : row.type === 'friend-delete' ? '已解除好友' : row.type === 'content-refresh' ? ('内容库：' + (content.actionType === 'add' ? '获得' : content.actionType === 'delete' ? '移除' : content.actionType || '更新') + ({ prop: '道具', bundle: '捆绑包' }[content.itemType] || content.itemType || '物品')) : row.type === 'group-joined' ? '加入群组' : row.type === 'group-member-updated' ? '群组成员信息更新' : row.type === 'group-role-updated' ? '群组角色更新' : row.type === 'hide-notification' ? ('通知已隐藏' + (notificationTypeLabel(content) ? '：' + notificationTypeLabel(content) : '')) : row.type === 'see-notification' ? ('通知已读' + (notificationTypeLabel(content) ? '：' + notificationTypeLabel(content) : '')) : row.type === 'unknown' ? '未知事件' : '未分类事件: ' + row.type,
+        summary: row.type === 'friend-location' ? '位置变化' : row.type === 'friend-online' ? '上线' : row.type === 'friend-offline' ? '离线' : row.type === 'friend-active' ? '状态变化' : row.type === 'friend-update' ? ({ avatar: '更换模型', status: '状态变化', bio: '简介变化', user_icon: '更新头像图标', pronouns: '更新代词', displayName: '改名' }[content.type] || '资料变化') : row.type === 'notification' || row.type === 'notification-v2' ? (content.message || content.title || '通知') : row.type === 'notification-v2-update' || row.type === 'notification-update' ? (content.updates && content.updates.seen ? '通知已读' : '通知状态更新') : row.type === 'user-update' ? ({ status: '状态变化', bio: '简介变化', avatar: '更换模型', user_icon: '更新头像图标', pronouns: '更新代词', displayName: '改名' }[content.type] || '资料变化') : row.type === 'user-location' ? '我的位置变化' : row.type === 'friend-add' ? '新增好友' : row.type === 'friend-delete' ? '已解除好友' : row.type === 'content-refresh' ? ('内容库：' + (content.actionType === 'add' ? '获得' : content.actionType === 'delete' ? '移除' : content.actionType || '更新') + ({ prop: '道具', bundle: '捆绑包' }[content.itemType] || content.itemType || '物品')) : row.type === 'group-joined' ? '加入群组' : row.type === 'group-member-updated' ? '群组成员信息更新' : row.type === 'group-role-updated' ? '群组角色更新' : row.type === 'hide-notification' ? ('通知已隐藏' + ((notificationTypeLabel(notiSrc) || notificationTypeLabel(content)) ? '：' + (notificationTypeLabel(notiSrc) || notificationTypeLabel(content)) + (notiSrc.senderUsername ? '（' + notiSrc.senderUsername + '）' : '') : '')) : row.type === 'see-notification' ? ('通知已读' + ((notificationTypeLabel(notiSrc) || notificationTypeLabel(content)) ? '：' + (notificationTypeLabel(notiSrc) || notificationTypeLabel(content)) + (notiSrc.senderUsername ? '（' + notiSrc.senderUsername + '）' : '') : '')) : row.type === 'unknown' ? '未知事件' : '未分类事件: ' + row.type,
       };
     });
   });
