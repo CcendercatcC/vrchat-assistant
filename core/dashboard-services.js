@@ -12,6 +12,34 @@
 import { isSafeModeEnabled } from './safe-mode.js';
 import { imgProxy, avatarThumb, avatarOf, avatarFileId } from './img-util.js';
 
+// 通知类型→中文标签（与前端 ui/src/utils.js 的 notificationTypeLabels 对齐，供 see/hide-notification 摘要拼类型）。
+// 通知相关事件 content 可能携带 notificationType / updateType / type 之一；历史遗留也可能是裸字符串 ID，
+// 取不到类型时返回 ''，摘要回退为固定标签。见 T2：通知已读/已隐藏摘要需写清楚通知类型。
+function notificationTypeLabel(content) {
+  const c = (content && typeof content === 'object') ? content : {};
+  const t = c.notificationType || c.updateType || c.type || '';
+  if (!t) return '';
+  const label = {
+    friendRequest: '好友请求',
+    invite: '房间邀请',
+    requestInvite: '请求加入',
+    requestInviteResponse: '加入响应',
+    friendRequestResponse: '好友响应',
+    giftSub: '订阅礼物',
+    votetokick: '投票踢人',
+    groupInvite: '群组邀请',
+    groupJoinRequest: '群组加入请求',
+    groupAnnouncement: '群公告',
+    'group.event.started': '群活动开始',
+    'group.event.ended': '群活动结束',
+    'group.event.scheduled': '群活动计划',
+    moderationWarning: '警告',
+    message: '消息',
+    group: '群组',
+  }[t];
+  return label || '';
+}
+
 // 自己 userId 的权威推导：user-location/user-update 事件只会是自己的（事件管线保证），
 // 种子导入/列表展示用它排除自己（/auth/user 在启动早期可能失败或缓存未就绪）
 export function getSelfUserId(storage) {
@@ -286,9 +314,11 @@ export function registerDashboardServices(loader, ctx) {
       const location = content.location || '';
       const locInfo = parseLocInfo(location);
       const prev = (row.type === 'friend-location' || row.type === 'user-location') ? previousLocationOf(row.user_id, row.id) : null;
-      // 群组名解析（缓存优先）：group-joined/group-member-updated 只有 groupId；
+      // 群组名解析（缓存优先）：group-joined/group-member-updated 平铺 groupId；
+      // group-role-updated 的 content 是嵌套 {role:{groupId,name,permissions}} → 回退 role.groupId（字段错位 T4）
       // 未命中的丢后台限流拉 /groups/{id} 回填 group_cache，下次请求即有群名
-      const gName = content.groupId ? (((ctx.storage.getGroupCached(content.groupId) || {}).name) || '') : '';
+      const gidForGName = content.groupId || (content.role && content.role.groupId) || '';
+      const gName = gidForGName ? (((ctx.storage.getGroupCached(gidForGName) || {}).name) || '') : '';
       // 通知更新事件（notification-v2-update/notification-update）只有 {id, updates}：
       // content.id 指向被更新的原通知（user_id），关联回原通知取群组信息与内容
       let src = content;
@@ -319,7 +349,10 @@ export function registerDashboardServices(loader, ctx) {
         notiTitle: src.title || '',
         notiGroupName: ((src.data && src.data.groupName) || gName || (src.title ? String(src.title).split(':')[0].trim() : '') || ''),
         notiGroupId: ((src.data && src.data.groupId) || ''),
-        groupId: content.groupId || '',
+        groupId: content.groupId || (content.role && content.role.groupId) || '',
+        // group-role-updated 角色详情（content.role 嵌套；字段错位 T4）供前端详单
+        roleName: (content.role && content.role.name) || '',
+        rolePermissions: Array.isArray(content.role && content.role.permissions) ? content.role.permissions : [],
         contentActionType: content.actionType || '',
         reconcile: !!content.reconcile,
         lastSeenAt: content.lastSeen || '',
@@ -346,8 +379,9 @@ export function registerDashboardServices(loader, ctx) {
           : row.type === 'content-refresh' ? ('内容库：' + (content.actionType === 'add' ? '获得' : content.actionType === 'delete' ? '移除' : content.actionType || '更新') + ({ prop: '道具', bundle: '捆绑包', accessory: '配件', shared: '共享物品' }[content.itemType] || content.itemType || '物品'))
           : row.type === 'group-joined' ? ('加入群组' + (gName ? '：' + gName : ''))
           : row.type === 'group-member-updated' ? ('群组成员信息更新' + (gName ? '：' + gName : ''))
-          : row.type === 'hide-notification' ? '通知已隐藏'
-          : row.type === 'see-notification' ? '通知已读'
+          : row.type === 'group-role-updated' ? ('群组角色更新' + (gName ? '：' + gName : '') + ((content.role && content.role.name) ? '（角色：' + content.role.name + '）' : ''))
+          : row.type === 'hide-notification' ? ('通知已隐藏' + (notificationTypeLabel(content) ? '：' + notificationTypeLabel(content) : ''))
+          : row.type === 'see-notification' ? ('通知已读' + (notificationTypeLabel(content) ? '：' + notificationTypeLabel(content) : ''))
           : row.type === 'unknown' ? '未知事件'
           : '未分类事件: ' + row.type,
         // 对齐 VRCX Feed detail：各类型的具体字段
@@ -415,7 +449,7 @@ export function registerDashboardServices(loader, ctx) {
     };
     // 群组名后台补全（限流）：缓存未命中的群组事件拉 /groups/{id} 回填 group_cache，本次响应立即返回
     const needGroup = [...new Set(result
-      .filter((e) => (e.type === 'group-joined' || e.type === 'group-member-updated') && e.groupId && !e.notiGroupName)
+      .filter((e) => (e.type === 'group-joined' || e.type === 'group-member-updated' || e.type === 'group-role-updated') && e.groupId && !e.notiGroupName)
       .map((e) => e.groupId))].slice(0, 5);
     if (needGroup.length) {
       (async () => {
@@ -529,7 +563,7 @@ export function registerDashboardServices(loader, ctx) {
         worldId: row.world_id || content.worldId || world.id || '',
         worldName: row.world_name || world.name || '',
         avatarUrl: avatarOf(friend?.userIcon, friend?.avatarUrl),
-        summary: row.type === 'friend-location' ? '位置变化' : row.type === 'friend-online' ? '上线' : row.type === 'friend-offline' ? '离线' : row.type === 'friend-active' ? '状态变化' : row.type === 'friend-update' ? ({ avatar: '更换模型', status: '状态变化', bio: '简介变化', user_icon: '更新头像图标', pronouns: '更新代词', displayName: '改名' }[content.type] || '资料变化') : row.type === 'notification' || row.type === 'notification-v2' ? (content.message || content.title || '通知') : row.type === 'notification-v2-update' || row.type === 'notification-update' ? (content.updates && content.updates.seen ? '通知已读' : '通知状态更新') : row.type === 'user-update' ? ({ status: '状态变化', bio: '简介变化', avatar: '更换模型', user_icon: '更新头像图标', pronouns: '更新代词', displayName: '改名' }[content.type] || '资料变化') : row.type === 'user-location' ? '我的位置变化' : row.type === 'friend-add' ? '新增好友' : row.type === 'friend-delete' ? '已解除好友' : row.type === 'content-refresh' ? ('内容库：' + (content.actionType === 'add' ? '获得' : content.actionType === 'delete' ? '移除' : content.actionType || '更新') + ({ prop: '道具', bundle: '捆绑包' }[content.itemType] || content.itemType || '物品')) : row.type === 'group-joined' ? '加入群组' : row.type === 'group-member-updated' ? '群组成员信息更新' : row.type === 'hide-notification' ? '通知已隐藏' : row.type === 'see-notification' ? '通知已读' : row.type === 'unknown' ? '未知事件' : '未分类事件: ' + row.type,
+        summary: row.type === 'friend-location' ? '位置变化' : row.type === 'friend-online' ? '上线' : row.type === 'friend-offline' ? '离线' : row.type === 'friend-active' ? '状态变化' : row.type === 'friend-update' ? ({ avatar: '更换模型', status: '状态变化', bio: '简介变化', user_icon: '更新头像图标', pronouns: '更新代词', displayName: '改名' }[content.type] || '资料变化') : row.type === 'notification' || row.type === 'notification-v2' ? (content.message || content.title || '通知') : row.type === 'notification-v2-update' || row.type === 'notification-update' ? (content.updates && content.updates.seen ? '通知已读' : '通知状态更新') : row.type === 'user-update' ? ({ status: '状态变化', bio: '简介变化', avatar: '更换模型', user_icon: '更新头像图标', pronouns: '更新代词', displayName: '改名' }[content.type] || '资料变化') : row.type === 'user-location' ? '我的位置变化' : row.type === 'friend-add' ? '新增好友' : row.type === 'friend-delete' ? '已解除好友' : row.type === 'content-refresh' ? ('内容库：' + (content.actionType === 'add' ? '获得' : content.actionType === 'delete' ? '移除' : content.actionType || '更新') + ({ prop: '道具', bundle: '捆绑包' }[content.itemType] || content.itemType || '物品')) : row.type === 'group-joined' ? '加入群组' : row.type === 'group-member-updated' ? '群组成员信息更新' : row.type === 'group-role-updated' ? '群组角色更新' : row.type === 'hide-notification' ? ('通知已隐藏' + (notificationTypeLabel(content) ? '：' + notificationTypeLabel(content) : '')) : row.type === 'see-notification' ? ('通知已读' + (notificationTypeLabel(content) ? '：' + notificationTypeLabel(content) : '')) : row.type === 'unknown' ? '未知事件' : '未分类事件: ' + row.type,
       };
     });
   });

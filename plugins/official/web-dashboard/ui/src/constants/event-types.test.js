@@ -40,6 +40,7 @@ describe('typeOf 归一化', () => {
     expect(typeOf({ type: 'content-refresh' })).toBe('contentRefresh');
     expect(typeOf({ type: 'group-joined' })).toBe('groupJoined');
     expect(typeOf({ type: 'group-member-updated' })).toBe('groupMemberUpdated');
+    expect(typeOf({ type: 'group-role-updated' })).toBe('groupRoleUpdated');
     expect(typeOf({ type: 'weird-thing' })).toBe('other');
   });
 });
@@ -53,6 +54,7 @@ describe('映射完整性', () => {
   });
   it('eventTypeLabel 兜底', () => {
     expect(eventTypeLabel({ type: 'friend-online' })).toBe('上线');
+    expect(eventTypeLabel({ type: 'group-role-updated' })).toBe('群组角色更新');
     expect(eventTypeLabel({ type: 'nonsense' })).toBe('资料变动'); // typeOf 兜底 other
   });
 });

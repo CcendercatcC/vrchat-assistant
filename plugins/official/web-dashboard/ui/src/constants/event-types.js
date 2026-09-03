@@ -7,6 +7,7 @@ export const TYPE_LABELS = {
   friendRequest: '好友申请', invite: '邀请', message: '私信', group: '群组通知',
   notification: '通知', notificationUpdate: '通知更新', friendAdd: '新增好友', friendDelete: '删除好友',
   unknown: '未知事件', contentRefresh: '内容库', groupJoined: '加入群组', groupMemberUpdated: '群组更新',
+  groupRoleUpdated: '群组角色更新',
   other: '资料变动',
 };
 
@@ -16,7 +17,8 @@ export const TYPE_ICONS = {
   displayName: 'pi-pencil', friendRequest: 'pi-user-plus', invite: 'pi-arrow-right-arrow-left',
   message: 'pi-comment', group: 'pi-users', notification: 'pi-bell', notificationUpdate: 'pi-bell',
   friendAdd: 'pi-user-plus', friendDelete: 'pi-user-minus', unknown: 'pi-question-circle',
-  contentRefresh: 'pi-refresh', groupJoined: 'pi-users', groupMemberUpdated: 'pi-users', other: 'pi-user',
+  contentRefresh: 'pi-refresh', groupJoined: 'pi-users', groupMemberUpdated: 'pi-users',
+  groupRoleUpdated: 'pi-users', other: 'pi-user',
 };
 
 export const TYPE_SEVERITIES = {
@@ -25,7 +27,7 @@ export const TYPE_SEVERITIES = {
   friendRequest: 'success', invite: 'info', message: 'secondary', group: 'warn',
   notification: 'secondary', notificationUpdate: 'secondary', friendAdd: 'success',
   friendDelete: 'danger', unknown: 'secondary', contentRefresh: 'info', groupJoined: 'success',
-  groupMemberUpdated: 'warn', other: 'secondary',
+  groupMemberUpdated: 'warn', groupRoleUpdated: 'warn', other: 'secondary',
 };
 
 // 事件 → 归一化类型（兼容后端多种历史形状；纯函数，行为与 FeedView 原实现一致）
@@ -59,6 +61,7 @@ export function typeOf(x) {
   if (x.type === 'content-refresh') return 'contentRefresh';
   if (x.type === 'group-joined') return 'groupJoined';
   if (x.type === 'group-member-updated') return 'groupMemberUpdated';
+  if (x.type === 'group-role-updated') return 'groupRoleUpdated';
   if (x.type === 'hide-notification' || x.type === 'see-notification') return 'notificationUpdate';
   if (x.type === 'notification' || x.type === 'notification-v2') {
     const t = x.updateType || x.notificationType || '';
