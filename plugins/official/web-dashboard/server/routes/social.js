@@ -121,7 +121,16 @@ export function registerSocialRoutes(api, dashboardState) {
           const w = await api.consume('dashboard.world', { worldId }).catch(() => null);
           if (w && w.name) { worldName = w.name; worldCover = w.imageUrl || ''; }
         }
-        return { ...n, isGroup, worldId, worldCover, worldName };
+        return {
+          ...n, isGroup, worldId, worldCover, worldName,
+          // 群组通知：展示群组名 + 群组图标（不显示"系统"占位）。
+          // 群组字段兼容多种结构：groupName/groupId(群公告)、ownerName/ownerId(群活动创建)。
+          // title "群名: 标题" 前缀兜底**仅限 group.* 类型**（防 boop/twitchdrop 等非群组通知误伤）。
+          groupName: (n.data && (n.data.groupName || n.data.ownerName)) ||
+            (isGroup ? (String(n.title || '').split(':')[0].trim().replace(/^New event by /i, '')) : '') || '',
+          groupId: (n.data && (n.data.groupId || n.data.ownerId)) || '',
+          groupImageUrl: n.imageUrl || '',
+        };
       };
       const notifications = await Promise.all((currentData.notifications || []).map(enrich));
       sendJson(res, {

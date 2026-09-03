@@ -651,8 +651,9 @@ export function registerDashboardServices(loader, ctx) {
         message: n.message || content.message || content.details || '',
         title: n.title || content.title || '',
         imageUrl: imgProxy(n.imageUrl || (content.data && content.data.imageUrl) || ''),
-        groupName: (content.data && content.data.groupName) || '',
-        groupId: (content.data && content.data.groupId) || '',
+        groupName: (content.data && (content.data.groupName || content.data.ownerName)) ||
+          (String(content.type || '').startsWith('group.') ? (String(content.title || '').split(':')[0].trim().replace(/^New event by /i, '')) : '') || '',
+        groupId: (content.data && (content.data.groupId || content.data.ownerId)) || '',
       };
     })
   );
