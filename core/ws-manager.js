@@ -13,6 +13,7 @@ import WebSocket from 'ws';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import { ctx } from './server-context.js';
 import { getLogger } from './logger.js';
+import { recordOpsLog } from './ops-log.js';
 import { notifier } from './notifier.js';
 
 // 命名日志：WS 组件标签，替代原裸 console.*（保留 [WS] 语义由 [ws] 标签承接）
@@ -208,6 +209,7 @@ export class WsManager {
     this.connectedAt = new Date();
     this._setStatus('connected');
     log.info(`✅ 已连接 (${this.connectedAt.toISOString().slice(11, 19)})`);
+    recordOpsLog('ws', 'info', 'WebSocket 已连接（第 ' + this.attempt + ' 次尝试）');
     
     // 启动心跳
     this._startHeartbeat();
@@ -258,6 +260,7 @@ export class WsManager {
     this.disconnectedAt = new Date();
     const reasonStr = reason ? reason.toString() : '无';
     log.info(`⚠️ 断开: code=${code}, reason=${reasonStr}`);
+    recordOpsLog('ws', 'warn', 'WebSocket 断开 code=' + code + '（' + reasonStr + '），将自动重连');
 
     this._clearTimers();
     this._setStatus('disconnected');
@@ -332,6 +335,7 @@ export class WsManager {
     this.authCooldownUntil = Date.now() + cooldownMs;
     const secs = Math.round(cooldownMs / 1000);
     log.info(`🔒 认证失败，冷却 ${secs} 秒后重试${isRateLimited ? ' (限流)' : ''}`);
+    recordOpsLog('ws', 'warn', '认证失败，冷却 ' + secs + ' 秒后重试' + (isRateLimited ? '（限流）' : ''));
   }
 
   _scheduleReconnect() {
@@ -348,6 +352,7 @@ export class WsManager {
     this._setStatus('reconnecting');
 
     log.info(`🔄 将在 ${delay} 秒后重连 (第 ${this.attempt} 次)...`);
+    recordOpsLog('ws', 'info', '将在 ' + delay + ' 秒后重连（第 ' + this.attempt + ' 次）');
     
     this.reconnectTimer = setTimeout(() => {
       this._connect();
