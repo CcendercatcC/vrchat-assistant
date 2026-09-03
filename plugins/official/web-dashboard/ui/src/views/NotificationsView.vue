@@ -163,7 +163,7 @@ onUnmounted(() => clearInterval(timer));
       <div v-else class="nt-list">
         <div v-for="x in currentShown" :key="x.id" class="nt-row" :class="{ unseen: !x.seen }">
         <span v-if="!x.seen" class="nt-dot" aria-hidden="true"></span>
-          <img v-if="x.groupImageUrl || x.imageUrl || friendAvatarOf(x.senderUserId)" class="nt-av" :src="x.groupImageUrl || x.imageUrl || friendAvatarOf(x.senderUserId)" alt="" loading="lazy" />
+          <img v-if="(x.isGroup ? (x.groupImageUrl || x.imageUrl) : (friendAvatarOf(x.senderUserId) || x.imageUrl))" class="nt-av" :src="(x.isGroup ? (x.groupImageUrl || x.imageUrl) : (friendAvatarOf(x.senderUserId) || x.imageUrl))" alt="" loading="lazy" />
           <div v-else class="nt-av nt-av-empty">{{ avatarLabel('', x.groupName || nameOf(x)) }}</div>
           <div class="nt-body">
             <div class="nt-top">
