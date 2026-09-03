@@ -205,11 +205,14 @@ export class WsManager {
   }
 
   _onOpen() {
+    const lastAttempt = this.attempt; // 归零前记录本次成功前的重连次数（审核建议）
     this.attempt = 0;
     this.connectedAt = new Date();
     this._setStatus('connected');
     log.info(`✅ 已连接 (${this.connectedAt.toISOString().slice(11, 19)})`);
-    recordOpsLog('ws', 'info', 'WebSocket 已连接（第 ' + this.attempt + ' 次尝试）');
+    recordOpsLog('ws', 'info', lastAttempt > 0
+      ? 'WebSocket 已连接（重连成功，第 ' + lastAttempt + ' 次尝试）'
+      : 'WebSocket 已连接（首次连接）');
     
     // 启动心跳
     this._startHeartbeat();
