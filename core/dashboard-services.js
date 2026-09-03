@@ -36,6 +36,9 @@ function notificationTypeLabel(content) {
     moderationWarning: '警告',
     message: '消息',
     group: '群组',
+    boop: '戳一戳',
+    'twitchdrop.fulfilled': 'Twitch 掉宝到账',
+    'group.event.created': '群活动创建',
   }[t];
   return label || '';
 }

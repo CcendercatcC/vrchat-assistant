@@ -241,4 +241,7 @@ export const notificationTypeLabels = {
   'group.event.scheduled': '群活动计划',
   moderationWarning: '警告',
   message: '消息',
+  boop: '戳一戳',
+  'twitchdrop.fulfilled': 'Twitch 掉宝到账',
+  'group.event.created': '群活动创建',
 };

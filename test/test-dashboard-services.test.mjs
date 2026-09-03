@@ -338,6 +338,61 @@ test('upsertFriend 空串不覆盖已有 display_name', () => {
   assert.equal(row2.dn, '新名字', '非空 displayName 应正常更新');
 });
 
+// ── PR #134 回归：see/hide-notification 详情富化（裸 ID 反查 + 摘要拼类型/发送者 + 孤儿回退）──
+test('dashboard.events see/hide-notification 反查原通知显示类型与发送者（PR #134）', async () => {
+  const NOTI_ID = 'not_test-pr134-0001';
+  const NOW = new Date().toISOString();
+  // 原通知事件：user_id = 通知 ID（反查键），content 带 type/senderUsername
+  ctx.storage.insertEvent({
+    type: 'notification', userId: NOTI_ID, displayName: '',
+    contentJson: { id: NOTI_ID, type: 'requestInvite', senderUserId: 'usr_sender1', senderUsername: '发送者甲' },
+    worldId: '', worldName: '', createdAt: NOW, source: 'ws',
+  });
+  // see/hide：user_id=''，content_json 是裸通知 ID 字符串（历史遗留形态）
+  ctx.storage.insertEvent({
+    type: 'see-notification', userId: '', displayName: '',
+    contentJson: NOTI_ID, worldId: '', worldName: '', createdAt: NOW, source: 'ws',
+  });
+  ctx.storage.insertEvent({
+    type: 'hide-notification', userId: '', displayName: '',
+    contentJson: NOTI_ID, worldId: '', worldName: '', createdAt: NOW, source: 'ws',
+  });
+  // 孤儿 see（原通知缺失）→ 回退固定标签，不崩
+  ctx.storage.insertEvent({
+    type: 'see-notification', userId: '', displayName: '',
+    contentJson: 'not_orphan-nonexistent', worldId: '', worldName: '', createdAt: NOW, source: 'ws',
+  });
+  // boop 类型（生产库真实存在，PR #134 建议补映射）
+  ctx.storage.insertEvent({
+    type: 'notification-v2', userId: 'not_test-boop-0002', displayName: '',
+    contentJson: { id: 'not_test-boop-0002', type: 'boop', senderUsername: '发送者乙' },
+    worldId: '', worldName: '', createdAt: NOW, source: 'ws',
+  });
+  ctx.storage.insertEvent({
+    type: 'see-notification', userId: '', displayName: '',
+    contentJson: 'not_test-boop-0002', worldId: '', worldName: '', createdAt: NOW, source: 'ws',
+  });
+
+  const r = await services.get('dashboard.events')({ limit: 50, offset: 0 });
+  const sees = r.events.filter((e) => e.type === 'see-notification');
+  const hides = r.events.filter((e) => e.type === 'hide-notification');
+  // 富化 see：通知已读：请求加入（发送者甲）
+  const seeRich = sees.find((e) => e.summary.includes('请求加入'));
+  assert.ok(seeRich, 'see-notification 应反查到类型，实际 summaries=' + JSON.stringify(sees.map((e) => e.summary)));
+  assert.equal(seeRich.summary, '通知已读：请求加入（发送者甲）');
+  // 富化 hide
+  const hideRich = hides.find((e) => e.summary.includes('请求加入'));
+  assert.ok(hideRich, 'hide-notification 应反查到类型');
+  assert.equal(hideRich.summary, '通知已隐藏：请求加入（发送者甲）');
+  // 孤儿回退：固定标签
+  const orphan = sees.find((e) => e.summary === '通知已读');
+  assert.ok(orphan, '孤儿 see 应回退固定标签，实际 summaries=' + JSON.stringify(sees.map((e) => e.summary)));
+  // boop 映射（戳一戳）
+  const boopSee = sees.find((e) => e.summary.includes('戳一戳'));
+  assert.ok(boopSee, 'boop see 应有类型标签，实际 summaries=' + JSON.stringify(sees.map((e) => e.summary)));
+  assert.equal(boopSee.summary, '通知已读：戳一戳（发送者乙）');
+});
+
 // ── 清理 ──
 after(() => {
   for (const f of [tmpDb, tmpDb + '-wal', tmpDb + '-shm']) { try { rmSync(f, { force: true }); } catch {} }
