@@ -14,6 +14,14 @@ const loading = ref(false);
 const acting = ref(new Set());
 const kindSel = ref('all');
 const onlyUnseen = ref(false);   // 只看未读
+// 消息折叠：默认截断 2 行，点击展开/收起（通知消息可能很长，全部展开占屏）
+const msgExpanded = ref(new Set());
+function toggleMsg(x) {
+  const id = x.id || x.eventId;
+  if (msgExpanded.value.has(id)) msgExpanded.value.delete(id);
+  else msgExpanded.value.add(id);
+}
+function isMsgExpanded(x) { return msgExpanded.value.has(x.id || x.eventId); }
 
 const KINDS = [
   { v: 'all', l: '全部' },
@@ -163,7 +171,7 @@ onUnmounted(() => clearInterval(timer));
               <span class="nt-type"><i class="pi nt-ico" :class="typeIcon(x)"></i>{{ typeLabel(x) }}</span>
               <span class="nt-time mono" :title="date(x.created_at)">{{ time(x.created_at) }}</span>
             </div>
-            <div class="nt-msg">{{ x.message || x.details || typeLabel(x) }}</div>
+            <div class="nt-msg" :class="{ 'nt-msg-clamp': !isMsgExpanded(x) }" :title="!isMsgExpanded(x) ? (x.message || x.details || '') : ''" @click="toggleMsg(x)" role="button" tabindex="0" @keydown.enter="toggleMsg(x)">{{ x.message || x.details || typeLabel(x) }}</div>
           </div>
           <div class="nt-acts">
             <template v-if="kindOf(x) === 'friendRequest'">
@@ -183,15 +191,15 @@ onUnmounted(() => clearInterval(timer));
       <div v-if="!historyShown.length" class="empty" style="padding:14px">暂无历史通知</div>
       <div v-else class="nt-list">
         <div v-for="x in historyShown" :key="x.eventId" class="nt-row nt-ro">
-          <div v-if="x.senderUsername" class="nt-av nt-av-empty">{{ avatarLabel('', x.senderUsername) }}</div>
-          <div v-else class="nt-av nt-av-empty">{{ avatarLabel('', '?') }}</div>
+          <img v-if="friendAvatarOf(x.senderUserId) || x.imageUrl" class="nt-av" :src="friendAvatarOf(x.senderUserId) || x.imageUrl" alt="" loading="lazy" />
+          <div v-else class="nt-av nt-av-empty">{{ avatarLabel('', x.senderUsername || '?') }}</div>
           <div class="nt-body">
             <div class="nt-top">
               <b class="nt-name">{{ x.senderUsername || '系统' }}</b>
               <span class="nt-type"><i class="pi nt-ico" :class="typeIcon(x)"></i>{{ typeLabel(x) }}</span>
               <span class="nt-time mono" :title="date(x.createdAt)">{{ time(x.createdAt) }}<small>{{ date(x.createdAt) }}</small></span>
             </div>
-            <div class="nt-msg">{{ x.message || x.title || typeLabel(x) }}</div>
+            <div class="nt-msg" :class="{ 'nt-msg-clamp': !isMsgExpanded(x) }" :title="!isMsgExpanded(x) ? (x.message || x.title || '') : ''" @click="toggleMsg(x)" role="button" tabindex="0" @keydown.enter="toggleMsg(x)">{{ x.message || x.title || typeLabel(x) }}</div>
           </div>
         </div>
       </div>
@@ -226,6 +234,7 @@ onUnmounted(() => clearInterval(timer));
 .nt-time { font-size: 10px; color: var(--text-dim); margin-left: auto; flex: none; font-family: var(--font-mono, monospace); }
 .nt-time small { margin-left: 4px; }
 .nt-msg { font-size: 11.5px; color: var(--text-dim); margin-top: 3px; overflow-wrap: anywhere; }
+.nt-msg-clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; }
 .nt-acts { display: flex; flex-direction: column; gap: 4px; flex: none; }
 
 @media (max-width: 899px) {
