@@ -652,7 +652,7 @@ export function registerDashboardServices(loader, ctx) {
         title: n.title || content.title || '',
         imageUrl: imgProxy(n.imageUrl || (content.data && content.data.imageUrl) || ''),
         groupName: (content.data && (content.data.groupName || content.data.ownerName)) ||
-          (String(content.type || '').startsWith('group.') ? (String(content.title || '').split(':')[0].trim()) : '') || '',
+          (String(content.type || '').startsWith('group.') ? (String(content.title || '').split(':')[0].trim().replace(/^New event by /i, '')) : '') || '',
         groupId: (content.data && (content.data.groupId || content.data.ownerId)) || '',
       };
     })

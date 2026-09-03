@@ -393,6 +393,42 @@ test('dashboard.events see/hide-notification 反查原通知显示类型与发�
   assert.equal(boopSee.summary, '通知已读：戳一戳（发送者乙）');
 });
 
+// ── PR #135 回归：群组通知 groupName 提取（ownerName/ownerId 兼容 + title 兜底限定 group.*）──
+test('dashboard.notificationEvents 群组通知提取 groupName（ownerName/ownerId + title 兜底）', async () => {
+  const NOW = new Date().toISOString();
+  // ① 群活动创建：data.ownerName/ownerId（无 groupName），title 带 "New event by " 前缀
+  ctx.storage.insertEvent({
+    type: 'notification-v2', userId: 'not_evt-0001', displayName: '',
+    contentJson: { id: 'not_evt-0001', type: 'group.event.created', title: 'New event by Trans: Volunteer Fair', data: { ownerName: 'Trans', ownerId: 'grp_evt1' } },
+    worldId: '', worldName: '', createdAt: NOW, source: 'ws',
+  });
+  // ② 群公告：data.groupName/groupId
+  ctx.storage.insertEvent({
+    type: 'notification-v2', userId: 'not_ann-0002', displayName: '',
+    contentJson: { id: 'not_ann-0002', type: 'group.announcement', title: 'CAT: 75k', data: { groupName: 'CAT', groupId: 'grp_ann1' } },
+    worldId: '', worldName: '', createdAt: NOW, source: 'ws',
+  });
+  // ③ 非群组 boop：title 无冒号，兜底不应触发（groupName 应为空，不误伤）
+  ctx.storage.insertEvent({
+    type: 'notification-v2', userId: 'not_boop-0003', displayName: '',
+    contentJson: { id: 'not_boop-0003', type: 'boop', title: 'Booped You!', data: { senderUsername: 'sender' } },
+    worldId: '', worldName: '', createdAt: NOW, source: 'ws',
+  });
+
+  const svc = services.get('dashboard.notificationEvents');
+  const all = svc({ limit: 100 });
+  const evt = all.find((x) => String(x.title || '').includes('Volunteer Fair'));
+  const ann = all.find((x) => String(x.title || '').includes('75k'));
+  const boop = all.find((x) => String(x.title || '').includes('Booped'));
+  assert.ok(evt, '群活动创建通知应存在');
+  assert.equal(evt.groupName, 'Trans', 'ownerName 应被提取为群名，实际: ' + evt.groupName);
+  assert.equal(evt.groupId, 'grp_evt1', 'ownerId 应被提取为群 ID');
+  assert.ok(ann, '群公告通知应存在');
+  assert.equal(ann.groupName, 'CAT', 'groupName 应被提取，实际: ' + ann.groupName);
+  assert.ok(boop, 'boop 通知应存在');
+  assert.equal(boop.groupName, '', '非群组通知 groupName 应为空（title 兜底限定 group.*），实际: ' + JSON.stringify(boop.groupName));
+});
+
 // ── 清理 ──
 after(() => {
   for (const f of [tmpDb, tmpDb + '-wal', tmpDb + '-shm']) { try { rmSync(f, { force: true }); } catch {} }

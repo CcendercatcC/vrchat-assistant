@@ -127,7 +127,7 @@ export function registerSocialRoutes(api, dashboardState) {
           // 群组字段兼容多种结构：groupName/groupId(群公告)、ownerName/ownerId(群活动创建)。
           // title "群名: 标题" 前缀兜底**仅限 group.* 类型**（防 boop/twitchdrop 等非群组通知误伤）。
           groupName: (n.data && (n.data.groupName || n.data.ownerName)) ||
-            (isGroup ? (String(n.title || '').split(':')[0].trim()) : '') || '',
+            (isGroup ? (String(n.title || '').split(':')[0].trim().replace(/^New event by /i, '')) : '') || '',
           groupId: (n.data && (n.data.groupId || n.data.ownerId)) || '',
           groupImageUrl: n.imageUrl || '',
         };
