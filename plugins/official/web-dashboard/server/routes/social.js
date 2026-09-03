@@ -121,7 +121,13 @@ export function registerSocialRoutes(api, dashboardState) {
           const w = await api.consume('dashboard.world', { worldId }).catch(() => null);
           if (w && w.name) { worldName = w.name; worldCover = w.imageUrl || ''; }
         }
-        return { ...n, isGroup, worldId, worldCover, worldName };
+        return {
+          ...n, isGroup, worldId, worldCover, worldName,
+          // 群组通知：展示群组名 + 群组图标（不显示"系统"占位）
+          groupName: (n.data && n.data.groupName) || '',
+          groupId: (n.data && n.data.groupId) || '',
+          groupImageUrl: n.imageUrl || '',
+        };
       };
       const notifications = await Promise.all((currentData.notifications || []).map(enrich));
       sendJson(res, {

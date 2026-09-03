@@ -163,11 +163,11 @@ onUnmounted(() => clearInterval(timer));
       <div v-else class="nt-list">
         <div v-for="x in currentShown" :key="x.id" class="nt-row" :class="{ unseen: !x.seen }">
         <span v-if="!x.seen" class="nt-dot" aria-hidden="true"></span>
-          <img v-if="friendAvatarOf(x.senderUserId) || x.imageUrl" class="nt-av" :src="friendAvatarOf(x.senderUserId) || x.imageUrl" alt="" loading="lazy" />
-          <div v-else class="nt-av nt-av-empty">{{ avatarLabel('', nameOf(x)) }}</div>
+          <img v-if="x.groupImageUrl || x.imageUrl || friendAvatarOf(x.senderUserId)" class="nt-av" :src="x.groupImageUrl || x.imageUrl || friendAvatarOf(x.senderUserId)" alt="" loading="lazy" />
+          <div v-else class="nt-av nt-av-empty">{{ avatarLabel('', x.groupName || nameOf(x)) }}</div>
           <div class="nt-body">
             <div class="nt-top">
-              <b class="nt-name" :style="{ color: trustColor((store.friends || []).find(fr => fr.userId === x.senderUserId)?.trustLevel) }" @click="x.senderUserId?.startsWith('usr_') && openUser({ userId: x.senderUserId, displayName: nameOf(x) })" role="button" tabindex="0" @keydown.enter="x.senderUserId?.startsWith('usr_') && openUser({ userId: x.senderUserId, displayName: nameOf(x) })">{{ nameOf(x) }}</b>
+              <b class="nt-name" :style="{ color: trustColor((store.friends || []).find(fr => fr.userId === x.senderUserId)?.trustLevel) }" @click="x.senderUserId?.startsWith('usr_') && openUser({ userId: x.senderUserId, displayName: nameOf(x) })" role="button" tabindex="0" @keydown.enter="x.senderUserId?.startsWith('usr_') && openUser({ userId: x.senderUserId, displayName: nameOf(x) })">{{ x.groupName || nameOf(x) }}</b>
               <span class="nt-type"><i class="pi nt-ico" :class="typeIcon(x)"></i>{{ typeLabel(x) }}</span>
               <span class="nt-time mono" :title="date(x.created_at)">{{ time(x.created_at) }}</span>
             </div>
@@ -191,11 +191,12 @@ onUnmounted(() => clearInterval(timer));
       <div v-if="!historyShown.length" class="empty" style="padding:14px">暂无历史通知</div>
       <div v-else class="nt-list">
         <div v-for="x in historyShown" :key="x.eventId" class="nt-row nt-ro">
-          <img v-if="friendAvatarOf(x.senderUserId) || x.imageUrl" class="nt-av" :src="friendAvatarOf(x.senderUserId) || x.imageUrl" alt="" loading="lazy" />
-          <div v-else class="nt-av nt-av-empty">{{ avatarLabel('', x.senderUsername || '?') }}</div>
+          <img v-if="x.imageUrl" class="nt-av" :src="x.imageUrl" alt="" loading="lazy" />
+          <img v-else-if="friendAvatarOf(x.senderUserId)" class="nt-av" :src="friendAvatarOf(x.senderUserId)" alt="" loading="lazy" />
+          <div v-else class="nt-av nt-av-empty">{{ avatarLabel('', x.groupName || x.senderUsername || '?') }}</div>
           <div class="nt-body">
             <div class="nt-top">
-              <b class="nt-name">{{ x.senderUsername || '系统' }}</b>
+              <b class="nt-name">{{ x.groupName || x.senderUsername || '系统' }}</b>
               <span class="nt-type"><i class="pi nt-ico" :class="typeIcon(x)"></i>{{ typeLabel(x) }}</span>
               <span class="nt-time mono" :title="date(x.createdAt)">{{ time(x.createdAt) }}<small>{{ date(x.createdAt) }}</small></span>
             </div>
