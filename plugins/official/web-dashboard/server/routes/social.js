@@ -123,9 +123,12 @@ export function registerSocialRoutes(api, dashboardState) {
         }
         return {
           ...n, isGroup, worldId, worldCover, worldName,
-          // 群组通知：展示群组名 + 群组图标（不显示"系统"占位）
-          groupName: (n.data && n.data.groupName) || '',
-          groupId: (n.data && n.data.groupId) || '',
+          // 群组通知：展示群组名 + 群组图标（不显示"系统"占位）。
+          // 群组字段兼容多种结构：groupName/groupId(群公告)、ownerName/ownerId(群活动创建)。
+          // title "群名: 标题" 前缀兜底**仅限 group.* 类型**（防 boop/twitchdrop 等非群组通知误伤）。
+          groupName: (n.data && (n.data.groupName || n.data.ownerName)) ||
+            (isGroup ? (String(n.title || '').split(':')[0].trim()) : '') || '',
+          groupId: (n.data && (n.data.groupId || n.data.ownerId)) || '',
           groupImageUrl: n.imageUrl || '',
         };
       };
