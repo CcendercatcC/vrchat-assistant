@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { parseLimit, readJsonBody, sendHtml, sendJson } from './server/http.js';
 import { CACHE_TTLS, createDashboardState, setCached } from './server/state.js';
 import { registerSearchRoutes } from './server/routes/search.js';
+import { readLoggerEntries, loggerFileInfo } from './server/logger-file.js';
 import { registerFavoriteRoutes } from './server/routes/favorites.js';
 import { registerAvatarRoutes, loadMe, loadAvatarName } from './server/routes/avatars.js';
 import { registerSocialRoutes } from './server/routes/social.js';
@@ -1098,6 +1099,25 @@ export default function register(api) {
         sendJson(res, await api.tools.call('get_ops_log', { limit, kind }));
       } catch (e) {
         sendJson(res, { items: [], error: String(e.message || e) });
+      }
+    },
+  });
+
+  // monitor.log 文件日志（structured logger 落盘）——日志页「文件」来源
+  api.http.registerRoute({
+    method: 'GET',
+    path: '/api/dashboard/logger',
+    handler: async (req, res) => {
+      const url = new URL(req.url, 'http://localhost');
+      const limit = parseLimit(url.searchParams.get('limit') || 200, 200, 1000);
+      const level = url.searchParams.get('level') || '';
+      const name = url.searchParams.get('name') || '';
+      const q = url.searchParams.get('q') || '';
+      try {
+        const r = readLoggerEntries({ limit, level, name, q });
+        sendJson(res, { items: r.items, info: loggerFileInfo() });
+      } catch (e) {
+        sendJson(res, { items: [], error: String(e.message || e), info: loggerFileInfo() });
       }
     },
   });
