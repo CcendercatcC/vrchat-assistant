@@ -10,6 +10,7 @@
  */
 import https from 'node:https';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { recordOpsLog } from './core/ops-log.js';
 
 const API_BASE = 'https://api.vrchat.cloud/api/1';
 
@@ -396,8 +397,15 @@ export class VrchatApiClient {
   async ensureAuth() {
     if (this.#authLock) return this.#authLock;
     this.#authLock = this._doEnsureAuth();
+    const t0 = Date.now();
     try {
-      return await this.#authLock;
+      const user = await this.#authLock;
+      recordOpsLog('auth', 'info', '认证完成：会话有效（' + (Date.now() - t0) + 'ms）');
+      return user;
+    } catch (err) {
+      const why = err.needsOtp ? '需要 2FA 验证码' : (err.message || '未知错误');
+      recordOpsLog('auth', 'warn', '认证失败（' + (Date.now() - t0) + 'ms）：' + why);
+      throw err;
     } finally {
       this.#authLock = null;
     }
@@ -455,8 +463,19 @@ export class VrchatApiClient {
   async ensureAuthWithAutoOtp(otpFetcher) {
     if (this.#authLock) return this.#authLock;
     this.#authLock = this._doEnsureAuthWithAutoOtp(otpFetcher);
+    const t0 = Date.now();
     try {
-      return await this.#authLock;
+      const user = await this.#authLock;
+      recordOpsLog('auth', 'info', '\u81ea\u52a8\u8ba4\u8bc1\u6210\u529f\uff082FA \u5df2\u81ea\u52a8\u5b8c\u6210\uff0c\u4f1a\u8bdd\u6709\u6548\uff0c' + (Date.now() - t0) + 'ms\uff09');
+      return user;
+    } catch (err) {
+      const why = err.needsTotp
+        ? '\u9700\u8981\u624b\u52a8\u63d0\u4ea4 TOTP\uff08\u8c03\u7528 submit_totp\uff09'
+        : err.needsOtp
+          ? '\u9700\u8981 2FA \u9a8c\u8bc1\u7801\u4e14\u81ea\u52a8\u83b7\u53d6\u5931\u8d25'
+          : (err.message || '\u672a\u77e5\u9519\u8bef');
+      recordOpsLog('auth', 'warn', '\u81ea\u52a8\u8ba4\u8bc1\u5931\u8d25\uff08' + (Date.now() - t0) + 'ms\uff09\uff1a' + why);
+      throw err;
     } finally {
       this.#authLock = null;
     }
