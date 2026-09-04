@@ -47,11 +47,15 @@ BOOTH 界面**语言随账号 locale 变化**（中文/日文/英文等，不一
 
 ```python
 # browser_exec 里
-lang = js("document.documentElement.lang")        # 'zh-CN' / 'ja' / 'en' ...
-txt = js("document.body.innerText")
-logged_out_keys = ['登录', 'ログイン', 'Login', 'Sign in']   # 出现则未登录
+lang = js("document.documentElement.lang")                    # 'zh-CN' / 'ja' / 'en' ...
+# 只扫页头导航区（header），避免页脚/引导区「登录后购买」诱导链接造成误判
+header_txt = js("(document.querySelector('header')||document.body).innerText || ''")
+logged_out_keys = ['登录', 'ログイン', 'Login', 'Sign in']      # 出现则未登录
 logged_in_keys  = ['登出','我的页面','购买的商品','ログアウト','購入した商品','Log out','Purchases','Library']
-logged = any(k in txt for k in logged_in_keys) and not any(k in txt for k in logged_out_keys)
+# 结构锚点优先：页头有登出按钮=已登录；有登录按钮=未登录；判定冲突时以登出按钮为准
+has_logout = js("!!(document.querySelector('header') && /登出|ログアウト|Log\\s*out/i.test(document.querySelector('header').innerText))")
+has_login  = js("!!(document.querySelector('header') && /登录|ログイン|Login|Sign\\s*in/i.test(document.querySelector('header').innerText))")
+logged = has_logout or (not has_login and any(k in header_txt for k in logged_in_keys))
 ```
 
 ## 第三步：定位并加购（DOM 定位）
@@ -85,7 +89,7 @@ return 'no cart btn';})()")
 步骤 1-6 的按钮文本随界面语言变化（中文/日文/英文）：「结账付款」=結帳/レジに進む/Checkout/Proceed to checkout；「确认订单」=注文を確定/Confirm order；「进行支付」=支払いを確定/支払う/Pay。DOM 定位时按 `lang` 选用对应词，勿只匹配中文。
 1. ⚠确认：说明将进入 checkout 与支付方式选择 → `/cart` 页点「结账付款」→ `checkout.booth.pm/checkout/step1`（选择支付方式）
 2. ⚠确认：说明所选支付方式及对应扣款路径 → step1 **默认确认 PayPal / 信用卡**（已绑卡显示 `card████/YYYY`）→ 走下方步骤 3-6 线上扣款
-   - **便利店/银行转账（不主动询问，仅兜底）**：当用户主动要求、或该商品/页面不提供 PayPal/信用卡时才走。页面会显示便利店代码或汇款账号，为**离线支付**：由用户自行去便利店/网银完成，确认支付/到账后回到 `checkout.booth.pm/orders/<订单号>` 成功页；此类**不会进入 PayPal 3DS**
+   - **便利店/银行转账（不主动询问，仅兜底）**：兜底顺序 = **PayPal/信用卡 → 便利店/银行转账**；触发条件 = 用户主动要求、或该商品/页面不提供 PayPal/信用卡（线上扣款不可用）时才走。页面会显示便利店代码或汇款账号，为**离线支付**：由用户自行去便利店/网银完成，确认支付/到账后回到 `checkout.booth.pm/orders/<订单号>` 成功页；此类**不会进入 PayPal 3DS**
    - 点标签后页下方出现「确认订单」submit
 3. （PayPal/信用卡分支）⚠确认：核对商品合计/金额/支付方式 → 点「确认订单」→ `checkout.booth.pm/checkout/step3`（订单内容确认：此处明确写「购买手续尚未完成」= 下一步才真付款）
 4. ⚠确认：将跳转 pixiv 支付网关 / 真实扣款 → 再点「确认订单」（value=确认订单）→ 跳 **pixiv 支付网关** `payment.pixiv.net/paypal/advancedCheckout/v2/confirm?token=...`（最终确认页：使用服务=BOOTH/支付方法=信用卡/金额=xxxx JPY/按钮=进行支付）
@@ -97,9 +101,10 @@ return 'no cart btn';})()")
 多数数字商品（如 VRChat 衣装）购买后需在**资料库**下载素材，通常含 贴图 + MaterialPack + 对应素体的 zip 等多个文件：
 
 1. 打开 `https://accounts.booth.pm/library`（购买的商品/资料库），找到刚买的商品
-2. 每个文件对应一个 **Download** 按钮（`button`，非 a 标签）——点击触发浏览器下载
-3. 下载文件落在浏览器默认下载目录，下载中显示 `未确认 NNNN.crdownload` 临时名，完成后改名
-4. 目标素体对应的文件通常含制作方或素体名关键词；常见还有一个 `最初にインポート...MaterialPack.zip` 需**最先导入**
+2. **先设定下载目录**：执行下载前用 CDP `Browser.setDownloadBehavior` 显式指定可预期目录（或先向用户确认浏览器默认下载路径），避免收尾时满盘找文件
+3. 每个文件对应一个 **Download** 按钮（`button`，非 a 标签）——点击触发浏览器下载
+4. 下载文件落在设定目录，下载中显示 `未确认 NNNN.crdownload` 临时名，完成后改名。**Chrome 对重名文件会追加 ` (1)` 后缀**——查找按文件名前缀匹配，勿精确全名匹配
+5. 目标素体对应的文件通常含制作方或素体名关键词；常见还有一个 `最初にインポート...MaterialPack.zip` 需**最先导入**
 
 **注意：** 下载文件用 `.crdownload` 临时名，**下载中勿删**；确认下载完成后才收走/移动。进度慢属 BOOTH 限速，正常。
 
@@ -108,6 +113,7 @@ return 'no cart btn';})()")
 - **点「确认订单」后跳 pixiv/paypal，页面跳转时 `browser_exec` 的 JS 求值会超时（Runtime.evaluate timed out / TimeoutError）**——这是**正常过渡**不是失败。重新读取当前 URL 即可，别误判为支付失败。
 - **「确认订单」按钮**：`input[type=submit] value=确认订单`，在 step1（选支付）和 step3（确认内容）各出现一次。误判层级会导致没真正下单。
 - 最终确认页（step3 + pixiv confirm）**金额不一定显示 ¥ 符号**，注意核对数字（如 `1,200 JPY`）。结账/汇款展示金额以**实际货币**为准——BOOTH 原生 JPY，依账号币种设置也可能显示 USD；**呈现给用户用表格：`实际JPY | 换算后价格`**，换算按用户语言变换（中文→人民币 / 日文→日元 / 英文→美元），勿一律默认人民币。
+- **支付 URL/按钮可能过时**：pixiv 支付网关（`payment.pixiv.net/paypal/advancedCheckout/...`）、PayPal 3DS、便利店/转账按钮文本均由第三方维护、随线上变更。页面结构与文档不符时**以实测为准兜底**，勿死套旧路径/旧词误判支付状态。
 - 搜索/查询走 `booth-query-display` skill；购买走本 skill。
 
 ## 验证
