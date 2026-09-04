@@ -134,7 +134,7 @@ async function _refreshOnlineState() {
       location: f.location || '',
       worldId: f.worldId || (f.location || '').split(':')[0],
       // 在线口径与 MCP get_online_friends 一致：仅「有有效 location」计在线（offline=false 返回含
-      // active/菜单中用户，location 为空者不算在线——issue #114 [警告]2 复测遗留修复）
+      // active/菜单中用户，location 为空者不算在线——issue #114 ⚠️2 复测遗留修复）
       isOnline: !!(f.location && f.location !== 'offline'),
     })));
 
@@ -262,7 +262,7 @@ async function _seedTrackedNonFriends() {
       const del = ctx.storage.run(`DELETE FROM tracked_non_friends WHERE user_id = $u`, { $u: selfId });
       if (del.changes > 0) log(`[清理] 追踪列表移除误导入的自己（${selfId.slice(0, 12)}…）`);
     }
-    // 自动导入上限（issue #114 [警告]3 复测遗留修复）：仅导入近 30 天出现过的非好友，最多 100 人——
+    // 自动导入上限（issue #114 ⚠️3 复测遗留修复）：仅导入近 30 天出现过的非好友，最多 100 人——
     // 长历史全量导入会数百上千行，每小时逐人拉资料触发 VRChat 限流；手动添加不受此限
     const rows = ctx.storage.query(
       `SELECT user_id, MAX(display_name) AS dn FROM events
