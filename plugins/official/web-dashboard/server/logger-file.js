@@ -125,7 +125,7 @@ export function readLoggerEntries(opts = {}) {
  * 且文件整体更大，则扩大窗口重试（最多扩 3 次）。
  * @param {string} filePath 目标文件
  * @param {number} wanted 想要的行数
- * @param {number} [startBytes] 起始窗口字节（内部递归用），默认封顶 4MB
+ * @param {number} [startBytes] 起始窗口字节（内部递归用），每次重试倍增（4MB→8MB→16MB 封顶）
  */
 export function readTailLines(filePath, wanted, startBytes = 4 * 1024 * 1024) {
   let fileSize = 0;

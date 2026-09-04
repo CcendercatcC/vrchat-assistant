@@ -37,6 +37,9 @@ const NAMES = [
   { v: 'all', l: '全部' },
   { v: 'app', l: 'app' },
   { v: 'ws', l: 'ws' },
+  { v: 'mcp', l: 'mcp' },
+  { v: 'storage', l: 'storage' },
+  { v: 'migrate', l: 'migrate' },
 ];
 const LEVEL = {
   debug: { label: '调试', severity: 'secondary', ico: 'pi-circle' },
