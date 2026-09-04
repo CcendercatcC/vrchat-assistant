@@ -110,7 +110,7 @@ export class VrchatApiClient {
 
     this._reauthInFlight = true;
     try {
-      console.log('[VRChat API] ⚠️ 请求返回 401，尝试自动重新登录...');
+      console.log('[VRChat API] [警告] 请求返回 401，尝试自动重新登录...');
       if (this.otpFetcher || this.totpFetcher) {
         await this.ensureAuthWithAutoOtp(this.otpFetcher);
       } else {
@@ -132,13 +132,13 @@ export class VrchatApiClient {
           throw err;
         }
       }
-      console.log('[VRChat API] ✅ 自动重新登录成功');
+      console.log('[VRChat API] [成功] 自动重新登录成功');
       return true;
     } catch (err) {
       if (err.needsTotp) throw err;
       // 非 TOTP 失败（网络/凭据错误等）：冷却 60s，避免高频重试
       this._reauthCooldownUntil = Date.now() + 60_000;
-      console.error(`[VRChat API] ❌ 自动重新登录失败: ${err.message}`);
+      console.error(`[VRChat API] [失败] 自动重新登录失败: ${err.message}`);
       return false;
     } finally {
       this._reauthInFlight = false;
@@ -182,7 +182,7 @@ export class VrchatApiClient {
 
       // 超时兜底：socket 半通不通（网络抖动/代理失效）时请求可能永挂不返回，
       // 若不设超时会占住 rateLimiter 队头 -> 锁死整条队列；超时 destroy 触发 error -> reject。
-      // ⚠️ 注：Node req.setTimeout 是「socket 空闲超时」(idle timeout)——仅在 socket 无任何
+      // [警告] 注：Node req.setTimeout 是「socket 空闲超时」(idle timeout)——仅在 socket 无任何
       //    活动时触发；「持续小流量但永不 end」的响应不会被它覆盖（由 rateLimiter 的
       //    任务级超时兜底，见 core/rate-limiter.js）。
       req.setTimeout(REQUEST_TIMEOUT_MS, () => {
@@ -268,7 +268,7 @@ export class VrchatApiClient {
 
     if (!cookies.auth) {
       const isLimited = r1.status === 401;
-      console.error(`[VRChat API] ❌ Login failed. Status: ${r1.status}${isLimited ? ' [限流?]' : ''}, Body: ${JSON.stringify(r1.data).slice(0, 200)}`);
+      console.error(`[VRChat API] [失败] Login failed. Status: ${r1.status}${isLimited ? ' [限流?]' : ''}, Body: ${JSON.stringify(r1.data).slice(0, 200)}`);
       const err = new Error('No auth cookie from login — check credentials or account status');
       if (isLimited) err.isRateLimited = true;
       throw err;
@@ -332,7 +332,7 @@ export class VrchatApiClient {
       });
       // 超时兜底：socket 半通不通（网络抖动/代理失效）时请求可能永挂不返回，
       // 若不设超时会占住 rateLimiter 队头 -> 锁死整条队列；超时 destroy 触发 error -> reject。
-      // ⚠️ 注：Node req.setTimeout 是「socket 空闲超时」(idle timeout)——仅在 socket 无任何
+      // [警告] 注：Node req.setTimeout 是「socket 空闲超时」(idle timeout)——仅在 socket 无任何
       //    活动时触发；「持续小流量但永不 end」的响应不会被它覆盖（由 rateLimiter 的
       //    任务级超时兜底，见 core/rate-limiter.js）。
       req.setTimeout(REQUEST_TIMEOUT_MS, () => {
@@ -375,7 +375,7 @@ export class VrchatApiClient {
       });
       // 超时兜底：socket 半通不通（网络抖动/代理失效）时请求可能永挂不返回，
       // 若不设超时会占住 rateLimiter 队头 -> 锁死整条队列；超时 destroy 触发 error -> reject。
-      // ⚠️ 注：Node req.setTimeout 是「socket 空闲超时」(idle timeout)——仅在 socket 无任何
+      // [警告] 注：Node req.setTimeout 是「socket 空闲超时」(idle timeout)——仅在 socket 无任何
       //    活动时触发；「持续小流量但永不 end」的响应不会被它覆盖（由 rateLimiter 的
       //    任务级超时兜底，见 core/rate-limiter.js）。
       req.setTimeout(REQUEST_TIMEOUT_MS, () => {
@@ -444,7 +444,7 @@ export class VrchatApiClient {
     }
 
     // Cookie expired — try re-login
-    console.log('[VRChat API] ⚠️ Auth cookie expired, attempting re-login...');
+    console.log('[VRChat API] [警告] Auth cookie expired, attempting re-login...');
     const result = await this.tryLoginWithCredentials();
     if (result.requiresOtp) {
       const err = new Error(result.message);
@@ -515,7 +515,7 @@ export class VrchatApiClient {
       const needTotp = types.includes('totp');
 
       if (needEmailOtp) {
-        console.log('[VRChat API] ⚠️ 需要邮箱验证码，自动获取中...');
+        console.log('[VRChat API] [警告] 需要邮箱验证码，自动获取中...');
         try {
           const otpCode = await otpFetcher();
           if (!otpCode || !/^\d{6}$/.test(String(otpCode))) {
@@ -526,10 +526,10 @@ export class VrchatApiClient {
           // 邮箱抓取失败：若账号也支持 TOTP，先试自动 TOTP 兜底，再转手动提交（保留 tempAuthCookie）
           if (needTotp) {
             if (this.totpFetcher) {
-              console.log('[VRChat API] ⚠️ 邮箱验证码获取失败，尝试自动 TOTP 兜底...');
+              console.log('[VRChat API] [警告] 邮箱验证码获取失败，尝试自动 TOTP 兜底...');
               try {
                 const user = await this._autoTotpLogin();
-                console.log('[VRChat API] ✅ 自动 TOTP 兜底登录成功');
+                console.log('[VRChat API] [成功] 自动 TOTP 兜底登录成功');
                 return user;
               } catch (totpErr) {
                 // 邮箱与自动 TOTP 双失败：补冷却等待下个窗口（与仅 TOTP 分支对称，审核 #70 🟡 建议 1）
@@ -553,10 +553,10 @@ export class VrchatApiClient {
 
       if (needTotp) {
         if (this.totpFetcher) {
-          console.log('[VRChat API] ⚠️ 需要 TOTP 验证码，自动生成中...');
+          console.log('[VRChat API] [警告] 需要 TOTP 验证码，自动生成中...');
           try {
             const user = await this._autoTotpLogin();
-            console.log('[VRChat API] ✅ TOTP 自动登录成功');
+            console.log('[VRChat API] [成功] TOTP 自动登录成功');
             return user;
           } catch (totpErr) {
             // 自动失败：保留 tempAuthCookie 转手动 submit_totp 兜底；冷却等待下一个 TOTP 窗口再自动重试
@@ -750,7 +750,7 @@ export class VrchatApiClient {
 
       // 超时兜底：socket 半通不通（网络抖动/代理失效）时请求可能永挂不返回，
       // 若不设超时会占住 rateLimiter 队头 -> 锁死整条队列；超时 destroy 触发 error -> reject。
-      // ⚠️ 注：Node req.setTimeout 是「socket 空闲超时」(idle timeout)——仅在 socket 无任何
+      // [警告] 注：Node req.setTimeout 是「socket 空闲超时」(idle timeout)——仅在 socket 无任何
       //    活动时触发；「持续小流量但永不 end」的响应不会被它覆盖（由 rateLimiter 的
       //    任务级超时兜底，见 core/rate-limiter.js）。
       req.setTimeout(REQUEST_TIMEOUT_MS, () => {
@@ -829,7 +829,7 @@ export class VrchatApiClient {
 
       // 超时兜底：socket 半通不通（网络抖动/代理失效）时请求可能永挂不返回，
       // 若不设超时会占住 rateLimiter 队头 -> 锁死整条队列；超时 destroy 触发 error -> reject。
-      // ⚠️ 注：Node req.setTimeout 是「socket 空闲超时」(idle timeout)——仅在 socket 无任何
+      // [警告] 注：Node req.setTimeout 是「socket 空闲超时」(idle timeout)——仅在 socket 无任何
       //    活动时触发；「持续小流量但永不 end」的响应不会被它覆盖（由 rateLimiter 的
       //    任务级超时兜底，见 core/rate-limiter.js）。
       req.setTimeout(REQUEST_TIMEOUT_MS, () => {

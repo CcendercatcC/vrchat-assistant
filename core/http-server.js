@@ -83,7 +83,7 @@ async function handleRequest(req, res) {
     try {
       await route.handler(req, res);
     } catch (err) {
-      log(`❌ 插件 HTTP 路由失败 [${route.pluginName} ${pathname}]: ${err.message}`);
+      log(`[失败] 插件 HTTP 路由失败 [${route.pluginName} ${pathname}]: ${err.message}`);
       if (!res.headersSent) {
         const body = JSON.stringify({ error: 'Internal Server Error', message: err.message });
         res.writeHead(500, { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) });
@@ -198,7 +198,7 @@ async function handleRpc(rpc, session, res) {
           result: { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] },
         }], session.id);
       } catch (err) {
-        log(`❌ ${name} failed: ${err.message}`);
+        log(`[失败] ${name} failed: ${err.message}`);
         sendError(res, id, err.message);
       }
       break;
@@ -238,11 +238,11 @@ export function createServer() {
   // 端口冲突 → 立即退出（防双实例并存互抢 OTP 验证码，issue #49）
   server.on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
-      log(`❌ 端口 ${PORT} 已被占用，请检查是否有旧进程残留`);
+      log(`[失败] 端口 ${PORT} 已被占用，请检查是否有旧进程残留`);
       log('   检测到监控服务可能已在运行，本进程立即退出，避免双实例并存互抢 OTP 验证码');
       process.exit(1);
     } else {
-      log(`❌ 服务器错误: ${err.message}`);
+      log(`[失败] 服务器错误: ${err.message}`);
     }
   });
 

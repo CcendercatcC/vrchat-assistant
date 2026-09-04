@@ -126,7 +126,7 @@ async function _refreshOnlineState() {
       if (r.data.length < 100) { complete = true; break; }
       offset += r.data.length;
     }
-    if (!complete) { log('⚠️ 刷新在线状态: 好友列表未拉全，跳过本轮对账'); return; }
+    if (!complete) { log('[警告] 刷新在线状态: 好友列表未拉全，跳过本轮对账'); return; }
 
     friendState.batchSetOnline(online.map(f => ({
       userId: f.id,
@@ -134,7 +134,7 @@ async function _refreshOnlineState() {
       location: f.location || '',
       worldId: f.worldId || (f.location || '').split(':')[0],
       // 在线口径与 MCP get_online_friends 一致：仅「有有效 location」计在线（offline=false 返回含
-      // active/菜单中用户，location 为空者不算在线——issue #114 ⚠️2 复测遗留修复）
+      // active/菜单中用户，location 为空者不算在线——issue #114 [警告]2 复测遗留修复）
       isOnline: !!(f.location && f.location !== 'offline'),
     })));
 
@@ -186,9 +186,9 @@ async function _refreshOnlineState() {
       } catch { /* 补事件失败不影响状态对账 */ }
       fixed++;
     }
-    log(`🔄 刷新在线状态: 在线 ${online.length} 人${fixed ? `，断线窗口对账补离线 ${fixed} 人` : ''}`);
+    log(`[重连] 刷新在线状态: 在线 ${online.length} 人${fixed ? `，断线窗口对账补离线 ${fixed} 人` : ''}`);
   } catch (err) {
-    log(`⚠️ 刷新在线状态失败: ${err.message}`);
+    log(`[警告] 刷新在线状态失败: ${err.message}`);
   }
 }
 
@@ -239,9 +239,9 @@ async function _syncFriendAvatars() {
       if (r.data.length < 100) break;
     }
     }
-    if (updated) log(`🖼️ 好友头像补全: 更新 ${updated} 人（全量=在线+离线双列表）`);
+    if (updated) log(`[头像] 好友头像补全: 更新 ${updated} 人（全量=在线+离线双列表）`);
   } catch (err) {
-    log(`⚠️ 好友头像补全失败: ${err.message}`);
+    log(`[警告] 好友头像补全失败: ${err.message}`);
   }
 }
 
@@ -260,9 +260,9 @@ async function _seedTrackedNonFriends() {
     // 启动清理：移除历史误导入的自己
     if (selfId) {
       const del = ctx.storage.run(`DELETE FROM tracked_non_friends WHERE user_id = $u`, { $u: selfId });
-      if (del.changes > 0) log(`🧹 追踪列表移除误导入的自己（${selfId.slice(0, 12)}…）`);
+      if (del.changes > 0) log(`[清理] 追踪列表移除误导入的自己（${selfId.slice(0, 12)}…）`);
     }
-    // 自动导入上限（issue #114 ⚠️3 复测遗留修复）：仅导入近 30 天出现过的非好友，最多 100 人——
+    // 自动导入上限（issue #114 [警告]3 复测遗留修复）：仅导入近 30 天出现过的非好友，最多 100 人——
     // 长历史全量导入会数百上千行，每小时逐人拉资料触发 VRChat 限流；手动添加不受此限
     const rows = ctx.storage.query(
       `SELECT user_id, MAX(display_name) AS dn FROM events
@@ -286,9 +286,9 @@ async function _seedTrackedNonFriends() {
       );
       added++;
     }
-    if (added) log(`⭐ 追踪非好友: 自动导入 ${added} 人（历史非好友，定时拉取资料/头像）`);
+    if (added) log(`[追踪] 追踪非好友: 自动导入 ${added} 人（历史非好友，定时拉取资料/头像）`);
   } catch (e) {
-    log(`⚠️ 追踪非好友初始化失败: ${e.message}`);
+    log(`[警告] 追踪非好友初始化失败: ${e.message}`);
   }
 }
 
@@ -318,7 +318,7 @@ async function _refreshTrackedNonFriends() {
             contentJson: { userId: u.user_id, displayName: dn || u.display_name || '', type: 'avatar', avatarImageUrl: av, previousAvatarImageUrl: prevAv },
             worldId: '', worldName: '', createdAt: new Date().toISOString(), source: 'poll',
           });
-          log(`⭐ 追踪非好友头像变化: ${dn || u.user_id}`);
+          log(`[追踪] 追踪非好友头像变化: ${dn || u.user_id}`);
         } catch { /* 记录失败不影响刷新 */ }
       }
       const st = userObj.status || '';
@@ -347,7 +347,7 @@ async function _refreshTrackedNonFriends() {
       ok++;
     } catch { /* 404/网络错误跳过，非致命 */ }
   }
-  if (ok) log(`⭐ 追踪非好友刷新: ${ok}/${list.length} 位已更新`);
+  if (ok) log(`[追踪] 追踪非好友刷新: ${ok}/${list.length} 位已更新`);
 }
 
 // 对照 events 表该用户最新 bio/status 事件，变化则记录（事件带头像）
@@ -441,7 +441,7 @@ function registerCoreServices(loader, ctx) {
   ];
   for (const name of whitelist) {
     if (typeof ctx.storage[name] !== 'function') {
-      log(`⚠️ 核心存储服务 ${name} 不存在，跳过`);
+      log(`[警告] 核心存储服务 ${name} 不存在，跳过`);
       continue;
     }
     const svc = `storage.${name}`;
@@ -615,7 +615,7 @@ async function main() {
   //    第二个实例早已抢走/消费验证码，触发 VRChat 重复下发，造成邮箱验证码轰炸
   if (await isPortBusy(PORT)) {
     console.error('');
-    console.error(`❌ 端口 ${PORT} 已被占用，检测到监控服务可能已在运行`);
+    console.error(`[失败] 端口 ${PORT} 已被占用，检测到监控服务可能已在运行`);
     console.error('   为避免双实例并存互抢 OTP 验证码（造成邮箱验证码轰炸），本进程将退出。');
     console.error('   请先确认旧实例状态并结束残留进程后重启：');
     console.error('     Windows: netstat -ano | findstr 8799  或  tasklist | findstr node');
@@ -628,17 +628,17 @@ async function main() {
 
   // 0b. 安全模式（VRC_MONITOR_SAFE_MODE=true）：启动即剔除破坏性工具，tools/list 不暴露、tools/call 拦截
   if (isSafeModeEnabled()) {
-    log('\n🔒 安全模式已启用（VRC_MONITOR_SAFE_MODE=true）');
+    log('\n[认证] 安全模式已启用（VRC_MONITOR_SAFE_MODE=true）');
     log(`   已移除 ${DESTRUCTIVE_TOOLS.length} 个破坏性工具: ${DESTRUCTIVE_TOOLS.join(', ')}`);
   } else {
-    log('\n🔓 安全模式未启用（VRC_MONITOR_SAFE_MODE 未设置或非 true）');
+    log('\n[认证] 安全模式未启用（VRC_MONITOR_SAFE_MODE 未设置或非 true）');
   }
 
   // 0c. 旧数据迁移（issue #103）：根目录旧文件 → data/
   migrateLegacyData(__dirname, path.join(__dirname, 'data'));
 
   // 1. 初始化数据库
-  log('📦 初始化数据库...');
+  log('[初始化] 初始化数据库...');
   ctx.storage = new Storage();
 // 服务运维日志（ops_log）：认证/连接生命周期打点的落库出口
 setOpsLogSink((kind, level, message) => {
@@ -649,14 +649,14 @@ setOpsLogSink((kind, level, message) => {
   // 服务进程启动打点：必须在 storage.init（建表）与 sink 接线之后，否则静默失败
   recordOpsLog('ops', 'info', `服务进程启动（v${APP_VERSION}，部署/容器重建/手动重启）`);
   ctx.serverState.version = APP_VERSION;
-  log(`   ✅ 数据库就绪: ${DB_PATH}`);
-  log(`   📊 事件: ${stats.events} 条 | 好友: ${stats.friends} 位 | 世界缓存: ${stats.world_cache} 个`);
+  log(`   [成功] 数据库就绪: ${DB_PATH}`);
+  log(`   [统计] 事件: ${stats.events} 条 | 好友: ${stats.friends} 位 | 世界缓存: ${stats.world_cache} 个`);
   refreshWatchlistCache();  // 初始化 watchlist 内存缓存
 
   // 2. 初始化 API 客户端
-  log('\n🔑 初始化 API 客户端...');
+  log('\n[认证] 初始化 API 客户端...');
   if (!existsSync(CRED_FILE)) {
-    console.error('\n❌ 未找到 credentials.json — 无法登录 VRChat');
+    console.error('\n[失败] 未找到 credentials.json — 无法登录 VRChat');
     console.error('');
     console.error('   请先完成配置：');
     console.error('   1. 复制 credentials.example.json 为 credentials.json');
@@ -669,12 +669,12 @@ setOpsLogSink((kind, level, message) => {
   try {
     creds = JSON.parse(readFileSync(CRED_FILE, 'utf-8'));
   } catch (parseErr) {
-    console.error(`\n❌ credentials.json 解析失败: ${parseErr.message}`);
+    console.error(`\n[失败] credentials.json 解析失败: ${parseErr.message}`);
     console.error('   请检查文件是否为合法 JSON（参考 credentials.example.json 模板）');
     process.exit(1);
   }
   if (!creds.email || !creds.password) {
-    console.error('\n❌ credentials.json 缺少 email 或 password 字段');
+    console.error('\n[失败] credentials.json 缺少 email 或 password 字段');
     console.error('   请参考 credentials.example.json 补全配置');
     process.exit(1);
   }
@@ -694,9 +694,9 @@ setOpsLogSink((kind, level, message) => {
         return [counter - 1, counter, counter + 1].map((c) => generateTotp(secretBytes, c, { digits, algorithm }));
       };
       ctx.api.setTotpFetcher(totpFetcher);
-      log(`   🔐 TOTP 自动登录已启用（digits=${digits}, period=${period}s, ${algorithm}，前后窗口容错）`);
+      log(`   [认证] TOTP 自动登录已启用（digits=${digits}, period=${period}s, ${algorithm}，前后窗口容错）`);
     } catch (parseErr) {
-      console.error(`   ⚠️ totp_secret 解析失败（${parseErr.message}）：TOTP 自动登录不可用，将回退手动 submit_totp`);
+      console.error(`   [警告] totp_secret 解析失败（${parseErr.message}）：TOTP 自动登录不可用，将回退手动 submit_totp`);
     }
   }
 
@@ -708,7 +708,7 @@ setOpsLogSink((kind, level, message) => {
       notifyConfig = JSON.parse(readFileSync(NOTIFY_FILE, 'utf-8'));
     }
   } catch (cfgErr) {
-    console.error(`   ⚠️ notify-config.json 解析失败（${cfgErr.message}），通知已关闭`);
+    console.error(`   [警告] notify-config.json 解析失败（${cfgErr.message}），通知已关闭`);
     notifyConfig = { enabled: false };
   }
   notifier.configure(notifyConfig);
@@ -716,30 +716,30 @@ setOpsLogSink((kind, level, message) => {
     notifier.registerChannel(ch);
   }
   if (notifier.enabled) {
-    log(`   🔔 登录状态主动通知已启用（通道: ${(notifyConfig.channels || []).join(', ') || '无'}，连续失败阈值 ${notifier.config.consecutiveFailThreshold}，间隔 ${notifier.config.minIntervalSec}s）`);
+    log(`   [通知] 登录状态主动通知已启用（通道: ${(notifyConfig.channels || []).join(', ') || '无'}，连续失败阈值 ${notifier.config.consecutiveFailThreshold}，间隔 ${notifier.config.minIntervalSec}s）`);
   }
   ctx.api.loadCookieFromFile(COOKIE_FILE);
   try {
     const user = await ctx.api.ensureAuthWithAutoOtp(fetchOtpFromEmail);
     ctx.serverState.authUser = { id: user.id, displayName: user.displayName };
     ctx.serverState.needsOtp = false;
-    log(`   ✅ 已登录: ${user.displayName} (${user.id})`);
+    log(`   [成功] 已登录: ${user.displayName} (${user.id})`);
     ctx.api.saveCookieToFile(COOKIE_FILE);
   } catch (err) {
     ctx.serverState.needsOtp = false;
     ctx.serverState.needsTotp = !!err.needsTotp;
     if (err.needsTotp) {
       if (totpFetcher) {
-        log(`   ⚠️ 账号需要 TOTP 验证码：已配置自动登录，将在认证冷却后自动重试（或调用 submit_totp 手动提交）`);
+        log(`   [警告] 账号需要 TOTP 验证码：已配置自动登录，将在认证冷却后自动重试（或调用 submit_totp 手动提交）`);
         notifier.notifyAuth('needsTotp', '账号需要 TOTP 验证码（已配置自动登录，若持续失败请检查 totp_secret 或手动提交）');
       } else {
-        log(`   ⚠️ 账号启用 TOTP 两步验证：请调用 MCP 工具 submit_totp 提交当前验证码（或在 credentials.json 配置 totp_secret 启用自动登录）`);
+        log(`   [警告] 账号启用 TOTP 两步验证：请调用 MCP 工具 submit_totp 提交当前验证码（或在 credentials.json 配置 totp_secret 启用自动登录）`);
         notifier.notifyAuth('needsTotp', '账号需要 TOTP 验证码，服务暂停——请调用 submit_totp 提交当前验证码');
       }
     } else {
       notifier.notifyAuth('otpFailed', `启动登录失败：${err.message}`);
     }
-    log(`   ❌ 登录失败: ${err.message}`);
+    log(`   [失败] 登录失败: ${err.message}`);
     // 不退出进程，让 MCP/WS 服务启动以便后续重试
   }
 
@@ -749,7 +749,7 @@ setOpsLogSink((kind, level, message) => {
 
   // 4. 初始化好友状态管理器
   ctx.friendState = new FriendStateManager();
-  log(`\n👥 好友状态管理器就绪`);
+  log(`\n[好友] 好友状态管理器就绪`);
 
   // 5. 初始化事件处理管道
   ctx.eventPipeline = new EventPipeline(ctx.storage, null);
@@ -762,10 +762,10 @@ setOpsLogSink((kind, level, message) => {
   pluginLoader.watch();
   ctx.pluginLoader = pluginLoader;
   log(` 插件系统就绪`);
-  log(`📨 事件处理管道就绪`);
+  log(`[事件] 事件处理管道就绪`);
 
   // 6. 启动 WebSocket
-  log('\n🔌 启动 WebSocket 连接...');
+  log('\n[连接] 启动 WebSocket 连接...');
   ctx.wsManager = new WsManager({
     apiClient: ctx.api,
     otpFetcher: fetchOtpFromEmail,
@@ -778,14 +778,14 @@ setOpsLogSink((kind, level, message) => {
         if (ctx.watchlist.dirty) refreshWatchlistCache();
         const isWatched = ctx.watchlist.cache.some(w => w.user_id === event.userId);
         if (isWatched) {
-          log(`⭐ [关注] ${event.displayName || event.userId}: ${event.type}`);
+          log(`[追踪] [关注] ${event.displayName || event.userId}: ${event.type}`);
         }
       } catch (err) {
-        log(`⚠️ 事件处理失败: ${err.message}`);
+        log(`[警告] 事件处理失败: ${err.message}`);
       }
     },
     onStatusChange: (status) => {
-      log(`🔌 WebSocket: ${status}`);
+      log(`[连接] WebSocket: ${status}`);
       if (status === 'connected') {
         // 连接后延迟对账：先让重连突发的实时推送（上线/下线）落地，再对账补漏，避免双记
         setTimeout(() => { _refreshOnlineState().catch(() => {}); }, 25_000);
@@ -795,7 +795,7 @@ setOpsLogSink((kind, level, message) => {
             ctx.serverState.authUser = { id: res.user.id, displayName: res.displayName };
           }
         }).catch((err) => {
-          log(`⚠️ 认证复查失败: ${err.message}`);
+          log(`[警告] 认证复查失败: ${err.message}`);
         });
       }
     },
@@ -806,9 +806,9 @@ setOpsLogSink((kind, level, message) => {
   const runAutoBackup = async () => {
     try {
       const r = await ctx.storage.backup(BACKUP_DIR);
-      log(`💾 自动备份完成: ${r.path} (${r.size} bytes)`);
+      log(`[备份] 自动备份完成: ${r.path} (${r.size} bytes)`);
     } catch (e) {
-      log(`⚠️ 自动备份失败: ${e.message}`);
+      log(`[警告] 自动备份失败: ${e.message}`);
     }
   };
   runAutoBackup();
@@ -828,7 +828,7 @@ setOpsLogSink((kind, level, message) => {
   // 7b. 启动 MCP 服务
   const server = createServer();
   server.listen(PORT, HOST, () => {
-    log(`\n🚀 MCP 服务运行在 http://${HOST}:${PORT}/mcp\n`);
+    log(`\n[启动] MCP 服务运行在 http://${HOST}:${PORT}/mcp\n`);
     log('可用工具:');
     for (const t of registry.listTools()) {
       log(`  ${t.name} — ${t.description}`);
@@ -847,12 +847,12 @@ main().catch(err => {
 async function shutdown(signal) {
   recordOpsLog('ops', 'info', `服务进程停止（${signal}——容器重建/手动停止）`);
   const { wsManager, eventPipeline, storage } = ctx;
-  log(`\n⚠️ 收到 ${signal}，正在关闭...`);
+  log(`\n[警告] 收到 ${signal}，正在关闭...`);
   try {
     if (wsManager) wsManager.stop();
     if (eventPipeline) eventPipeline.flush();
     if (storage) storage.save();
-    log('✅ 已保存数据');
+    log('[成功] 已保存数据');
   } catch (e) {
     console.error('关闭时出错:', e);
   }
@@ -867,10 +867,10 @@ process.on('beforeExit', () => {
 
 // ── 全局异常兜底（防止僵尸进程 + 端口残留）──
 process.on('uncaughtException', (err) => {
-  console.error('💥 Uncaught Exception:', err);
+  console.error('[崩溃] Uncaught Exception:', err);
   shutdown('uncaughtException');
 });
 process.on('unhandledRejection', (reason) => {
-  console.error('💥 Unhandled Rejection:', reason);
+  console.error('[崩溃] Unhandled Rejection:', reason);
   shutdown('unhandledRejection');
 });

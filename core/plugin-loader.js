@@ -289,7 +289,7 @@ export class PluginLoader {
     plugin.error = error;
     plugin.loaded = false;
     this.registry.removePluginTools(plugin.name);
-    this.log(`❌ 插件加载失败 [${plugin.name}]: ${error}`);
+    this.log(`[失败] 插件加载失败 [${plugin.name}]: ${error}`);
   }
 
   /** 加载所有插件 */
@@ -458,7 +458,7 @@ export class PluginLoader {
     try {
       this._loadManifest(candidate);
       if (this.plugins.has(candidate.name)) {
-        this.log(`⚠️ 插件 ${candidate.name} 已存在，跳过新插件加载`);
+        this.log(`[警告] 插件 ${candidate.name} 已存在，跳过新插件加载`);
         return;
       }
       this._applySchema(candidate);
@@ -469,7 +469,7 @@ export class PluginLoader {
       candidate.status = 'error';
       candidate.error = err.message;
       this.plugins.set(candidate.name, candidate);
-      this.log(`❌ 插件加载失败 [${candidate.name || candidate.dir}]: ${err.message}`);
+      this.log(`[失败] 插件加载失败 [${candidate.name || candidate.dir}]: ${err.message}`);
     }
   }
 
@@ -511,7 +511,7 @@ export class PluginLoader {
         });
         this.watchers.push(watcher);
       } catch (err) {
-        this.log(`️ 插件目录监听失败 ${dir}: ${err.message}`);
+        this.log(`[警告] 插件目录监听失败 ${dir}: ${err.message}`);
       }
     }
   }
