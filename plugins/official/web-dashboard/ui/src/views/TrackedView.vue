@@ -132,11 +132,10 @@ async function load() {
   }
 }
 
-// 排序：在线优先（active/joinme/askme/busy），其次有变化的，最后按最近刷新倒序
+// 排序：在线优先（按 location 判定在游戏中），其次有变化的，最后按最近刷新倒序
 function sortTracked(list) {
   const rank = (x) => {
-    const s = String(x.status || '').toLowerCase();
-    const online = ['active', 'join me', 'ask me', 'busy'].some((k) => s.includes(k.split(' ')[0]));
+    const online = isOnline(x.location);
     return (online ? 0 : 1) * 100 + (x.lastRefreshAt ? 0 : 1) * 10;
   };
   return [...list].sort((a, b) => rank(a) - rank(b) || String(b.lastRefreshAt || '').localeCompare(String(a.lastRefreshAt || '')));
@@ -160,6 +159,7 @@ const CHANGE_TYPES = [
   { v: 'avatar', l: '头像' },
   { v: 'bio', l: '简介' },
   { v: 'status', l: '状态' },
+  { v: 'location', l: '位置' },
 ];
 const filteredChanges = (userId) => {
   const cs = changesMap.value[userId] || [];
@@ -181,15 +181,19 @@ const lastChangeAt = (x) => {
   return x.lastChangeAt || '';
 };
 
-const CHANGE_LABEL = { bio: '简介变更', status: '状态变更', avatar: '头像更新', user_icon: '头像图标更新', pronouns: '代词更新', displayName: '改名' };
-const statusText = (s) => ({ active: '在线', 'join me': '加入我', 'ask me': '问我', busy: '忙碌', offline: '离线' }[s] || s || '—');
+const CHANGE_LABEL = { bio: '简介变更', status: '状态变更', avatar: '头像更新', user_icon: '头像图标更新', pronouns: '代词更新', displayName: '改名', location: '位置/上下线' };
+// 位置可读化：offline=离线 / offline:offline=网页在线 / traveling=传送中 / wrld_xxx=世界（世界名在 c.worldName 里附加）
+const locLabel = (l) => { const v = String(l || ''); if (!v || v === 'offline') return '离线'; if (v === 'offline:offline') return '网页在线'; if (v === 'traveling') return '传送中'; return v; };
+const statusText = (s) => ({ active: '空闲', 'join me': '加入我', 'ask me': '问我', busy: '忙碌', offline: '离线' }[s] || s || '—');
 // 状态圆点颜色（对齐好友页视觉）：在线系绿色，离线灰色
-function statusDotStyle(s) {
-  const v = String(s || '').toLowerCase();
-  const online = ['active', 'join me', 'ask me', 'busy'].some((k) => v.includes(k.split(' ')[0]));
-  return { background: online ? '#52c41a' : v.includes('offline') ? 'var(--border-strong)' : 'var(--text-dim)' };
+function statusDotStyle(loc) {
+  return { background: isOnline(loc) ? '#52c41a' : 'var(--border-strong)' };
 }
-const isOnline = (s) => !['offline', ''].includes(String(s || ''));
+// 真实在线判定：只看 location（status 是用户偏好，离线保留）。offline=真离线、offline:offline=网页在线不在世界、traveling=转场，均不算在游戏中。
+const isOnline = (loc) => {
+  const v = String(loc || '').trim().toLowerCase();
+  return v !== '' && !['offline', 'offline:offline', 'traveling'].includes(v);
+};
 
 function toggle(userId) {
   if (expanded.value === userId) {
@@ -273,13 +277,13 @@ onMounted(load);
           <Avatar :image="x.avatarUrl || ''" :label="avatarLabel(x.avatarUrl, x.displayName)" shape="circle" size="large" />
           <div class="tk-info">
             <b class="tk-name">
-              <span v-if="x.status" class="tk-dot" :style="statusDotStyle(x.status)" :title="'当前状态：' + statusText(x.status)"></span>
+              <span v-if="x.status" class="tk-dot" :style="statusDotStyle(x.location)" :title="'当前状态：' + statusText(x.status)"></span>
               {{ x.displayName || x.userId }}
             </b>
             <small class="tk-sub">
               <span class="tk-statusline">
                 <span class="mono tk-uid">{{ x.userId }}</span>
-                <span v-if="x.status" class="tk-status" :class="{ on: isOnline(x.status) }">{{ statusText(x.status) }}</span>
+                <span v-if="x.status" class="tk-status" :class="{ on: isOnline(x.location) }">{{ statusText(x.status) }}</span>
               </span>
               <span v-if="lastChangeAt(x)" class="tk-stat">最近变化 {{ reltime(lastChangeAt(x)) }}</span>
               <span v-if="x.lastRefreshAt" class="tk-stat tk-stat-dim">上次检测 {{ fmtRefresh(x.lastRefreshAt) }}</span>
@@ -336,6 +340,10 @@ onMounted(load);
                   <template v-else-if="c.type === 'status'">
                     <span class="tc-old">旧：{{ statusText(c.previousStatus) }}{{ c.previousStatusDescription ? ' · ' + c.previousStatusDescription : '' }}</span>
                     <span class="tc-new">新：{{ statusText(c.status) }}{{ c.statusDescription ? ' · ' + c.statusDescription : '' }}</span>
+                  </template>
+                  <template v-else-if="c.type === 'location'">
+                    <span class="tc-old">旧：{{ locLabel(c.previousLocation) }}</span>
+                    <span class="tc-new">新：{{ locLabel(c.location) }}{{ c.worldName ? '（' + c.worldName + '）' : '' }}</span>
                   </template>
                   <span v-else class="tc-new">{{ JSON.stringify(c).slice(0, 120) }}</span>
                 </div>

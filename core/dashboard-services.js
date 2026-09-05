@@ -801,6 +801,10 @@ export function registerDashboardServices(loader, ctx) {
             previousStatus: c.previousStatus || '',
             previousStatusDescription: c.previousStatusDescription || '',
             avatarImageUrl: c.avatarImageUrl ? avatarThumb(c.avatarImageUrl) : '',
+            location: c.location || '',
+            previousLocation: c.previousLocation || '',
+            worldId: c.worldId || '',
+            worldName: c.worldName || '',
             previousAvatarImageUrl: c.previousAvatarImageUrl ? avatarThumb(c.previousAvatarImageUrl) : '',
           };
         }),
