@@ -149,7 +149,7 @@ export async function dispatch(name, args) {
   } catch (err) {
     if (err.needsTotp) {
       ctx.serverState.needsTotp = true;
-      log('🔑 检测到需要 TOTP 验证码，请调用 submit_totp 完成登录');
+      log('[认证] 检测到需要 TOTP 验证码，请调用 submit_totp 完成登录');
       notifier.notifyAuth('needsTotp', '运行期会话失效需 TOTP 验证码，服务暂停——请调用 submit_totp 提交当前验证码');
     }
     throw err;

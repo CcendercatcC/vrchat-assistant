@@ -959,7 +959,7 @@ export async function fetchCreatorTweets(screenName, { minTweets = 0 } = {}) {
       const tweets = await fetchCreatorViaBrowser(screenName);
       return { tweets: await enrichWorldsWithTco(tweets, screenName), source: 'browser' };
     } catch (e) {
-      log(`⚠️ x-world @${screenName} 浏览器抓取失败，回退 HTTP 通道：${e.message}`);
+      log(`[警告] x-world @${screenName} 浏览器抓取失败，回退 HTTP 通道：${e.message}`);
       // 落到下方原 Nitter RSS → SearchTimeline 链
     }
   }
@@ -970,7 +970,7 @@ export async function fetchCreatorTweets(screenName, { minTweets = 0 } = {}) {
     tweets = await fetchCreatorRss(screenName);
     source = 'nitter';
     if (minTweetsEffective > 0 && tweets.length < minTweetsEffective) {
-      log(`⚠️ x-world @${screenName} Nitter 仅 ${tweets.length} 条(< minTweets=${minTweetsEffective})，尝试 SearchTimeline 补充`);
+      log(`[警告] x-world @${screenName} Nitter 仅 ${tweets.length} 条(< minTweets=${minTweetsEffective})，尝试 SearchTimeline 补充`);
       try {
         const extra = await fetchCreatorViaSearchTimeline(screenName);
         const seen = new Set(tweets.map(t => t.id));
@@ -983,7 +983,7 @@ export async function fetchCreatorTweets(screenName, { minTweets = 0 } = {}) {
       }
     }
   } catch (e) {
-    log(`⚠️ x-world @${screenName} Nitter 不可达，回退 X SearchTimeline：${e.message}`);
+    log(`[警告] x-world @${screenName} Nitter 不可达，回退 X SearchTimeline：${e.message}`);
     try {
       tweets = await fetchCreatorViaSearchTimeline(screenName);
       source = 'search_timeline';
@@ -1088,7 +1088,7 @@ export async function scanCreatorWorlds({ force = false } = {}) {
       totalWorlds += saved;
       results.push({ screen_name: screen, name: creator.name || screen, tweets: tweets.length, worlds: saved });
     } catch (e) {
-      log(`❌ x-world scan @${screen}: ${e.message}`);
+      log(`[失败] x-world scan @${screen}: ${e.message}`);
       // 结构化错误：三通道均失败 → 用户可读的降级提示
       const errorInfo = e.code === 'X_FETCH_ALL_FAILED'
         ? `Nitter / X SearchTimeline / 浏览器抓取均不可用（2026 上游反向爬 + 网络受限），该通道当前无法获取新推荐。`

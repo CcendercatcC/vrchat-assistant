@@ -396,8 +396,19 @@ function write(levelName, name, msg, meta) {
 
   if (state.fileEnabled && state.filePath) {
     try {
-      checkRotation(line);
-      fs.appendFileSync(state.filePath, `${line}\n`, 'utf8');
+      // 多行消息按行拆分落盘：每行都带完整前缀。否则「前缀+空正文」行会被解析成
+      // 空条目（日志页出现空行）、无前缀的续行（如 `\n[启动]...` 的正文、error.stack）
+      // 会被解析器整行丢弃（日志页数据丢失）。空段跳过——装饰性 '\n' 不再产生空行。
+      const fileLines = state.format === 'json'
+        ? [line]
+        : redactedMsg.split('\n')
+            .map((s) => s.trim())
+            .filter(Boolean)
+            .map((seg) => formatText(ts, levelName, name, seg));
+      for (const fl of fileLines) {
+        checkRotation(fl);
+        fs.appendFileSync(state.filePath, `${fl}\n`, 'utf8');
+      }
     } catch (err) {
       if (state.console) {
         console.error(`[logger] 写入日志文件失败: ${err.message}`);

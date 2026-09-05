@@ -232,7 +232,7 @@ export function handleRateWorld({ worldId, rating = 0 }) {
     throw new Error('rating must be -1 (junk), 0 (clear), or 1 (good)');
   }
   const result = storage.rateWorld({ worldId, rating: r });
-  log(`⭐ 用户反馈: ${worldId} → rating=${result.userRating}${result.worldName ? ` (${result.worldName})` : ''}`);
+  log(`[反馈] 用户反馈: ${worldId} → rating=${result.userRating}${result.worldName ? ` (${result.worldName})` : ''}`);
   return result;
 }
 
@@ -241,7 +241,7 @@ export function handleMarkWorldVisited({ worldId }) {
   const { storage } = ctx;
   if (!worldId) throw new Error('worldId is required');
   const result = storage.markWorldVisited({ worldId });
-  log(`✅ 手动标记 visited: ${worldId}${result.worldName ? ` (${result.worldName})` : ''}`);
+  log(`[成功] 手动标记 visited: ${worldId}${result.worldName ? ` (${result.worldName})` : ''}`);
   return result;
 }
 
@@ -250,7 +250,7 @@ export function handleAddToBacklog({ worldId, reason = '', priority = 0 }) {
   const { storage } = ctx;
   if (!worldId) throw new Error('worldId is required');
   const result = storage.addToBacklog({ worldId, reason, priority });
-  log(`📌 加入待逛: ${worldId}${result.worldName ? ` (${result.worldName})` : ''} priority=${result.priority}`);
+  log(`[待办] 加入待逛: ${worldId}${result.worldName ? ` (${result.worldName})` : ''} priority=${result.priority}`);
   return result;
 }
 
@@ -264,7 +264,7 @@ export function handleRemoveFromBacklog({ worldId }) {
   const { storage } = ctx;
   if (!worldId) throw new Error('worldId is required');
   const result = storage.removeFromBacklog({ worldId });
-  log(`🗑 移出待逛: ${worldId}`);
+  log(`[删除] 移出待逛: ${worldId}`);
   return result;
 }
 
@@ -324,7 +324,7 @@ export function handleSetNickname({ userId, nickname, displayName }) {
 export async function handleBackupDatabase() {
   try {
     const result = await ctx.storage.backup(ctx.paths.BACKUP_DIR);
-    log(`💾 手动备份完成: ${result.path} (${result.size} bytes)`);
+    log(`[备份] 手动备份完成: ${result.path} (${result.size} bytes)`);
     return result;
   } catch (e) {
     return { ok: false, error: String(e.message || e) };
@@ -336,7 +336,7 @@ export function handleSetWorldSleep({ worldId, isSleep = true }) {
   const { storage } = ctx;
   if (!worldId) throw new Error('worldId is required');
   const result = storage.setWorldSleep({ worldId, isSleep: !!isSleep });
-  log(`${result.isSleep ? '🛏' : '✖️'} 标记睡觉图: ${worldId}${result.worldName ? ` (${result.worldName})` : ''} → sleep_ok=${result.isSleep ? 1 : 0}`);
+  log(`${result.isSleep ? '[睡眠]' : '[取消]'} 标记睡觉图: ${worldId}${result.worldName ? ` (${result.worldName})` : ''} → sleep_ok=${result.isSleep ? 1 : 0}`);
   return result;
 }
 

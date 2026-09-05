@@ -215,7 +215,7 @@ export async function handleGetWorldsByAuthor({ authorId, authorName, limit = 10
     offset += r.data.length;
   }
 
-  log(`🔍 get_worlds_by_author: ${resolvedAuthorName} (${resolvedAuthorId}) → ${worlds.length} 张图`);
+  log(`[查询] get_worlds_by_author: ${resolvedAuthorName} (${resolvedAuthorId}) → ${worlds.length} 张图`);
   return { authorId: resolvedAuthorId, authorName: resolvedAuthorName, total: worlds.length, worlds };
 }
 

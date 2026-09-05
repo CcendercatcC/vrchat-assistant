@@ -243,7 +243,7 @@ export default function register(api) {
   async function collectGoogleCalendar(calId, src, lang, minDate, maxDate) {
     const googleKey = getGoogleKey();
     if (!googleKey || googleKey.includes('...')) {
-      api.log(`⚠️ 未配置 Google Calendar API key（${src} 跳过）。请经 set_community_events_google_key 录入（存入数据库）或设 VRC_MONITOR_GCAL_CRED / config.json`);
+      api.log(`[警告] 未配置 Google Calendar API key（${src} 跳过）。请经 set_community_events_google_key 录入（存入数据库）或设 VRC_MONITOR_GCAL_CRED / config.json`);
       return [];
     }
     const items = [];
@@ -261,7 +261,7 @@ export default function register(api) {
         if (!pageToken) break;
       }
     } catch (e) {
-      api.log(`⚠️ ${src} Google Calendar API 失败: ${e.message}（仅该源跳过，其余源照常）`);
+      api.log(`[警告] ${src} Google Calendar API 失败: ${e.message}（仅该源跳过，其余源照常）`);
       return [];
     }
     const out = [];
@@ -682,7 +682,7 @@ export default function register(api) {
         const HAVE_GC_KEY = !!(getGoogleKey() && !String(getGoogleKey()).includes('...'));
         const GC_UNAVAILABLE_REASON = HAVE_GC_KEY ? '' : '未配置 Google Calendar API key（用 set_community_events_google_key 录入或设 VRC_MONITOR_GCAL_CRED）';
 
-        api.log(`🔍 采集活动 window=${opts.window} focus=${opts.focus} sources=${opts.sources.join(',')}`);
+        api.log(`[查询] 采集活动 window=${opts.window} focus=${opts.focus} sources=${opts.sources.join(',')}`);
 
         // 采集（限流友好：串行，逐源）。记录每源 ok/fail 供 sourceBreakdown 区分「源不可达」与「无活动」。
             let collected = [];
@@ -728,7 +728,7 @@ export default function register(api) {
     const needMine = dedup.filter(e => !e.group_id || !(e.member_count || e.group_members));
     needMine.sort((a, b) => (b.shortcode ? 1 : 0) - (a.shortcode ? 1 : 0));
     const toMine = needMine.slice(0, maxMine);
-    api.log(`🔗 待群组处理 ${needMine.length} 个（本次挖/补 ${toMine.length}，上限 ${maxMine}；短码优先）`);
+    api.log(`[链接] 待群组处理 ${needMine.length} 个（本次挖/补 ${toMine.length}，上限 ${maxMine}；短码优先）`);
     for (const e of toMine) {
       await mineGroup(e);
     }
@@ -736,7 +736,7 @@ export default function register(api) {
     // 侧面补充源：窥探已挖掘/采集到的群组公告（peekGroups=true 时启用，有副作用）
     if (opts.peekGroups) {
       const groupIds = dedup.map(e => e.group_id).filter(Boolean);
-      api.log(`👀 窥探 ${[...new Set(groupIds)].length} 个群组公告（副作用：加入→读→退出）`);
+      api.log(`[窥探] 窥探 ${[...new Set(groupIds)].length} 个群组公告（副作用：加入→读→退出）`);
       const annEvents = await collectFromGroupAnnouncements(groupIds);
       if (annEvents.length > 0) {
         // 与已采集合并（去重交给后续统一逻辑）
@@ -744,7 +744,7 @@ export default function register(api) {
         for (const a of annEvents) {
           if (!seenNames.has(normName(a.name))) { dedup.push(a); seenNames.add(normName(a.name)); }
         }
-        api.log(`📣 群组公告补充 ${annEvents.length} 条活动线索`);
+        api.log(`[公告] 群组公告补充 ${annEvents.length} 条活动线索`);
       }
     }
 
@@ -799,7 +799,7 @@ export default function register(api) {
       }
     }
 
-    api.log(`✅ 完成：采集 ${collected.length} → 去重 ${dedup.length} → 输出 ${events.length}`);
+    api.log(`[成功] 完成：采集 ${collected.length} → 去重 ${dedup.length} → 输出 ${events.length}`);
 
     // 返回结构化 JSON（供 Agent 翻译/渲染 PDF/进一步加工）
     const HAVE_GOOGLE_KEY = getGoogleKey() ? true : false;
@@ -886,7 +886,7 @@ export default function register(api) {
         `DELETE FROM store WHERE (end_iso != '' AND end_iso < $now) OR (end_iso = '' AND start_iso < $past)`,
         { $now: now, $past: past }
       );
-      api.log(`🗑️ 清理过期活动 ${r.changes} 条`);
+      api.log(`[删除] 清理过期活动 ${r.changes} 条`);
     } catch (e) {
       api.log(`清理过期活动失败: ${e.message}`);
     }
@@ -912,7 +912,7 @@ export default function register(api) {
       return;
     }
     // status === false 表示明确离线，直接重挖三个窗口并落库
-    api.log('🌙 每日活动刷新：玩家离线，开始重挖社区活动');
+    api.log('[夜间] 每日活动刷新：玩家离线，开始重挖社区活动');
     try {
       for (const window of ['week', 'month', 'tonight']) {
         await api.tools.call('fetch_community_events', { window, maxMine: 30 });
@@ -966,7 +966,7 @@ export default function register(api) {
     cfg.run('INSERT OR REPLACE INTO config (cfg_key, cfg_val, updated_at) VALUES ($k, $v, datetime(\'now\'))',
       { $k: 'google_calendar_api_key', $v: apiKey.trim() });
     const ok = getGoogleKey() ? true : false;
-    api.log(`ℹ️ 使用者 Google API Key 已${apiKey.trim() ? '更新' : '清除'}（config 表）`);
+    api.log(`[信息] 使用者 Google API Key 已${apiKey.trim() ? '更新' : '清除'}（config 表）`);
     return {
       stored: true,
       configured: ok,
