@@ -324,11 +324,45 @@ async function _refreshTrackedNonFriends() {
       const st = userObj.status || '';
       const stDesc = userObj.statusDescription || '';
       const loc = userObj.location || '';
-      if (av || dn || st) {
+      if (av || dn || st || loc) {
         storage.run(
           `UPDATE tracked_non_friends SET avatar_image_url=$a, display_name=$d, status=$s, status_description=$sd, location=$l, last_refresh_at=datetime('now') WHERE user_id=$u`,
           { $a: av, $d: dn, $s: st, $sd: stDesc, $l: loc, $u: u.user_id }
         );
+      }
+      // location/上下线变化检测（#146）：轮询 1h 低频，offline/offline:offline/traveling 离线态微动与转场不记录
+      const locPrev = u.location || '';
+      const locOffline = (v) => { const s = String(v || ''); return s === '' || s === 'offline' || s === 'offline:offline' || s === 'traveling'; };
+      if (String(loc) !== String(locPrev) && !(locOffline(loc) && locOffline(locPrev))) {
+        try {
+          const lastLoc = storage.query(
+            `SELECT created_at FROM events WHERE user_id=$u AND type='friend-update'
+             AND json_extract(content_json,'$.type')='location' ORDER BY id DESC LIMIT 1`, { $u: u.user_id });
+          let locSkip = false;
+          if (lastLoc.length) {
+            const dt = (Date.now() - new Date(lastLoc[0].created_at).getTime()) / 1000;
+            if (dt >= 0 && dt < 300) locSkip = true; // 5 分钟去重窗（轮询 1h 几乎不触发，防御编辑型高频）
+          }
+          if (!locSkip) {
+            let wId = '', wName = '';
+            if (!locOffline(loc)) {
+              const w0 = String(loc).split(':')[0];
+              if (w0.startsWith('wrld_')) {
+                wId = w0;
+                try {
+                  const wc = storage.query(`SELECT name FROM world_cache WHERE world_id=$w LIMIT 1`, { $w: w0 });
+                  if (wc.length) wName = wc[0].name || '';
+                } catch { /* 无缓存忽略 */ }
+              }
+            }
+            storage.insertEvent({
+              type: 'friend-update', userId: u.user_id, displayName: dn || u.display_name || '',
+              contentJson: { userId: u.user_id, displayName: dn || u.display_name || '', type: 'location', location: String(loc), previousLocation: locPrev, worldId: wId, worldName: wName, avatarImageUrl: av },
+              worldId: wId, worldName: wName, createdAt: new Date().toISOString(), source: 'poll',
+            });
+            log('[追踪] 追踪非好友位置变化: ' + (dn || u.user_id) + ' ' + (locPrev || '离线') + ' → ' + (loc || '离线'));
+          }
+        } catch { /* 记录失败不影响刷新 */ }
       }
       _recordNonFriendChange(u.user_id, dn, userObj, av);
       // 回填历史事件头像（之前没存头像的事件，如 VRCX 迁移数据）
