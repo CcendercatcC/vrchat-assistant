@@ -132,7 +132,7 @@ async function load() {
   }
 }
 
-// 排序：在线优先（active/joinme/askme/busy），其次有变化的，最后按最近刷新倒序
+// 排序：在线优先（按 location 判定在游戏中），其次有变化的，最后按最近刷新倒序
 function sortTracked(list) {
   const rank = (x) => {
     const online = isOnline(x.location);
