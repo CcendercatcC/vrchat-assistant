@@ -16,6 +16,7 @@ import {
   statSync,
   watch,
 } from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { buildPluginApi } from './plugin-api.js';
@@ -242,10 +243,37 @@ export class PluginLoader {
     const tableRe = /((?:CREATE TABLE|ALTER TABLE)\s+(?:IF\s+NOT\s+EXISTS\s+)?)([a-zA-Z0-9_]+)/gi;
     sql = sql.replace(tableRe, (match, pre, tableName) => {
       if (tableName.startsWith('plg_')) return match;
-      return `${pre}${prefix}${tableName}`;
+      const full = prefix + tableName;
+      // 仅当完整表名含非标识符字符（连字符插件名）才加双引号，避免非必需引号
+      const needsQuote = /[^a-zA-Z0-9_]/.test(full);
+      return `${pre}${needsQuote ? `"${full}"` : full}`;
     });
 
     ctx.storage.exec(sql);
+  }
+
+  /** 检查插件 package.json 依赖是否已安装（不自动安装，缺依赖则抛出错误） */
+  _checkPluginDeps(plugin) {
+    if (!plugin.dir || !existsSync(plugin.dir)) return;
+    const pkgPath = path.join(plugin.dir, 'package.json');
+    if (!existsSync(pkgPath)) return;
+    let pkg;
+    try {
+      pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+    } catch {
+      return;
+    }
+    const deps = pkg.dependencies;
+    if (!deps || typeof deps !== 'object' || Object.keys(deps).length === 0) return;
+
+    const req = createRequire(pkgPath);
+    for (const dep of Object.keys(deps)) {
+      try {
+        req.resolve(dep);
+      } catch {
+        throw new Error(`插件 ${plugin.name} 缺少依赖 ${dep}，请在仓库根执行: npm ci --prefix plugins/official/${plugin.name}`);
+      }
+    }
   }
 
   /** 加载单个插件 */
@@ -343,6 +371,7 @@ export class PluginLoader {
       const plugin = candidates.find(p => p.name === name);
       if (plugin.status === 'error') continue;
       try {
+        this._checkPluginDeps(plugin);
         this._applySchema(plugin);
         await this._loadPlugin(plugin);
         plugin.status = 'loaded';
@@ -461,6 +490,7 @@ export class PluginLoader {
         this.log(`[警告] 插件 ${candidate.name} 已存在，跳过新插件加载`);
         return;
       }
+      this._checkPluginDeps(candidate);
       this._applySchema(candidate);
       await this._loadPlugin(candidate);
       candidate.status = 'loaded';

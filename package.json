@@ -10,7 +10,8 @@
   },
   "scripts": {
     "start": "node start-monitor.js",
-    "test": "node --test \"test/**/*.test.mjs\""
+    "test": "node --test \"test/**/*.test.mjs\"",
+    "install-plugins": "node scripts/install-plugin-deps.mjs"
   },
   "dependencies": {
     "better-sqlite3": "^12.2.0",

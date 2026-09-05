@@ -11,7 +11,7 @@
 
 | 放置位置 | 说明 | 是否随主仓管理 |
 |----------|------|---------------|
-| `plugins/official/<name>/` | 官方插件（随主仓发布） | 是 |
+| `plugins/official/<name>/` | 官方插件（随主仓发布）；带第三方依赖的多一步安装：clone 后 `npm ci --prefix plugins/official/<name>`（见契约 §6.1） | 是 |
 | `plugins/local/<name>/` 或 `plugins/local/<name>.js` | 用户私有插件 | 否（gitignore） |
 | `$VRC_MONITOR_PLUGINS_DIR` 指向的目录 | 额外插件位置 | 否 |
 
@@ -209,7 +209,7 @@ api.registerTool({
 | 工具前缀 | 建议 `hello_`，便于辨识来源；破坏性工具（`remove_`/`delete_`/`leave_`/`decline_`/`hide_`/`unfavorite_`/`unfriend_` 等）必须声明 `destructive: true` |
 | 依赖 | `depends` 声明依赖插件名；拓扑排序加载；依赖缺失/成环拒绝加载 |
 
-**零依赖约定**：v1 插件只准使用 Node ≥22 内置模块（含全局 fetch）。确需第三方包属进阶场景，需在清单声明 `dependencies` 并自带安装说明——主仓官方插件一律零依赖。
+**依赖约定**：默认零依赖（只准使用 Node ≥22 内置模块，含全局 fetch）。确需第三方依赖走插件自带 `package.json`——步骤：在插件目录写 `package.json` 声明 `dependencies` → 仓库根 `npm ci --prefix plugins/official/<name>` 安装 → 插件代码 `import x from '<pkg>'` 裸包名导入（详见契约 §6.1）。**loader 缺依赖会拒载并给出安装指引；loader 不自动安装。**
 
 ---
 

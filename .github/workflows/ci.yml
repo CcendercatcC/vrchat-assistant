@@ -44,6 +44,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install plugin dependencies (per-plugin package.json)
+        run: npm run install-plugins
+
       - name: Registry integrity (tools, no credentials)
         run: node test/test-registry.mjs
 

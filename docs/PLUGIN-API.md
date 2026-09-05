@@ -56,6 +56,8 @@ plugins/local/hello/
 | `engines.vrc_monitor` | 否 | 如 `">=3.0.0"`，不满足则拒绝加载并说明 |
 | `depends` | 否 | 依赖的其他插件名数组，如 `["world-kb"]`。loader 按依赖拓扑排序加载；依赖缺失时拒绝加载并报错「请先安装插件 world-kb」。**不设硬版本约束**（过度设计），但提供能力探测：`api.tools.has(name)` / `api.hasService(name)`（§4.6），调用方 catch 错误时能区分「插件没装」vs「装了但版本不兼容/能力缺失」——不兼容时返回带指引的错误而非静默失败。**加载期依赖环**（A depends B 且 B depends A）会被检测，拒绝加载并报环（明示成环插件名），不进入加载。运行时"调用环"不属此类（运行时无锁定、不死锁），但设计上避免互相递归 |
 
+> **dependencies 不在 plugin.json 里声明**：插件第三方依赖统一走插件目录内自带 `package.json`（见 §6.1）。
+
 **清单校验失败的插件被拒绝加载，日志给出具体原因（不影响其他插件）。**
 
 ## 3. register(api) 入口
@@ -184,14 +186,23 @@ const digest = await api.consume("query_digest", wrld_xxx);
 | 注册任意数量 MCP 工具 | import 核心内部模块、触碰全局 ctx |
 | 用 api.db 建自己的表 | 访问其他插件/核心的表 |
 | 用 api.vrchat.fetch 调 VRChat API | 读取凭据（凭据已入库加密，插件不可达） |
-| 用 Node 内置模块 + fetch 访问外网 | 自行 npm install 第三方包（v1 零依赖约定，见下） |
+| 用 Node 内置模块 + fetch 访问外网 | 官方插件可经插件自带 package.json 声明第三方依赖（见 §6.1）；local 插件同样适用 |
 | 读取插件目录内自己的文件 | 写插件目录以外的文件（数据走 api.db） |
 
-**零依赖约定**：v1 插件只准使用 Node ≥22 内置模块（含全局 fetch）。这保证「拷贝文件夹即用」，使用者与 Agent 无需理解依赖管理。确需第三方包属于进阶场景，需在清单声明 `dependencies` 并自带安装说明——主仓官方插件一律遵守零依赖。
+**依赖约定**：插件默认只准使用 Node ≥22 内置模块（含全局 fetch），保证「拷贝文件夹即用」。确需第三方包走插件自带 `package.json` 声明（见 §6.1），不要求在 plugin.json 里声明。
+
+### 6.1 第三方依赖（插件自带 package.json）
+
+1. **声明位置**：插件目录内 `package.json` 的 `dependencies`；`"private": true`；`"type": "module"` 与仓库 ESM 一致；包名用 `vrc-monitor-plugin-<插件名>` 避免撞 npm 公仓。plugin.json 不重复声明 dependencies（唯一权威源是插件目录 package.json，杜绝两处漂移）。
+2. **提交物**：`package.json` 与 `package-lock.json` 都提交进 git（lock 保证各平台可复现、CI 可 `npm ci`）；`node_modules/` 已被根 .gitignore 任意深度忽略，不提交。
+3. **安装**：clone/pull 后在仓库根执行 `npm ci --prefix plugins/official/<name>`（或 `npm run install-plugins` 逐插件探测并 npm ci）。跨平台一致（Win/Linux/mac/NAS/容器）。
+4. **loader 探测**：加载插件前若无依赖可 resolve（`createRequire(插件package.json).resolve(dep)`），则**拒绝加载该插件**（不影响其他插件与主链路），日志与 `/health` plugins 段给出指引：`插件 <name> 缺少依赖 <dep>，请在仓库根执行: npm ci --prefix plugins/official/<name>`。
+5. **loader 绝不自动 npm install**：保持加载路径无副作用、无 child_process、热加载快；缺依赖只拒载 + 指引。
+6. **官方插件依赖准入规则**：每个依赖须纯 JS 优先；确需原生模块须在 PR 说明 prebuilt 对各目标平台（含 ARM NAS、Alpine/musl）的覆盖（DEVELOPMENT.md §3.3 原文继续适用并在此引用）；依赖须 MIT/BSD/Apache-2.0 等兼容许可；PR 描述列出新增依赖名+版本+许可+用途；依赖数量克制（默认 1~3 个），pin 到 semver 范围并提交 lock。
 
 ## 7. 禁止事项（loader 静态扫描 + 运行时防护）
 
-1. 禁止 `import` 任何 `core/` 路径、`start-monitor.js`；禁止动态 `import()` 非插件自身文件；
+1. 禁止 `import` 任何 `core/` 路径、`start-monitor.js`；禁止动态 `import()` 非插件自身文件（**不含裸包名导入**——第三方依赖经 `import x from '<pkg>'`（bare specifier）允许，静态扫描不误报）；
 2. 禁止读取含 `KEY`/`SECRET`/`TOKEN`/`PASSWORD`/`COOKIE`/`AUTH`（忽略大小写）的**环境变量**（含 `VRC_MONITOR_MASTER_KEY`）与仓库根目录任何此类配置文件；允许读取 `VRC_MONITOR_*` 公共配置（排除上述敏感项）；
 3. 禁止读写数据库文件本体（`data/vrc-monitor.sqlite3*`）；一切持久化走 `api.db`；
 4. 禁止访问凭据加密存储、核心 `secure_secrets`（或等价）表、以及任何主密钥解密接口；
@@ -256,5 +267,6 @@ export default function register(api) {
 
 ## Changelog
 
+- **v1.2 (2026-09-05)**：放开插件第三方库限制，落地「插件自带 package.json」依赖机制。
 - **v1.0 (2026-08-23)**：初始契约（registerTool / db / vrchat.fetch / log / tools.call 共 5 个 API）。
 - **v1.1 (2026-08-23)**：experimental 化；新增 §4.6 `api.provide/consume`（共 6 个 API）+ `api.tools.has`/`api.hasService` 能力探测；§4.2 改显式表句柄 + schema 只增不删约定；§4.1 补 destructive 对偶拦截 / outputSchema 扩展位 / 逻辑隔离定性；§2 补 depends 能力探测与加载期环检测＋破坏性前缀校验；§5 补热加载不中断 + schema 版本可见；§7 补敏感文件/env/加密存储禁读 + loader 静态扫描；凭据入库加密（核心基建，随 PR 演进）。
