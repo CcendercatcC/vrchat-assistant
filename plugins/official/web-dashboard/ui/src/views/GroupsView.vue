@@ -90,7 +90,8 @@ onMounted(async () => {
     </div>
     <div v-else class="mg-list">
       <button v-for="g in groups" :key="g.groupId || g.name" class="mg-row" @click="loadAnn(g); openGroup(g.groupId || g.name)">
-        <div class="mg-icon"><i class="pi pi-users"></i></div>
+        <img v-if="g.iconUrl" class="mg-icon mg-icon-img" :src="g.iconUrl" alt="" loading="lazy" />
+        <div v-else class="mg-icon"><i class="pi pi-users"></i></div>
         <Button v-if="String(g.groupId || '').startsWith('grp_')" class="mg-copy" icon="pi pi-link" text size="small" rounded :aria-label="'复制群组链接 ' + (g.name || '')" title="复制群组链接" @click.stop="copyGroupLink(g)" />
         <div class="mg-info">
           <b class="mg-name">{{ g.name || g.groupId }}</b>
@@ -117,6 +118,7 @@ onMounted(async () => {
 .mg-row:hover { border-color: var(--accent); }
 .mg-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .mg-icon { width: 42px; height: 42px; border-radius: 10px; background: var(--surface-2); display: flex; align-items: center; justify-content: center; color: var(--accent); flex: none; font-size: 18px; }
+.mg-icon-img { display: block; width: 42px; height: 42px; border-radius: 10px; object-fit: cover; flex: none; }
 .mg-info { min-width: 0; flex: 1; }
 .mg-name { font-size: 14px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mg-ann { display: block; font-size: 10px; color: var(--accent); opacity: 0.85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }

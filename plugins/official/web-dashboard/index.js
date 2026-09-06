@@ -9,6 +9,7 @@ import { registerFavoriteRoutes } from './server/routes/favorites.js';
 import { registerAvatarRoutes, loadMe, loadAvatarName } from './server/routes/avatars.js';
 import { registerSocialRoutes } from './server/routes/social.js';
 import { registerImageProxyRoutes } from './server/routes/image-proxy.js';
+import { imgProxy } from '../../../core/img-util.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -850,6 +851,11 @@ export default function register(api) {
         const hit = groupsCache.get('mine');
         if (hit && Date.now() - hit.at < GROUPS_TTL) return sendJson(res, hit.data);
         const r = await api.tools.call('get_user_groups', {});
+        // 群头像 iconUrl 走本地图片代理（<img> 无需 token、国内可加载）
+        const groups = (r && r.groups) || [];
+        for (const g of groups) {
+          if (g.iconUrl) g.iconUrl = imgProxy(g.iconUrl);
+        }
         groupsCache.set('mine', { at: Date.now(), data: r });
         sendJson(res, r);
       } catch (e) {
