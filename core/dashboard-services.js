@@ -707,6 +707,8 @@ export function registerDashboardServices(loader, ctx) {
             groupName,
             title: annTitle,
             text: content.message || '',
+            // 公告封面图：content 顶层 imageUrl（notification-v2 群公告实测字段），经本地代理
+            imageUrl: imgProxy(content.imageUrl || (content.data && content.data.imageUrl) || ''),
           };
         }),
       };

@@ -10,6 +10,14 @@ import { registerAvatarRoutes, loadMe, loadAvatarName } from './server/routes/av
 import { registerSocialRoutes } from './server/routes/social.js';
 import { registerImageProxyRoutes } from './server/routes/image-proxy.js';
 
+// 把 VRChat CDN 图片 URL 改写成本地 image-proxy（与本插件 server/routes/image-proxy.js 配套）。
+// 插件内联实现（core/img-util.js 的 imgProxy 同款域名白名单与包装），不 import core/（PLUGIN-API.md §7.1）。
+const imgProxyInline = (u) => {
+  if (!u) return u;
+  if (!/^https:\/\/(api\.vrchat\.cloud|d348imysud55la\.cloudfront\.net|assets\.vrchat\.com|files\.vrchat\.cloud)\//.test(String(u))) return u;
+  return '/api/dashboard/image-proxy?url=' + encodeURIComponent(u);
+};
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // VRChat file URL → 256 缩略图：/file/{file_id}/[version]/[/file|/] → /image/{file_id}/1/256。
@@ -850,6 +858,11 @@ export default function register(api) {
         const hit = groupsCache.get('mine');
         if (hit && Date.now() - hit.at < GROUPS_TTL) return sendJson(res, hit.data);
         const r = await api.tools.call('get_user_groups', {});
+        // 群头像 iconUrl 走本地图片代理（<img> 无需 token、国内可加载）
+        const groups = (r && r.groups) || [];
+        for (const g of groups) {
+          if (g.iconUrl) g.iconUrl = imgProxyInline(g.iconUrl);
+        }
         groupsCache.set('mine', { at: Date.now(), data: r });
         sendJson(res, r);
       } catch (e) {

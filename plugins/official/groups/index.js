@@ -14,6 +14,7 @@ export default function register(api) {
       if (g.shortCode !== undefined && g.shortCode !== null) item.shortCode = g.shortCode;
       if (g.memberCount !== undefined && g.memberCount !== null) item.memberCount = g.memberCount;
       if (g.isVerified !== undefined && g.isVerified !== null) item.isVerified = g.isVerified;
+      if (g.iconUrl !== undefined && g.iconUrl !== null) item.iconUrl = g.iconUrl;
       if (g.myRank !== undefined && g.myRank !== null) {
         item.myRank = typeof g.myRank === 'object' ? (g.myRank.id || null) : g.myRank;
       }
