@@ -182,7 +182,7 @@ onUnmounted(() => clearInterval(timer));
               <span class="nt-time mono" :title="date(x.created_at)">{{ time(x.created_at) }}</span>
             </div>
             <div class="nt-msg" :class="{ 'nt-msg-clamp': !isMsgExpanded(x) }" :title="!isMsgExpanded(x) ? (x.message || x.details || '') : ''" @click="toggleMsg(x)" role="button" tabindex="0" @keydown.enter="toggleMsg(x)">{{ x.message || x.details || typeLabel(x) }}</div>
-            <img v-if="x.imageUrl" class="nt-img" :src="x.imageUrl" alt="" loading="lazy" title="点击查看原图" @click="openImage(x.imageUrl)" role="button" tabindex="0" @keydown.enter="openImage(x.imageUrl)" />
+            <img v-if="x.imageUrl && !isGroupNotif(x)" class="nt-img" :src="x.imageUrl" alt="" loading="lazy" title="点击查看原图" @click="openImage(x.imageUrl)" role="button" tabindex="0" @keydown.enter="openImage(x.imageUrl)" />
           </div>
           <div class="nt-acts">
             <template v-if="kindOf(x) === 'friendRequest'">
@@ -202,7 +202,7 @@ onUnmounted(() => clearInterval(timer));
       <div v-if="!historyShown.length" class="empty" style="padding:14px">暂无历史通知</div>
       <div v-else class="nt-list">
         <div v-for="x in historyShown" :key="x.eventId" class="nt-row nt-ro">
-          <img v-if="isGroupNotif(x)" class="nt-av" :src="x.imageUrl" alt="" loading="lazy" />
+          <img v-if="isGroupNotif(x) && x.imageUrl" class="nt-av" :src="x.imageUrl" alt="" loading="lazy" />
           <img v-else-if="friendAvatarOf(x.senderUserId)" class="nt-av" :src="friendAvatarOf(x.senderUserId)" alt="" loading="lazy" />
           <div v-else class="nt-av nt-av-empty">{{ avatarLabel('', x.groupName || x.senderUsername || '?') }}</div>
           <div class="nt-body">
@@ -212,7 +212,7 @@ onUnmounted(() => clearInterval(timer));
               <span class="nt-time mono" :title="date(x.createdAt)">{{ time(x.createdAt) }}<small>{{ date(x.createdAt) }}</small></span>
             </div>
             <div class="nt-msg" :class="{ 'nt-msg-clamp': !isMsgExpanded(x) }" :title="!isMsgExpanded(x) ? (x.message || x.title || '') : ''" @click="toggleMsg(x)" role="button" tabindex="0" @keydown.enter="toggleMsg(x)">{{ x.message || x.title || typeLabel(x) }}</div>
-            <img v-if="x.imageUrl" class="nt-img" :src="x.imageUrl" alt="" loading="lazy" title="点击查看原图" @click="openImage(x.imageUrl)" role="button" tabindex="0" @keydown.enter="openImage(x.imageUrl)" />
+            <img v-if="x.imageUrl && !isGroupNotif(x)" class="nt-img" :src="x.imageUrl" alt="" loading="lazy" title="点击查看原图" @click="openImage(x.imageUrl)" role="button" tabindex="0" @keydown.enter="openImage(x.imageUrl)" />
           </div>
         </div>
       </div>
